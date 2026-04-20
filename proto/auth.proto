@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package auth;
+
+service AuthService {
+  // Xác thực token và trả về thông tin user
+  rpc VerifyToken (VerifyTokenRequest) returns (VerifyTokenResponse) {}
+
+  // Kiểm tra quyền hạn (Authorize)
+  rpc CheckPermission (CheckPermissionRequest) returns (CheckPermissionResponse) {}
+}
+
+message VerifyTokenRequest {
+  string token = 1;
+}
+
+message VerifyTokenResponse {
+  bool valid = 1;
+  string userId = 2;
+  string name = 3;
+  string role = 4;
+}
+
+message CheckPermissionRequest {
+  string userId = 1;
+  string permission = 2;
+}
+
+message CheckPermissionResponse {
+  bool allowed = 1;
+}
