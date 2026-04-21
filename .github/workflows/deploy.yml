@@ -34,7 +34,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/tritruong666/picare-core-hub-server:latest
+          tags: ghcr.io/tritruong666/picare-hub-server:latest
           # Bây giờ các dòng cache này sẽ chạy mượt mà
           cache-from: type=gha
           cache-to: type=gha,mode=max
