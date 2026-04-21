@@ -9,8 +9,8 @@ services:
       - picare-network
       - web_network
 
-  networks:
-    picare-network:
-      external: true
-    web_network:
-      external: true    
+networks:
+  picare-network:
+    external: true
+  web_network:
+    external: true    
