@@ -1,0 +1,16 @@
+services:
+  picare-hub-server:
+    image: ghcr.io/tritruong666/picare-hub-server:latest
+    container_name: picare-hub-server
+    restart: always
+    env_file:
+      - .env
+    networks:
+      - picare-network
+      - web_network
+
+  networks:
+    picare-network:
+      external: true
+    web_network:
+      external: true    

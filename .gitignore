@@ -51,11 +51,6 @@ logs/
 Thumbs.db
 desktop.ini
 
-# Docker
-.docker/
-docker-compose.override.yml
-docker-compose.yml
-Dockerfile
 # Local Docker Data (Common naming patterns)
 data/
 db_data/
