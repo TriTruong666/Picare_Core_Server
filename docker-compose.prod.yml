@@ -5,6 +5,8 @@ services:
     restart: always
     env_file:
       - .env
+    volumes:
+      - ./src/seeds/local_data:/app/src/seeds/local_data
     networks:
       - picare-network
       - web_network
