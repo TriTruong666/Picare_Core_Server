@@ -74,7 +74,9 @@ const HubClient = sequelize.define(
     hooks: {
       beforeValidate: (client) => {
         if (!client.clientInternalUrl && client.clientId) {
-          client.clientInternalUrl = `https://hub.picare.vn/clients/${client.clientId}`;
+          const isDev = process.env.NODE_ENV === "development";
+          const baseUrl = isDev ? "http://localhost:5173" : "https://hub.picare.vn";
+          client.clientInternalUrl = `${baseUrl}/clients/${client.clientId}`;
         }
       },
     },
