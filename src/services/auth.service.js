@@ -28,7 +28,6 @@ class AuthService {
     }
 
     const token = JWTService.signUser(user.name, user.role, user.userId);
-    await user.update({ isOnline: true });
 
     return {
       message: "Đăng nhập thành công",

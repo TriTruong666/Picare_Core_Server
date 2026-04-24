@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/postgres.config");
+const { ROLES, UserRoles } = require("../common/enum/role.enum");
 const bcrypt = require("bcrypt");
 
 const User = sequelize.define(
@@ -42,19 +43,10 @@ const User = sequelize.define(
     role: {
       type: DataTypes.STRING,
       validate: {
-        isIn: [
-          [
-            "admin",
-            "ecom_staff",
-            "ecom_lead",
-            "logistics",
-            "warehouse",
-            "default",
-          ],
-        ],
+        isIn: [ROLES],
       },
       allowNull: false,
-      defaultValue: "default",
+      defaultValue: UserRoles.DEFAULT,
     },
     note: {
       type: DataTypes.TEXT,

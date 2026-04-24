@@ -18,7 +18,7 @@ async function seedingUsers() {
           email: u.email,
           password: u.password,
         });
-        console.log(`Tài khoản ${u.email} đã được tạo thành công.`);
+        console.log(`[SEED]: Tài khoản ${u.email} đã được tạo thành công.`);
       } else {
         await isExisted.update({
           name: u.name,
@@ -26,7 +26,7 @@ async function seedingUsers() {
           email: u.email,
           password: u.password,
         });
-        console.log(`Tài khoản ${u.email} đã được cập nhật thông tin.`);
+        console.log(`[SEED]: Tài khoản ${u.email} đã được cập nhật thông tin.`);
       }
     }
   } catch (error) {

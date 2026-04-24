@@ -53,6 +53,16 @@ const ErrorCodes = {
     message: "Email đã được sử dụng",
     statusCode: 400,
   },
+  AUTH_ROLE_NOT_ALLOWED: {
+    code: "ERR_AUTH_003",
+    message: "Tài khoản của bạn không có quyền truy cập vào hệ thống này",
+    statusCode: 403,
+  },
+  CLIENT_NOT_FOUND: {
+    code: "ERR_CLIENT_001",
+    message: "Không tìm thấy client hệ thống",
+    statusCode: 404,
+  },
 
   USER_NOT_FOUND: {
     code: "ERR_USER_001",

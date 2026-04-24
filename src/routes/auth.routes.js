@@ -16,6 +16,16 @@ const { loginSchema, registerSchema, logoutSchema } = require("../schemas/auth.s
  *   post:
  *     summary: Đăng nhập vào hệ thống
  *     tags: [Auth]
+ *     parameters:
+ *       - in: query
+ *         name: clientId
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: |
+ *           UUID của client cần đăng nhập vào (ví dụ OMS, CRM...).
+ *           Nếu được cung cấp, hệ thống sẽ kiểm tra role của user có được phép truy cập client đó không.
  *     requestBody:
  *       required: true
  *       content:
@@ -31,6 +41,18 @@ const { loginSchema, registerSchema, logoutSchema } = require("../schemas/auth.s
  *               $ref: '#/components/schemas/AuthResponse'
  *       401:
  *         description: Email hoặc mật khẩu không đúng
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Role của tài khoản không được phép truy cập client này
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Không tìm thấy client với clientId đã cung cấp
  *         content:
  *           application/json:
  *             schema:

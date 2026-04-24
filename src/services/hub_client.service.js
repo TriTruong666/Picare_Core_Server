@@ -1,9 +1,13 @@
 const { Op } = require("sequelize");
 const HubClient = require("../models/hub_client.model");
 const { HubClientDTO } = require("../schemas/hub_client.schema");
+const JWTService = require("./jwt.service");
+const ErrorCodes = require("../common/exceptions/error_codes");
 const {
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
+  ForbiddenException,
 } = require("../common/exceptions/BaseException");
 
 class HubClientService {
@@ -115,6 +119,42 @@ class HubClientService {
 
     await client.destroy();
     return { message: "Xóa Hub Client thành công" };
+  }
+  /**
+   * Check if the current token holder has access to a specific client.
+   * Mirrors getMe pattern: reads token from cookie, decodes role, validates against client's allowedRoles.
+   * @param {string} token - JWT token from cookie
+   * @param {string} clientId - UUID of the target client
+   * @returns {Object} { client: HubClientDTO, user: { name, role, userId } }
+   */
+  static async checkClientAccess(token, clientId) {
+    if (!token) {
+      throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
+    }
+
+    const decoded = JWTService.verify(token);
+    if (!decoded) {
+      throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
+    }
+
+    const client = await HubClient.findOne({ where: { clientId } });
+    if (!client) {
+      throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+    }
+
+    const allowedRoles = client.allowedRoles || [];
+    if (!allowedRoles.includes(decoded.role)) {
+      throw new ForbiddenException(ErrorCodes.AUTH_ROLE_NOT_ALLOWED);
+    }
+
+    return {
+      client: HubClientDTO.fromClient(client),
+      user: {
+        name: decoded.name,
+        role: decoded.role,
+        userId: decoded.userId,
+      },
+    };
   }
 }
 

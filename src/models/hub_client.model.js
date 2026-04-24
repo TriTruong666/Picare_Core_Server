@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/postgres.config");
+const { CLIENT_STATUS } = require("../common/enum/hub_client.enum");
 
 const HubClient = sequelize.define(
   "HubClient",
@@ -50,6 +51,11 @@ const HubClient = sequelize.define(
     clientStatus: {
       type: DataTypes.STRING,
       allowNull: false,
+      validate: {
+        isIn: [CLIENT_STATUS],
+      },
+      defaultValue: CLIENT_STATUS.ACTIVE,
+      note: "Trạng thái của client: active, inactive",
       field: "client_status",
     },
     note: {
@@ -65,6 +71,13 @@ const HubClient = sequelize.define(
   {
     tableName: "hub_clients",
     timestamps: true,
+    hooks: {
+      beforeValidate: (client) => {
+        if (!client.clientInternalUrl && client.clientId) {
+          client.clientInternalUrl = `https://hub.picare.vn/clients/${client.clientId}`;
+        }
+      },
+    },
   },
 );
 

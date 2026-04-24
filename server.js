@@ -15,6 +15,7 @@ const { loadDynamicConfig } = require("./src/config/app.config");
 const socketService = require("./src/services/socket.service");
 const { startGrpcServer } = require("./src/services/grpc_server");
 const seedingRBAC = require("./src/seeds/rbac_seed");
+const seedingHubClients = require("./src/seeds/hub_client_seed");
 
 // Khởi tạo ứng dụng express
 const app = express();
@@ -85,6 +86,7 @@ const startServer = async () => {
     // Hạt giống dữ liệu
     await seedingUsers();
     await seedingRBAC();
+    await seedingHubClients();
     await seedAppConfig();
     await loadDynamicConfig();
 

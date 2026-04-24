@@ -6,11 +6,11 @@ const DEFAULT_APP_NAME = "Picare Core Hub";
  * Seed dữ liệu AppConfig từ .env (chỉ chạy lần đầu, không ghi đè)
  */
 async function seedAppConfig() {
-  console.log("[SEEDING]: Kiểm tra AppConfig...");
+  console.log("[SEED]: Kiểm tra AppConfig...");
 
   const existing = await AppConfig.findOne({ where: { key: "main" } });
   if (existing) {
-    console.log("[SEEDING]: AppConfig đã tồn tại.");
+    console.log("[SEED]: AppConfig đã tồn tại.");
     return existing;
   }
 
@@ -26,7 +26,7 @@ async function seedAppConfig() {
     },
   });
 
-  console.log("[SEEDING]: Đã tạo AppConfig mới từ .env thành công.");
+  console.log("[SEED]: Đã tạo AppConfig mới từ .env thành công.");
   return config;
 }
 

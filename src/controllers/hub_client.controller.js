@@ -116,6 +116,31 @@ class HubClientController {
       next(error);
     }
   }
+
+  /**
+   * Check if the current user (via cookie token) has access to a specific client.
+   * Used when user already has a session and navigates to a client.
+   */
+  static async checkClientAccess(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException("Dữ liệu không hợp lệ", errors.array());
+      }
+
+      const token = req.cookies?.token;
+      const { clientId } = req.params;
+      const result = await HubClientService.checkClientAccess(token, clientId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Tài khoản có quyền truy cập vào client này"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = HubClientController;

@@ -6,6 +6,7 @@ const {
   createHubClientSchema,
   updateHubClientSchema,
   clientIdSchema,
+  checkAccessSchema,
 } = require("../schemas/hub_client.schema");
 
 /**
@@ -35,7 +36,7 @@ const {
  *         schema:
  *           type: integer
  *           default: 20
- *         description: Số lượng bản ghi trên một trang 
+ *         description: Số lượng bản ghi trên một trang
  *       - in: query
  *         name: search
  *         schema:
@@ -50,7 +51,7 @@ const {
  *       200:
  *         description: Thành công
  */
-router.get("/", protect, HubClientController.getClientsPaginate);
+router.get("/", HubClientController.getClientsPaginate);
 
 /**
  * @swagger
@@ -70,7 +71,7 @@ router.get("/", protect, HubClientController.getClientsPaginate);
  *       200:
  *         description: Thành công
  */
-router.get("/:clientId", protect, clientIdSchema, HubClientController.getClientById);
+router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
 
 /**
  * @swagger
@@ -112,7 +113,12 @@ router.get("/:clientId", protect, clientIdSchema, HubClientController.getClientB
  *       201:
  *         description: Tạo thành công
  */
-router.post("/", protect, createHubClientSchema, HubClientController.createClient);
+router.post(
+  "/",
+  protect,
+  createHubClientSchema,
+  HubClientController.createClient,
+);
 
 /**
  * @swagger
@@ -159,7 +165,12 @@ router.post("/", protect, createHubClientSchema, HubClientController.createClien
  *       200:
  *         description: Cập nhật thành công
  */
-router.put("/:clientId", protect, updateHubClientSchema, HubClientController.updateClient);
+router.put(
+  "/:clientId",
+  protect,
+  updateHubClientSchema,
+  HubClientController.updateClient,
+);
 
 /**
  * @swagger
@@ -179,6 +190,44 @@ router.put("/:clientId", protect, updateHubClientSchema, HubClientController.upd
  *       200:
  *         description: Xóa thành công
  */
-router.delete("/:clientId", protect, clientIdSchema, HubClientController.deleteClient);
+router.delete(
+  "/:clientId",
+  protect,
+  clientIdSchema,
+  HubClientController.deleteClient,
+);
+
+/**
+ * @swagger
+ * /api/v1/hub-clients/{clientId}/check-access:
+ *   get:
+ *     summary: Kiểm tra quyền truy cập của user hiện tại vào một client
+ *     description: |
+ *       Dùng khi user đã có session (cookie token). Không cần đăng nhập lại.
+ *       API sẽ decode token từ cookie, lấy role và kiểm tra xem role đó có trong allowedRoles của client không.
+ *     tags: [HubClients]
+ *     parameters:
+ *       - in: path
+ *         name: clientId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID của client cần kiểm tra quyền
+ *     responses:
+ *       200:
+ *         description: User có quyền truy cập. Trả về thông tin client và user.
+ *       401:
+ *         description: Không có token hoặc token không hợp lệ / hết hạn
+ *       403:
+ *         description: Role của user không được phép truy cập client này
+ *       404:
+ *         description: Không tìm thấy client
+ */
+router.get(
+  "/:clientId/check-access",
+  checkAccessSchema,
+  HubClientController.checkClientAccess,
+);
 
 module.exports = router;

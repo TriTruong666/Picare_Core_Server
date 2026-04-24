@@ -1,4 +1,5 @@
 const { body, param } = require("express-validator");
+const { ROLES } = require("../common/enum/role.enum");
 
 /**
  * Data Transfer Objects (DTOs) for User
@@ -40,7 +41,7 @@ const createUserSchema = [
   body("phone").optional().isMobilePhone().withMessage("Số điện thoại không hợp lệ"),
   body("role")
     .optional()
-    .isIn(["admin", "ecom", "logistics", "default"])
+    .isIn(ROLES)
     .withMessage("Role không hợp lệ"),
 ];
 
@@ -55,7 +56,7 @@ const updateUserSchema = [
   body("phone").optional().isMobilePhone().withMessage("Số điện thoại không hợp lệ"),
   body("role")
     .optional()
-    .isIn(["admin", "ecom", "logistics", "default"])
+    .isIn(ROLES)
     .withMessage("Role không hợp lệ"),
   body("isOnline").optional().isBoolean().withMessage("isOnline phải là boolean"),
   body("note").optional().trim(),

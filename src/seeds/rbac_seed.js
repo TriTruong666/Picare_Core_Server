@@ -2,18 +2,30 @@ const { Role, Permission, User } = require("../models");
 
 const seedRBAC = async () => {
   try {
-    console.log("[SEEDING RBAC]: Bắt đầu khởi tạo Role và Permission...");
+    console.log("[SEED]: Bắt đầu khởi tạo Role và Permission...");
 
     // 1. Tạo Danh sách Permissions
     const permissionsData = [
       { name: "*", description: "Toàn quyền hệ thống", service: "all" },
       { name: "view_dashboard", description: "Xem dashboard", service: "oms" },
-      { name: "manage_orders", description: "Quản lý đơn hàng", service: "oms" },
+      {
+        name: "manage_orders",
+        description: "Quản lý đơn hàng",
+        service: "oms",
+      },
       { name: "view_reports", description: "Xem báo cáo", service: "oms" },
-      { name: "access_chat", description: "Truy cập hệ thống chat", service: "chat" },
+      {
+        name: "access_chat",
+        description: "Truy cập hệ thống chat",
+        service: "chat",
+      },
       { name: "manage_stock", description: "Quản lý kho", service: "oms" },
       { name: "view_orders", description: "Xem đơn hàng", service: "oms" },
-      { name: "view_profile", description: "Xem profile cá nhân", service: "all" },
+      {
+        name: "view_profile",
+        description: "Xem profile cá nhân",
+        service: "all",
+      },
     ];
 
     const permissions = {};
@@ -35,7 +47,12 @@ const seedRBAC = async () => {
       {
         name: "ecom_lead",
         description: "Trưởng nhóm E-commerce",
-        perms: ["view_dashboard", "manage_orders", "view_reports", "access_chat"],
+        perms: [
+          "view_dashboard",
+          "manage_orders",
+          "view_reports",
+          "access_chat",
+        ],
       },
       {
         name: "ecom_staff",
@@ -61,7 +78,7 @@ const seedRBAC = async () => {
       });
 
       // Gán permissions cho role
-      const rolePerms = r.perms.map(pName => permissions[pName]);
+      const rolePerms = r.perms.map((pName) => permissions[pName]);
       await role.setPermissions(rolePerms);
     }
 
@@ -74,9 +91,9 @@ const seedRBAC = async () => {
       }
     }
 
-    console.log("[SEEDING RBAC]: Hoàn tất khởi tạo RBAC!");
+    console.log("[SEED]: Hoàn tất khởi tạo RBAC!");
   } catch (error) {
-    console.error("[SEEDING RBAC ERROR]:", error);
+    console.error("[SEED ERROR]:", error);
   }
 };
 

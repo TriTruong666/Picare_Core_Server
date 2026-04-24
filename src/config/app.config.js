@@ -13,6 +13,9 @@ const ALLOWED_CLIENT_URL_1 =
 const ALLOWED_CLIENT_URL_2 =
   process.env.ALLOWED_CLIENT_URL_2 || "http://localhost:2345";
 
+const ALLOWED_CLIENT_URL_3 =
+  process.env.ALLOWED_CLIENT_URL_3 || "http://localhost:2345";
+
 /**
  * Centralized Application Configuration
  */
@@ -33,7 +36,7 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: true,
+    force_reset: false,
     protectedTables: ["users"],
   },
 
@@ -47,7 +50,7 @@ const appConfig = {
     level: process.env.LOG_LEVEL || "info",
   },
 
-  cors: [ALLOWED_CLIENT_URL_1, ALLOWED_CLIENT_URL_2],
+  cors: [ALLOWED_CLIENT_URL_1, ALLOWED_CLIENT_URL_2, ALLOWED_CLIENT_URL_3],
 
   jwt: {
     secret: process.env.JWT_SECRET || null,

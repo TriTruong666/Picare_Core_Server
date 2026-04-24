@@ -34,6 +34,7 @@ class HubClientDTO {
 const createHubClientSchema = [
   body("clientName").trim().notEmpty().withMessage("Tên client không được để trống"),
   body("clientInternalUrl")
+    .optional()
     .isURL()
     .withMessage("Internal URL không hợp lệ"),
   body("clientExternalUrl")
@@ -81,9 +82,14 @@ const clientIdSchema = [
   param("clientId").isUUID(4).withMessage("ID client không hợp lệ"),
 ];
 
+const checkAccessSchema = [
+  param("clientId").isUUID(4).withMessage("ID client không hợp lệ"),
+];
+
 module.exports = {
   HubClientDTO,
   createHubClientSchema,
   updateHubClientSchema,
   clientIdSchema,
+  checkAccessSchema,
 };
