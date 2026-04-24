@@ -128,6 +128,7 @@ class HubClientService {
    * @returns {Object} { client: HubClientDTO, user: { name, role, userId } }
    */
   static async checkClientAccess(token, clientId) {
+    // 1. Kiểm tra token trước
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
@@ -137,24 +138,22 @@ class HubClientService {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    const client = await HubClient.findOne({ where: { clientId } });
+    // 2. Tìm client trong DB
+    const client = await HubClient.findOne({
+      where: { clientId },
+      attributes: ["allowedRoles"], // Chỉ lấy field cần thiết, không kéo toàn bộ record
+    });
     if (!client) {
       throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
     }
 
+    // 3. Check role sau khi có client
     const allowedRoles = client.allowedRoles || [];
     if (!allowedRoles.includes(decoded.role)) {
       throw new ForbiddenException(ErrorCodes.AUTH_ROLE_NOT_ALLOWED);
     }
 
-    return {
-      client: HubClientDTO.fromClient(client),
-      user: {
-        name: decoded.name,
-        role: decoded.role,
-        userId: decoded.userId,
-      },
-    };
+    return null;
   }
 }
 

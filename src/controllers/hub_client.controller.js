@@ -23,7 +23,7 @@ class HubClientController {
         result.count,
         result.page,
         result.limit,
-        "Lấy danh sách Hub Clients thành công"
+        "Lấy danh sách Hub Clients thành công",
       );
     } catch (error) {
       next(error);
@@ -46,7 +46,7 @@ class HubClientController {
       return ResponseHandler.success(
         res,
         client,
-        "Lấy thông tin Hub Client thành công"
+        "Lấy thông tin Hub Client thành công",
       );
     } catch (error) {
       next(error);
@@ -68,7 +68,7 @@ class HubClientController {
       return ResponseHandler.created(
         res,
         client,
-        "Tạo Hub Client mới thành công"
+        "Tạo Hub Client mới thành công",
       );
     } catch (error) {
       next(error);
@@ -91,7 +91,7 @@ class HubClientController {
       return ResponseHandler.success(
         res,
         client,
-        "Cập nhật Hub Client thành công"
+        "Cập nhật Hub Client thành công",
       );
     } catch (error) {
       next(error);
@@ -130,12 +130,12 @@ class HubClientController {
 
       const token = req.cookies?.token;
       const { clientId } = req.params;
-      const result = await HubClientService.checkClientAccess(token, clientId);
+      await HubClientService.checkClientAccess(token, clientId);
 
       return ResponseHandler.success(
         res,
-        result,
-        "Tài khoản có quyền truy cập vào client này"
+        null,
+        "Tài khoản có quyền truy cập vào client này",
       );
     } catch (error) {
       next(error);

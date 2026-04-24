@@ -14,7 +14,13 @@ async function seedingHubClients() {
     const rawData = fs.readFileSync(filePath, "utf-8");
     const clients = JSON.parse(rawData);
 
+    const isDev = process.env.NODE_ENV === "development";
+
     for (const c of clients) {
+      const clientExternalUrl = isDev
+        ? c.clientExternalUrlDev
+        : c.clientExternalUrlProd;
+
       const isExisted = await HubClient.findOne({
         where: { clientName: c.clientName },
       });
@@ -23,21 +29,21 @@ async function seedingHubClients() {
         await HubClient.create({
           clientName: c.clientName,
           clientDescription: c.clientDescription,
-          clientExternalUrl: c.clientExternalUrl,
+          clientExternalUrl,
           clientStatus: c.clientStatus || "active",
           allowedRoles: c.allowedRoles,
           note: c.note,
         });
-        console.log(`[SEED]: Hub Client "${c.clientName}" đã được tạo thành công.`);
+        console.log(`[SEED]: Hub Client "${c.clientName}" đã được tạo thành công. (${isDev ? "dev" : "prod"} URL)`);
       } else {
         await isExisted.update({
           clientDescription: c.clientDescription,
-          clientExternalUrl: c.clientExternalUrl,
+          clientExternalUrl,
           clientStatus: c.clientStatus || isExisted.clientStatus,
           allowedRoles: c.allowedRoles,
           note: c.note || isExisted.note,
         });
-        console.log(`[SEED]: Hub Client "${c.clientName}" đã được cập nhật thông tin.`);
+        console.log(`[SEED]: Hub Client "${c.clientName}" đã được cập nhật thông tin. (${isDev ? "dev" : "prod"} URL)`);
       }
     }
   } catch (error) {

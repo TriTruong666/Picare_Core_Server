@@ -7,6 +7,10 @@ const UserRoles = {
   ECOM_LEAD: "ecom_lead",
   LOGISTICS: "logistics",
   WAREHOUSE: "warehouse",
+  MARKETING: "marketing",
+  FINANCE: "finance",
+  SALE_LEAD: "sale_lead",
+  SALE_STAFF: "sale_staff",
   DEFAULT: "default",
 };
 
