@@ -23,6 +23,7 @@ class AuthController {
         secure: true,
         sameSite: "none",
         path: "/",
+        domain: process.env.NODE_ENV === "production" ? ".picare.vn" : "localhost",
         maxAge: 24 * 60 * 60 * 1000,
       });
 
@@ -71,6 +72,7 @@ class AuthController {
         secure: true,
         sameSite: "none",
         path: "/",
+        domain: process.env.NODE_ENV === "production" ? ".picare.vn" : "localhost",
       });
 
       const result = await AuthService.logout({ email });
