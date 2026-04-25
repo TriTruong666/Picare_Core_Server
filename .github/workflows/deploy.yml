@@ -84,6 +84,7 @@ jobs:
           script: |
             mkdir -p ~/projects/picare-hub/server/hub/src/seeds/local_data
             echo '${{ secrets.PICARE_USER_SEED_JSON }}' > ~/projects/picare-hub/server/hub/src/seeds/local_data/user_seed_data.json
+            echo '${{ secrets.PICARE_HUB_CLIENT_SEED_JSON }}' > ~/projects/picare-hub/server/hub/src/seeds/local_data/hub_client_seed_data.json
 
 
       - name: Deploy to VPS via SSH
