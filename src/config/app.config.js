@@ -46,6 +46,12 @@ const appConfig = {
     password: process.env.REDIS_PASSWORD || null,
   },
 
+  redis_event_bus: {
+    host: process.env.REDIS_EVENT_BUS_HOST || process.env.REDIS_HOST || "localhost",
+    port: parseInt(process.env.REDIS_EVENT_BUS_PORT, 10) || parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_EVENT_BUS_PASSWORD || process.env.REDIS_PASSWORD || null,
+  },
+
   logging: {
     level: process.env.LOG_LEVEL || "info",
   },

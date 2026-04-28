@@ -9,7 +9,7 @@ async function seedingHubClients() {
   try {
     const filePath = path.join(
       __dirname,
-      "/local_data/hub_client_seed_data.json",
+      "/local_data/hub_client_seed_data.json"
     );
     const rawData = fs.readFileSync(filePath, "utf-8");
     const clients = JSON.parse(rawData);
@@ -35,7 +35,9 @@ async function seedingHubClients() {
           note: c.note,
         });
         console.log(
-          `[SEED]: Hub Client "${c.clientName}" đã được tạo thành công. (${isDev ? "dev" : "prod"} URL)`,
+          `[SEED]: Hub Client "${c.clientName}" đã được tạo thành công. (${
+            isDev ? "dev" : "prod"
+          } URL)`
         );
       } else {
         await isExisted.update({
@@ -46,7 +48,9 @@ async function seedingHubClients() {
           note: c.note || isExisted.note,
         });
         console.log(
-          `[SEED]: Hub Client "${c.clientName}" đã được cập nhật thông tin. (${isDev ? "dev" : "prod"} URL)`,
+          `[SEED]: Hub Client "${c.clientName}" đã được cập nhật thông tin. (${
+            isDev ? "dev" : "prod"
+          } URL)`
         );
       }
     }

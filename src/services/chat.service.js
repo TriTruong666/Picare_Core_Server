@@ -6,6 +6,7 @@ const {
 } = require("../models/chat");
 const User = require("../models/user.model");
 const socketService = require("./socket.service");
+const ssePublisher = require("./sse_publisher.service");
 const { Op } = require("sequelize");
 const {
   NotFoundException,
@@ -129,6 +130,8 @@ class ChatService {
     // Notify real-time tới tất cả thành viên
     for (const uid of allMemberIds) {
       socketService.emitToUser(uid, "new_conversation", conversation.toJSON());
+      // [Distributed SSE] Gửi qua Redis Bus để các server khác (OMS) có thể nhận
+      ssePublisher.publishToUser(uid, "NEW_CONVERSATION", conversation.toJSON());
     }
 
     return conversation;
@@ -408,6 +411,13 @@ class ChatService {
 
     // Emit real-time tới conversation room
     socketService.emitToRoom(`conversation:${conversationId}`, "new_message", fullMessage.toJSON());
+
+    // [Distributed SSE] Gửi qua Redis Bus cho từng thành viên trong cuộc hội thoại
+    // Lưu ý: OMS sẽ dựa vào userId để push cho đúng client
+    const members = await ConversationMember.findAll({ where: { conversationId, leftAt: null } });
+    for (const m of members) {
+      ssePublisher.publishToUser(m.userId, "NEW_MESSAGE", fullMessage.toJSON());
+    }
 
     return fullMessage;
   }
