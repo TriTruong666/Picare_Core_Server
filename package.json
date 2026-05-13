@@ -9,6 +9,9 @@
     "test:grpc": "node grpc_client_test.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/lib-storage": "^3.1045.0",
+    "@aws-sdk/s3-request-presigner": "^3.1045.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "bcrypt": "^6.0.0",
@@ -21,6 +24,7 @@
     "ioredis": "^5.9.2",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
+    "multer": "^2.1.1",
     "pg": "^8.16.3",
     "sequelize": "^6.37.7",
     "socket.io": "^4.8.3",
