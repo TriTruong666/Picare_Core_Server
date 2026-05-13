@@ -10,6 +10,11 @@ const {
 } = require("../schemas/s3.schema");
 
 class S3Controller {
+  static extractObjectKey(req) {
+    const rawKey = req.params?.key ?? req.params?.[0];
+    return Array.isArray(rawKey) ? rawKey.join("/") : rawKey;
+  }
+
   /**
    * POST /api/v1/s3/upload
    * Upload một file lên S3 qua multipart/form-data.
@@ -22,12 +27,24 @@ class S3Controller {
       }
 
       const folder = req.body.folder || "uploads";
+      const clientId = req.body.clientId || null;
+      const description = req.body.description || null;
+      const visibility = req.body.visibility || "private";
+      const uploadedBy = req.user?.userId || null;
+
       const key = S3Service.buildKey(folder, req.file.originalname);
 
       const result = await S3Service.upload({
         key,
         body: req.file.buffer,
         mimeType: req.file.mimetype,
+        originalName: req.file.originalname,
+        fileSize: req.file.size,
+        folder,
+        clientId,
+        uploadedBy,
+        description,
+        visibility,
       });
 
       return ResponseHandler.created(
@@ -104,7 +121,7 @@ class S3Controller {
       }
 
       // Cho phép key có chứa "/" bằng cách dùng wildcard route
-      const key = req.params[0] || req.params.key;
+      const key = S3Controller.extractObjectKey(req);
       await S3Service.delete(key);
 
       return ResponseHandler.success(res, null, "Xoá object thành công");
@@ -148,7 +165,7 @@ class S3Controller {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const key = req.params[0] || req.params.key;
+      const key = S3Controller.extractObjectKey(req);
       const exists = await S3Service.exists(key);
 
       return ResponseHandler.success(
@@ -172,7 +189,7 @@ class S3Controller {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const key = req.params[0] || req.params.key;
+      const key = S3Controller.extractObjectKey(req);
       const metadata = await S3Service.getMetadata(key);
 
       return ResponseHandler.success(

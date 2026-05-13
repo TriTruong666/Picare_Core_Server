@@ -54,6 +54,16 @@ if (db.User && db.Role && db.Permission) {
   });
 }
 
+// 5. HubClient ↔ S3Asset (1-n)
+if (db.HubClient && db.S3Asset) {
+  db.HubClient.hasMany(db.S3Asset, {
+    foreignKey: "clientId",
+    as: "assets",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+}
+
 db.sequelize = sequelize;
 
 module.exports = db;

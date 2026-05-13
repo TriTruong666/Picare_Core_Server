@@ -21,7 +21,7 @@ const upload = multer({
  * @swagger
  * /api/v1/s3/upload:
  *   post:
- *     summary: Upload file lên AWS S3
+ *     summary: Upload file lên AWS S3 và lưu record vào DB
  *     tags: [S3]
  *     security:
  *       - cookieAuth: []
@@ -40,11 +40,23 @@ const upload = multer({
  *                 description: File cần upload (tối đa 50MB)
  *               folder:
  *                 type: string
- *                 description: Thư mục đích trong bucket (mặc định là "uploads")
+ *                 description: Thư mục đích trong bucket (mặc định "uploads")
  *                 example: avatars
+ *               clientId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: UUID của HubClient sở hữu file (tuỳ chọn)
+ *               description:
+ *                 type: string
+ *                 description: Mô tả ngắn về file (tuỳ chọn)
+ *               visibility:
+ *                 type: string
+ *                 enum: [public, private]
+ *                 default: private
+ *                 description: Quyền truy cập file
  *     responses:
  *       201:
- *         description: Upload thành công
+ *         description: Upload thành công, record đã được lưu vào DB
  *         content:
  *           application/json:
  *             schema:
@@ -58,6 +70,9 @@ const upload = multer({
  *                   example: https://my-bucket.s3.ap-southeast-1.amazonaws.com/avatars/...
  *                 etag:
  *                   type: string
+ *                 record:
+ *                   type: object
+ *                   description: Record S3Asset đã được lưu trong DB
  *       400:
  *         description: Không có file trong request
  *       401:
@@ -240,7 +255,7 @@ router.get("/objects", protect, listObjectsSchema, S3Controller.listObjects);
  *       401:
  *         description: Chưa xác thực
  */
-router.get("/objects/exists/*", protect, S3Controller.checkExists);
+router.get(/^\/objects\/exists\/(.+)$/, protect, S3Controller.checkExists);
 
 /**
  * @swagger
@@ -282,7 +297,7 @@ router.get("/objects/exists/*", protect, S3Controller.checkExists);
  *       404:
  *         description: Object không tồn tại
  */
-router.get("/objects/metadata/*", protect, S3Controller.getMetadata);
+router.get(/^\/objects\/metadata\/(.+)$/, protect, S3Controller.getMetadata);
 
 /**
  * @swagger
@@ -308,6 +323,6 @@ router.get("/objects/metadata/*", protect, S3Controller.getMetadata);
  *       404:
  *         description: Object không tồn tại
  */
-router.delete("/objects/*", protect, S3Controller.deleteObject);
+router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
 
 module.exports = router;

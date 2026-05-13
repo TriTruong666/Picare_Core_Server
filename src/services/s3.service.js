@@ -10,44 +10,114 @@ const { Upload } = require("@aws-sdk/lib-storage");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const s3Client = require("../config/s3.config");
 const appConfig = require("../config/app.config");
+const S3Asset = require("../models/s3_asset.model");
+const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 
 const BUCKET = appConfig.s3.bucketName;
+const REGION = appConfig.s3.region;
 
 /**
  * S3 Service – Wrapper cho các thao tác với AWS S3
  */
 class S3Service {
+  resolveAcl(visibility, acl) {
+    if (acl) return acl;
+    return visibility === AssetVisibility.PUBLIC ? "public-read" : "private";
+  }
+
+  async uploadToS3(params) {
+    const uploader = new Upload({
+      client: s3Client,
+      params,
+    });
+
+    try {
+      return await uploader.done();
+    } catch (error) {
+      if (params.ACL && error.name === "AccessControlListNotSupported") {
+        const { ACL, ...paramsWithoutAcl } = params;
+        const retryUploader = new Upload({
+          client: s3Client,
+          params: paramsWithoutAcl,
+        });
+        return retryUploader.done();
+      }
+
+      throw error;
+    }
+  }
   // ─── UPLOAD ─────────────────────────────────────────────────────────────────
 
   /**
-   * Upload file buffer/stream lên S3 (hỗ trợ multipart tự động).
+   * Upload file buffer/stream lên S3 và tự động tạo record trong bảng s3_assets.
    * @param {Object} params
-   * @param {string}          params.key        - Đường dẫn object trong bucket (vd: "images/avatar.png")
-   * @param {Buffer|Readable} params.body       - Nội dung file
-   * @param {string}          params.mimeType   - Content-Type (vd: "image/png")
-   * @param {"public-read"|"private"} [params.acl="private"] - Quyền truy cập
-   * @param {Object}          [params.metadata] - Metadata tuỳ chỉnh
-   * @returns {Promise<{key: string, url: string, etag: string}>}
+   * @param {string}            params.key          - Object key trong bucket (vd: "images/avatar.png")
+   * @param {Buffer|Readable}   params.body         - Nội dung file
+   * @param {string}            params.mimeType     - Content-Type (vd: "image/png")
+   * @param {string}            params.originalName - Tên file gốc
+   * @param {number}            params.fileSize     - Kích thước file (bytes)
+   * @param {"public-read"|"private"} [params.acl="private"] - ACL trên S3
+   * @param {string}            [params.folder]     - Thư mục logic (vd: "avatars")
+   * @param {string}            [params.clientId]   - UUID của HubClient sở hữu file
+   * @param {string}            [params.uploadedBy] - UUID của user đã upload
+   * @param {string}            [params.description]- Mô tả ngắn về file
+   * @param {"public"|"private"} [params.visibility="private"] - Visibility record DB
+   * @param {Object}            [params.s3Metadata] - Metadata tuỳ chỉnh gửi lên S3
+   * @returns {Promise<{key, url, etag, record: S3Asset}>}
    */
-  async upload({ key, body, mimeType, acl = "private", metadata = {} }) {
-    const upload = new Upload({
-      client: s3Client,
-      params: {
-        Bucket: BUCKET,
-        Key: key,
-        Body: body,
-        ContentType: mimeType,
-        ACL: acl,
-        Metadata: metadata,
-      },
-    });
+  async upload({
+    key,
+    body,
+    mimeType,
+    originalName,
+    fileSize,
+    acl,
+    folder = "uploads",
+    clientId = null,
+    uploadedBy = null,
+    description = null,
+    visibility = AssetVisibility.PRIVATE,
+    s3Metadata = {},
+  }) {
+    // 1. Upload lên S3
+    const resolvedAcl = this.resolveAcl(visibility, acl);
+    const uploadParams = {
+      Bucket: BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: mimeType,
+      Metadata: s3Metadata,
+    };
 
-    const result = await upload.done();
+    if (resolvedAcl) {
+      uploadParams.ACL = resolvedAcl;
+    }
+
+    const result = await this.uploadToS3(uploadParams);
+    const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
+
+    // 2. Tạo record trong DB
+    const record = await S3Asset.create({
+      clientId,
+      s3Key: key,
+      s3Url: url,
+      s3Bucket: BUCKET,
+      s3Region: REGION,
+      etag: result.ETag,
+      originalName,
+      mimeType,
+      fileSize: fileSize || 0,
+      visibility,
+      folder,
+      uploadedBy,
+      description,
+    });
 
     return {
       key,
-      url: `https://${BUCKET}.s3.${appConfig.s3.region}.amazonaws.com/${key}`,
+      url,
       etag: result.ETag,
+      record,
     };
   }
 
@@ -83,12 +153,24 @@ class S3Service {
   // ─── DELETE ──────────────────────────────────────────────────────────────────
 
   /**
-   * Xoá một object khỏi bucket.
+   * Xoá một object khỏi bucket (chỉ S3, không xoá DB record).
    * @param {string} key - Object key cần xoá
    * @returns {Promise<void>}
    */
   async delete(key) {
     await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+  }
+
+  /**
+   * Xoá object khỏi S3 và đồng thời xoá record tương ứng trong DB.
+   * @param {string} key - Object key cần xoá
+   * @returns {Promise<void>}
+   */
+  async deleteAndRecord(key) {
+    await Promise.all([
+      s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
+      S3Asset.destroy({ where: { s3Key: key, s3Bucket: BUCKET } }),
+    ]);
   }
 
   /**
