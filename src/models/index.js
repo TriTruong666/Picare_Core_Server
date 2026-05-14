@@ -64,6 +64,25 @@ if (db.HubClient && db.S3Asset) {
   });
 }
 
+// 6. User ↔ S3Asset (1-n)
+if (db.User && db.S3Asset) {
+  // User owns assets (e.g. avatars)
+  db.User.hasMany(db.S3Asset, {
+    foreignKey: "userId",
+    as: "ownedAssets",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+
+  // User uploaded assets
+  db.User.hasMany(db.S3Asset, {
+    foreignKey: "uploadedBy",
+    as: "uploadedAssets",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+}
+
 db.sequelize = sequelize;
 
 module.exports = db;

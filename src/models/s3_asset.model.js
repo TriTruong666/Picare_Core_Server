@@ -26,16 +26,27 @@ const S3Asset = sequelize.define(
       comment: "ID định danh duy nhất của asset",
     },
 
-    // ── Liên kết client ─────────────────────────────────────────────────────
+    // ── Liên kết client / User ──────────────────────────────────────────────
     clientId: {
       type: DataTypes.UUID,
-      allowNull: true, // null = asset của hệ thống (không thuộc client nào)
+      allowNull: true, // null = asset của hệ thống hoặc cá nhân
       field: "client_id",
       references: {
         model: "hub_clients",
         key: "client_id",
       },
       comment: "FK → hub_clients.client_id – App sử dụng tài nguyên này",
+    },
+
+    userId: {
+      type: DataTypes.UUID,
+      allowNull: true, // null = asset của hệ thống hoặc client-level
+      field: "user_id",
+      references: {
+        model: "users",
+        key: "user_id",
+      },
+      comment: "FK → users.user_id – User sở hữu tài nguyên này (vd: avatar)",
     },
 
     // ── Thông tin lưu trữ S3 ────────────────────────────────────────────────
@@ -135,6 +146,10 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true,
       field: "uploaded_by",
+      references: {
+        model: "users",
+        key: "user_id",
+      },
       comment: "userId của người đã upload file",
     },
   },
@@ -143,6 +158,7 @@ const S3Asset = sequelize.define(
     timestamps: true, // createdAt, updatedAt
     indexes: [
       { fields: ["client_id"] },
+      { fields: ["user_id"] },
       { fields: ["asset_type"] },
       { fields: ["uploaded_by"] },
       { fields: ["folder"] },
@@ -194,6 +210,22 @@ S3Asset.associate = (db) => {
   S3Asset.belongsTo(db.HubClient, {
     foreignKey: "clientId",
     as: "client",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+
+  // S3Asset thuộc về một User (nếu là tài nguyên cá nhân)
+  S3Asset.belongsTo(db.User, {
+    foreignKey: "userId",
+    as: "user",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+
+  // S3Asset được upload bởi một User
+  S3Asset.belongsTo(db.User, {
+    foreignKey: "uploadedBy",
+    as: "uploader",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
   });

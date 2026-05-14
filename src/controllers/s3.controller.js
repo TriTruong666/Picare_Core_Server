@@ -3,6 +3,8 @@ const ResponseHandler = require("../common/response.handler");
 const S3Service = require("../services/s3.service");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
+const HubClient = require("../models/hub_client.model");
+const { validate: isUuid } = require("uuid");
 const {
   S3UploadResultDTO,
   S3PresignedUrlDTO,
@@ -13,6 +15,24 @@ class S3Controller {
   static extractObjectKey(req) {
     const rawKey = req.params?.key ?? req.params?.[0];
     return Array.isArray(rawKey) ? rawKey.join("/") : rawKey;
+  }
+
+  static async resolveClientId(clientId) {
+    if (!clientId) return null;
+    if (!isUuid(clientId)) {
+      throw new BadRequestException("clientId không hợp lệ");
+    }
+
+    const client = await HubClient.findOne({
+      where: { clientId },
+      attributes: ["clientId"],
+    });
+
+    if (!client) {
+      throw new BadRequestException("clientId không tồn tại");
+    }
+
+    return clientId;
   }
 
   /**
@@ -27,7 +47,7 @@ class S3Controller {
       }
 
       const folder = req.body.folder || "uploads";
-      const clientId = req.body.clientId || null;
+      const clientId = await S3Controller.resolveClientId(req.body.clientId);
       const description = req.body.description || null;
       const visibility = req.body.visibility || "private";
       const uploadedBy = req.user?.userId || null;

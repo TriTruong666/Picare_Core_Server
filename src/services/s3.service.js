@@ -59,6 +59,7 @@ class S3Service {
    * @param {"public-read"|"private"} [params.acl="private"] - ACL trên S3
    * @param {string}            [params.folder]     - Thư mục logic (vd: "avatars")
    * @param {string}            [params.clientId]   - UUID của HubClient sở hữu file
+   * @param {string}            [params.userId]     - UUID của User sở hữu file (vd: avatar)
    * @param {string}            [params.uploadedBy] - UUID của user đã upload
    * @param {string}            [params.description]- Mô tả ngắn về file
    * @param {"public"|"private"} [params.visibility="private"] - Visibility record DB
@@ -74,6 +75,7 @@ class S3Service {
     acl,
     folder = "uploads",
     clientId = null,
+    userId = null,
     uploadedBy = null,
     description = null,
     visibility = AssetVisibility.PRIVATE,
@@ -99,6 +101,7 @@ class S3Service {
     // 2. Tạo record trong DB
     const record = await S3Asset.create({
       clientId,
+      userId,
       s3Key: key,
       s3Url: url,
       s3Bucket: BUCKET,
