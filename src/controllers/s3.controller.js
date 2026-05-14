@@ -14,7 +14,8 @@ const {
 class S3Controller {
   static extractObjectKey(req) {
     const rawKey = req.params?.key ?? req.params?.[0];
-    return Array.isArray(rawKey) ? rawKey.join("/") : rawKey;
+    const key = Array.isArray(rawKey) ? rawKey.join("/") : rawKey;
+    return key ? decodeURIComponent(key) : key;
   }
 
   static async resolveClientId(clientId) {
@@ -216,6 +217,65 @@ class S3Controller {
         res,
         S3ObjectMetaDTO.from(metadata),
         "Lấy metadata thành công",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/s3/view/:key
+   * Redirect trực tiếp tới presigned URL của S3.
+   * Giúp Client dùng thẳng trong thẻ <img> mà không cần gọi API lấy URL trước.
+   */
+  static async viewObject(req, res, next) {
+    try {
+      const key = S3Controller.extractObjectKey(req);
+      const expiresIn = parseInt(req.query.expiresIn, 10) || 3600;
+
+      const presignedUrl = await S3Service.getPresignedUrl(key, expiresIn);
+
+      // Redirect 302 tới S3
+      return res.redirect(presignedUrl);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/s3/assets
+   * Lấy danh sách asset từ database.
+   */
+  static async getAssets(req, res, next) {
+    try {
+      const {
+        clientId,
+        userId,
+        folder,
+        assetType,
+        limit = 20,
+        offset = 0,
+        includeUrl = "true",
+        expiresIn = 3600,
+      } = req.query;
+
+      const filter = {};
+      if (clientId) filter.clientId = clientId;
+      if (userId) filter.userId = userId;
+      if (folder) filter.folder = folder;
+      if (assetType) filter.assetType = assetType;
+
+      const result = await S3Service.getAssetsFromDb(filter, {
+        limit: parseInt(limit, 10),
+        offset: parseInt(offset, 10),
+        includeUrl: includeUrl === "true",
+        expiresIn: parseInt(expiresIn, 10),
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Lấy danh sách asset thành công",
       );
     } catch (error) {
       next(error);

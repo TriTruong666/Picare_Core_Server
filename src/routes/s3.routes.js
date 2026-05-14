@@ -325,4 +325,25 @@ router.get(/^\/objects\/metadata\/(.+)$/, protect, S3Controller.getMetadata);
  */
 router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
 
+router.get("/assets", protect, S3Controller.getAssets);
+
+/**
+ * @swagger
+ * /api/v1/s3/view/{key}:
+ *   get:
+ *     summary: Redirect trực tiếp tới presigned URL để xem ảnh/file
+ *     tags: [S3]
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Object key
+ *     responses:
+ *       302:
+ *         description: Redirect tới S3
+ */
+router.get(/^\/view\/(.+)$/, S3Controller.viewObject);
+
 module.exports = router;

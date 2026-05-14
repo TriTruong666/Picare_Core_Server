@@ -258,6 +258,40 @@ class S3Service {
     };
   }
 
+  // ─── DATABASE ASSETS ────────────────────────────────────────────────────────
+  /**
+   * Lấy danh sách asset từ database kèm theo presigned URL nếu cần.
+   * @param {Object} filter - Điều kiện lọc (clientId, userId, folder, etc.)
+   * @param {Object} options - Phân trang và cấu hình (limit, offset, includeUrl)
+   * @returns {Promise<{rows: S3Asset[], count: number}>}
+   */
+  async getAssetsFromDb(filter = {}, options = {}) {
+    const { limit = 20, offset = 0, includeUrl = true, expiresIn = 3600 } = options;
+    
+    const { rows, count } = await S3Asset.findAndCountAll({
+      where: filter,
+      limit,
+      offset,
+      order: [["createdAt", "DESC"]],
+    });
+
+    if (includeUrl) {
+      // Gán thêm presignedUrl cho từng item nếu là private hoặc theo yêu cầu
+      for (const asset of rows) {
+        if (asset.visibility === AssetVisibility.PRIVATE) {
+          asset.setDataValue(
+            "presignedUrl",
+            await this.getPresignedUrl(asset.s3Key, expiresIn)
+          );
+        } else {
+          asset.setDataValue("presignedUrl", asset.s3Url);
+        }
+      }
+    }
+
+    return { rows, count };
+  }
+
   // ─── HELPER ──────────────────────────────────────────────────────────────────
 
   /**
