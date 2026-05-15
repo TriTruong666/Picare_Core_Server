@@ -4,6 +4,8 @@ const S3Service = require("../services/s3.service");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const HubClient = require("../models/hub_client.model");
+const S3Asset = require("../models/s3_asset.model");
+const S3Folder = require("../models/s3_folder.model");
 const { validate: isUuid } = require("uuid");
 const {
   S3UploadResultDTO,
@@ -293,8 +295,17 @@ class S3Controller {
       const filter = {};
       if (clientId) filter.clientId = clientId;
       if (userId) filter.userId = userId;
-      if (folder) filter.folder = folder;
       if (assetType) filter.assetType = assetType;
+      
+      // Nếu folder là UUID thì filter theo folderId, nếu là string thì filter theo name của Folder
+      if (folder) {
+        if (isUuid(folder)) {
+          filter.folderId = folder;
+        } else {
+          // Sequelize include filter
+          filter["$folder.name$"] = folder;
+        }
+      }
 
       const result = await S3Service.getAssetsFromDb(filter, {
         limit: parseInt(limit, 10),

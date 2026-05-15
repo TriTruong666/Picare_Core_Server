@@ -12,6 +12,7 @@ const slugify = require("slugify");
 const s3Client = require("../config/s3.config");
 const appConfig = require("../config/app.config");
 const S3Asset = require("../models/s3_asset.model");
+const S3Folder = require("../models/s3_folder.model");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 
 const BUCKET = appConfig.s3.bucketName;
@@ -74,7 +75,20 @@ class S3Service {
     const result = await this.uploadToS3(uploadParams);
     const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 
-    // 2. Tạo record trong DB
+    // 2. Resolve Folder
+    let folderId = null;
+    if (folder) {
+      const [folderRecord] = await S3Folder.findOrCreate({
+        where: { name: folder },
+        defaults: {
+          name: folder,
+          description: `Auto-created folder for ${folder}`,
+        },
+      });
+      folderId = folderRecord.folderId;
+    }
+
+    // 3. Tạo record trong DB
     const record = await S3Asset.create({
       clientId,
       userId,
@@ -87,7 +101,7 @@ class S3Service {
       mimeType,
       fileSize: fileSize || 0,
       visibility,
-      folder,
+      folderId,
       uploadedBy,
       description,
     });
@@ -242,13 +256,31 @@ class S3Service {
    * @returns {Promise<{rows: S3Asset[], count: number}>}
    */
   async getAssetsFromDb(filter = {}, options = {}) {
-    const { limit = 20, offset = 0, includeUrl = true, expiresIn = 3600 } = options;
-    
+    const {
+      limit = 20,
+      offset = 0,
+      includeUrl = true,
+      expiresIn = 3600,
+    } = options;
+
     const { rows, count } = await S3Asset.findAndCountAll({
       where: filter,
       limit,
       offset,
       order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: S3Folder,
+          as: "folder",
+          attributes: [
+            "folderId",
+            "name",
+            "description",
+            "assetCount",
+            "totalSize",
+          ],
+        },
+      ],
     });
 
     if (includeUrl) {
@@ -257,7 +289,7 @@ class S3Service {
         if (asset.visibility === AssetVisibility.PRIVATE) {
           asset.setDataValue(
             "presignedUrl",
-            await this.getPresignedUrl(asset.s3Key, expiresIn)
+            await this.getPresignedUrl(asset.s3Key, expiresIn),
           );
         } else {
           asset.setDataValue("presignedUrl", asset.s3Url);

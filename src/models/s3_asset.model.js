@@ -123,10 +123,15 @@ const S3Asset = sequelize.define(
     },
 
     // ── Tổ chức / phân loại ──────────────────────────────────────────────────
-    folder: {
-      type: DataTypes.STRING(255),
+    folderId: {
+      type: DataTypes.UUID,
       allowNull: true,
-      comment: "Thư mục logic trong bucket (vd: avatars, documents)",
+      field: "folder_id",
+      references: {
+        model: "s3_folders",
+        key: "folder_id",
+      },
+      comment: "FK trỏ tới S3Folder",
     },
 
     tags: {
@@ -161,7 +166,7 @@ const S3Asset = sequelize.define(
       { fields: ["user_id"] },
       { fields: ["asset_type"] },
       { fields: ["uploaded_by"] },
-      { fields: ["folder"] },
+      { fields: ["folder_id"] },
       { unique: true, fields: ["s3_key", "s3_bucket"] }, // Không duplicate key trong cùng bucket
     ],
     hooks: {
@@ -184,6 +189,30 @@ const S3Asset = sequelize.define(
           asset.assetType = "document";
         } else {
           asset.assetType = "other";
+        }
+      },
+      /**
+       * Cập nhật stats cho Folder sau khi tạo asset.
+       */
+      afterCreate: async (asset) => {
+        if (asset.folderId) {
+          const S3Folder = sequelize.models.S3Folder;
+          await S3Folder.increment(
+            { assetCount: 1, totalSize: asset.fileSize || 0 },
+            { where: { folderId: asset.folderId } }
+          );
+        }
+      },
+      /**
+       * Cập nhật stats cho Folder sau khi xóa asset.
+       */
+      afterDestroy: async (asset) => {
+        if (asset.folderId) {
+          const S3Folder = sequelize.models.S3Folder;
+          await S3Folder.increment(
+            { assetCount: -1, totalSize: -(asset.fileSize || 0) },
+            { where: { folderId: asset.folderId } }
+          );
         }
       },
     },
@@ -229,6 +258,15 @@ S3Asset.associate = (db) => {
     foreignKey: "uploadedBy",
     targetKey: "userId",
     as: "uploader",
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE",
+  });
+
+  // S3Asset thuộc về một Folder
+  S3Asset.belongsTo(db.S3Folder, {
+    foreignKey: "folderId",
+    targetKey: "folderId",
+    as: "folder",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
   });
