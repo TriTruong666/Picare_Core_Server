@@ -185,30 +185,6 @@ class S3Controller {
   }
 
   /**
-   * GET /api/v1/s3/objects?prefix=...&maxKeys=...
-   * Liệt kê các object trong bucket theo prefix.
-   */
-  static async listObjects(req, res, next) {
-    try {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) {
-        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
-      }
-
-      const { prefix = "", maxKeys = 100 } = req.query;
-      const objects = await S3Service.list(prefix, maxKeys);
-
-      return ResponseHandler.success(
-        res,
-        objects,
-        "Lấy danh sách object thành công",
-      );
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  /**
    * GET /api/v1/s3/objects/exists/:key
    * Kiểm tra object có tồn tại trong bucket không.
    */
@@ -314,9 +290,14 @@ class S3Controller {
         expiresIn: parseInt(expiresIn, 10),
       });
 
-      return ResponseHandler.success(
+      const currentPage = Math.floor(parseInt(offset, 10) / parseInt(limit, 10)) + 1;
+
+      return ResponseHandler.paginate(
         res,
-        result,
+        result.rows,
+        result.count,
+        currentPage,
+        limit,
         "Lấy danh sách asset thành công",
       );
     } catch (error) {

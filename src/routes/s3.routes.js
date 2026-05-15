@@ -6,7 +6,6 @@ const { protect } = require("../middlewares/auth.middleware");
 const {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
-  listObjectsSchema,
 } = require("../schemas/s3.schema");
 
 // Multer – lưu file vào memory buffer (không ghi ra disk)
@@ -182,50 +181,6 @@ router.get(
 
 /**
  * @swagger
- * /api/v1/s3/objects:
- *   get:
- *     summary: Liệt kê các object trong bucket theo prefix
- *     tags: [S3]
- *     security:
- *       - cookieAuth: []
- *     parameters:
- *       - in: query
- *         name: prefix
- *         schema:
- *           type: string
- *         description: Prefix để lọc (vd "images/")
- *       - in: query
- *         name: maxKeys
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 1000
- *           default: 100
- *         description: Số lượng object tối đa trả về
- *     responses:
- *       200:
- *         description: Lấy danh sách thành công
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   key:
- *                     type: string
- *                   size:
- *                     type: integer
- *                   lastModified:
- *                     type: string
- *                     format: date-time
- *       401:
- *         description: Chưa xác thực
- */
-router.get("/objects", protect, listObjectsSchema, S3Controller.listObjects);
-
-/**
- * @swagger
  * /api/v1/s3/objects/exists/{key}:
  *   get:
  *     summary: Kiểm tra object có tồn tại trong bucket không
@@ -325,6 +280,49 @@ router.get(/^\/objects\/metadata\/(.+)$/, protect, S3Controller.getMetadata);
  */
 router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
 
+/**
+ * @swagger
+ * /api/v1/s3/assets:
+ *   get:
+ *     summary: Lấy danh sách asset từ database
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: folder
+ *         schema:
+ *           type: string
+ *         description: folderId (UUID) hoặc folderName (string) để lọc
+ *       - in: query
+ *         name: clientId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: assetType
+ *         schema:
+ *           type: string
+ *           enum: [image, video, document, audio, other]
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *     responses:
+ *       200:
+ *         description: Thành công
+ */
 router.get("/assets", protect, S3Controller.getAssets);
 
 /**

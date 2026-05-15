@@ -96,21 +96,6 @@ const keyParamSchema = [
     .withMessage("key phải là chuỗi"),
 ];
 
-/**
- * Validate query params cho endpoint list objects.
- */
-const listObjectsSchema = [
-  query("prefix")
-    .optional()
-    .isString()
-    .withMessage("prefix phải là chuỗi"),
-  query("maxKeys")
-    .optional()
-    .isInt({ min: 1, max: 1000 })
-    .withMessage("maxKeys phải là số nguyên từ 1 đến 1000")
-    .toInt(),
-];
-
 module.exports = {
   S3UploadResultDTO,
   S3PresignedUrlDTO,
@@ -118,5 +103,4 @@ module.exports = {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
   keyParamSchema,
-  listObjectsSchema,
 };

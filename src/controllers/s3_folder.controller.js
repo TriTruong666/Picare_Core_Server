@@ -34,16 +34,12 @@ class S3FolderController {
       const { page, limit, search } = req.query;
       const { rows, count } = await S3FolderService.getAll({ page, limit, search });
       
-      return ResponseHandler.success(
+      return ResponseHandler.paginate(
         res,
-        {
-          folders: S3FolderDTO.fromFolders(rows),
-          pagination: {
-            total: count,
-            page: parseInt(page) || 1,
-            limit: parseInt(limit) || 20,
-          },
-        },
+        S3FolderDTO.fromFolders(rows),
+        count,
+        page || 1,
+        limit || 20,
         "Lấy danh sách thư mục thành công"
       );
     } catch (error) {

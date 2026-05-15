@@ -187,29 +187,6 @@ class S3Service {
     }
   }
 
-  // ─── LIST ────────────────────────────────────────────────────────────────────
-
-  /**
-   * Liệt kê các object trong bucket theo prefix.
-   * @param {string} [prefix=""]     - Prefix để lọc (vd: "images/")
-   * @param {number} [maxKeys=1000]  - Số lượng tối đa object trả về
-   * @returns {Promise<Array<{key: string, size: number, lastModified: Date}>>}
-   */
-  async list(prefix = "", maxKeys = 1000) {
-    const command = new ListObjectsV2Command({
-      Bucket: BUCKET,
-      Prefix: prefix,
-      MaxKeys: maxKeys,
-    });
-
-    const response = await s3Client.send(command);
-    return (response.Contents || []).map((item) => ({
-      key: item.Key,
-      size: item.Size,
-      lastModified: item.LastModified,
-    }));
-  }
-
   // ─── HEAD / EXISTS ───────────────────────────────────────────────────────────
 
   /**
