@@ -8,6 +8,7 @@ const {
 } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const slugify = require("slugify");
 const s3Client = require("../config/s3.config");
 const appConfig = require("../config/app.config");
 const S3Asset = require("../models/s3_asset.model");
@@ -20,31 +21,12 @@ const REGION = appConfig.s3.region;
  * S3 Service – Wrapper cho các thao tác với AWS S3
  */
 class S3Service {
-  resolveAcl(visibility, acl) {
-    if (acl) return acl;
-    return visibility === AssetVisibility.PUBLIC ? "public-read" : "private";
-  }
-
   async uploadToS3(params) {
     const uploader = new Upload({
       client: s3Client,
       params,
     });
-
-    try {
-      return await uploader.done();
-    } catch (error) {
-      if (params.ACL && error.name === "AccessControlListNotSupported") {
-        const { ACL, ...paramsWithoutAcl } = params;
-        const retryUploader = new Upload({
-          client: s3Client,
-          params: paramsWithoutAcl,
-        });
-        return retryUploader.done();
-      }
-
-      throw error;
-    }
+    return uploader.done();
   }
   // ─── UPLOAD ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +54,6 @@ class S3Service {
     mimeType,
     originalName,
     fileSize,
-    acl,
     folder = "uploads",
     clientId = null,
     userId = null,
@@ -81,8 +62,7 @@ class S3Service {
     visibility = AssetVisibility.PRIVATE,
     s3Metadata = {},
   }) {
-    // 1. Upload lên S3
-    const resolvedAcl = this.resolveAcl(visibility, acl);
+    // 1. Upload lên S3 (không dùng ACL)
     const uploadParams = {
       Bucket: BUCKET,
       Key: key,
@@ -90,10 +70,6 @@ class S3Service {
       ContentType: mimeType,
       Metadata: s3Metadata,
     };
-
-    if (resolvedAcl) {
-      uploadParams.ACL = resolvedAcl;
-    }
 
     const result = await this.uploadToS3(uploadParams);
     const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
@@ -302,8 +278,12 @@ class S3Service {
    */
   buildKey(folder, filename) {
     const timestamp = Date.now();
-    const sanitized = filename.replace(/\s+/g, "_");
-    return `${folder}/${timestamp}_${sanitized}`;
+    // Tách extension trước khi slugify để không bị mất dấu chấm
+    const lastDot = filename.lastIndexOf(".");
+    const ext = lastDot !== -1 ? filename.slice(lastDot) : "";
+    const name = lastDot !== -1 ? filename.slice(0, lastDot) : filename;
+    const slug = slugify(name, { lower: true, strict: true, locale: "vi" });
+    return `${folder}/${timestamp}_${slug}${ext}`;
   }
 }
 

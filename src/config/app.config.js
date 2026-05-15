@@ -36,8 +36,8 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: false,
-    protectedTables: ["users"],
+    force_reset: true,
+    protectedTables: [""],
   },
 
   redis: {

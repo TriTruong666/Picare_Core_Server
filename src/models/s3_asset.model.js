@@ -209,6 +209,7 @@ S3Asset.associate = (db) => {
   // S3Asset thuộc về một HubClient
   S3Asset.belongsTo(db.HubClient, {
     foreignKey: "clientId",
+    targetKey: "clientId",
     as: "client",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
@@ -217,6 +218,7 @@ S3Asset.associate = (db) => {
   // S3Asset thuộc về một User (nếu là tài nguyên cá nhân)
   S3Asset.belongsTo(db.User, {
     foreignKey: "userId",
+    targetKey: "userId",
     as: "user",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
@@ -225,6 +227,7 @@ S3Asset.associate = (db) => {
   // S3Asset được upload bởi một User
   S3Asset.belongsTo(db.User, {
     foreignKey: "uploadedBy",
+    targetKey: "userId",
     as: "uploader",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",

@@ -29,8 +29,8 @@ socketService.init(server);
  */
 app.use(morgan("dev"));
 app.use(cors({ origin: config.cors, credentials: true }));
-app.use(express.json()); // Parse JSON body
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "50mb" })); // Parse JSON body
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use(cookieParser()); // Parse Cookies
 
 /**

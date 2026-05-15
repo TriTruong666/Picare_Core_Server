@@ -58,6 +58,7 @@ if (db.User && db.Role && db.Permission) {
 if (db.HubClient && db.S3Asset) {
   db.HubClient.hasMany(db.S3Asset, {
     foreignKey: "clientId",
+    sourceKey: "clientId",
     as: "assets",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
@@ -69,6 +70,7 @@ if (db.User && db.S3Asset) {
   // User owns assets (e.g. avatars)
   db.User.hasMany(db.S3Asset, {
     foreignKey: "userId",
+    sourceKey: "userId",
     as: "ownedAssets",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",
@@ -77,6 +79,7 @@ if (db.User && db.S3Asset) {
   // User uploaded assets
   db.User.hasMany(db.S3Asset, {
     foreignKey: "uploadedBy",
+    sourceKey: "userId",
     as: "uploadedAssets",
     onDelete: "SET NULL",
     onUpdate: "CASCADE",

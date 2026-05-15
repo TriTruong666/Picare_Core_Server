@@ -35,10 +35,10 @@ const createHubClientSchema = [
   body("clientName").trim().notEmpty().withMessage("Tên client không được để trống"),
   body("clientInternalUrl")
     .optional()
-    .isURL()
+    .isURL({ require_tld: false })
     .withMessage("Internal URL không hợp lệ"),
   body("clientExternalUrl")
-    .isURL()
+    .isURL({ require_tld: false })
     .withMessage("External URL không hợp lệ"),
   body("clientStatus")
     .notEmpty()
@@ -58,11 +58,11 @@ const updateHubClientSchema = [
   body("clientName").optional().trim().notEmpty().withMessage("Tên client không được để trống"),
   body("clientInternalUrl")
     .optional()
-    .isURL()
+    .isURL({ require_tld: false })
     .withMessage("Internal URL không hợp lệ"),
   body("clientExternalUrl")
     .optional()
-    .isURL()
+    .isURL({ require_tld: false })
     .withMessage("External URL không hợp lệ"),
   body("clientStatus")
     .optional()

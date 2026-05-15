@@ -43,8 +43,39 @@ class S3Controller {
    */
   static async uploadFile(req, res, next) {
     try {
-      if (!req.file) {
-        throw new BadRequestException("Không tìm thấy file trong request");
+      let fileBuffer, mimeType, originalName, fileSize;
+
+      // 1. Trường hợp 1: Upload qua multipart/form-data (multer)
+      if (req.file) {
+        fileBuffer = req.file.buffer;
+        mimeType = req.file.mimetype;
+        originalName = req.file.originalname;
+        fileSize = req.file.size;
+      } 
+      // 2. Trường hợp 2: Upload qua JSON (base64 string trong body.file)
+      else if (req.body.file && typeof req.body.file === "string") {
+        const fileData = req.body.file;
+        
+        // Kiểm tra xem có phải data URI không (vd: data:image/png;base64,...)
+        const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        
+        if (matches && matches.length === 3) {
+          mimeType = matches[1];
+          fileBuffer = Buffer.from(matches[2], "base64");
+          fileSize = fileBuffer.length;
+          // Lấy tên file từ body hoặc tạo tên mặc định dựa trên mimetype
+          originalName = req.body.filename || `upload_${Date.now()}.${mimeType.split("/")[1]}`;
+        } else {
+          // Nếu không phải data URI, giả định là base64 raw (cần mimeType trong body)
+          fileBuffer = Buffer.from(fileData, "base64");
+          fileSize = fileBuffer.length;
+          mimeType = req.body.mimeType || "application/octet-stream";
+          originalName = req.body.filename || `upload_${Date.now()}`;
+        }
+      }
+
+      if (!fileBuffer) {
+        throw new BadRequestException("Không tìm thấy file trong request (hỗ trợ multipart hoặc base64 JSON)");
       }
 
       const folder = req.body.folder || "uploads";
@@ -53,14 +84,14 @@ class S3Controller {
       const visibility = req.body.visibility || "private";
       const uploadedBy = req.user?.userId || null;
 
-      const key = S3Service.buildKey(folder, req.file.originalname);
+      const key = S3Service.buildKey(folder, originalName);
 
       const result = await S3Service.upload({
         key,
-        body: req.file.buffer,
-        mimeType: req.file.mimetype,
-        originalName: req.file.originalname,
-        fileSize: req.file.size,
+        body: fileBuffer,
+        mimeType,
+        originalName,
+        fileSize,
         folder,
         clientId,
         uploadedBy,
