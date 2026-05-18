@@ -372,7 +372,7 @@ class S3Service {
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
       // Scale video phụ bằng 45% (gần một nửa) chiều rộng video chính, áp dụng thuật toán Lanczos siêu sắc nét
       let filterComplex =
-        "[1:v][0:v]scale2ref=w=iw/2.2:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
+        "[1:v]crop=iw*0.8:ih*0.8[cropped]; [cropped][0:v]scale2ref=w=iw/3:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-10:10[outv]";
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
