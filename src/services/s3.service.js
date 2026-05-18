@@ -366,8 +366,8 @@ class S3Service {
       ]);
 
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
-      // Scale video phụ bằng 25% (1/4) chiều rộng video chính và overlay ở góc trên bên phải (cách lề 20px)
-      let filterComplex = "[1:v][0:v]scale2ref=w=iw/4:h=-1[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
+      // Scale video phụ bằng 33% (1/3) chiều rộng video chính để rõ nét hơn và overlay ở góc trên bên phải (cách lề 20px)
+      let filterComplex = "[1:v][0:v]scale2ref=w=iw/3:h=-1[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
@@ -389,8 +389,8 @@ class S3Service {
         "-filter_complex", filterComplex,
         ...mapArgs,
         "-c:v", "libvpx-vp9",
-        "-crf", "32",
-        "-b:v", "1500k",
+        "-crf", "22",          // Tăng chất lượng từ 32 lên 22 (HD cực kỳ sắc nét)
+        "-b:v", "0",           // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
         "-deadline", "realtime",
         "-cpu-used", "8",
       ];
