@@ -344,4 +344,129 @@ router.get("/assets", protect, S3Controller.getAssets);
  */
 router.get(/^\/view\/(.+)$/, S3Controller.viewObject);
 
+/**
+ * @swagger
+ * /api/v1/s3/download:
+ *   get:
+ *     summary: Tải trực tiếp một file bất kỳ từ S3 về máy (với Content-Disposition attachment)
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: key
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Object key của file trong S3 bucket (nếu dùng query param)
+ *         example: donghang/1779077292048_upload1779077292047.webm
+ *     responses:
+ *       200:
+ *         description: Trả về file stream nhị phân (binary) kèm header tải xuống
+ *         content:
+ *           application/octet-stream:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       400:
+ *         description: Lỗi yêu cầu (thiếu key hoặc file không tồn tại)
+ *       401:
+ *         description: Chưa xác thực
+ */
+router.get("/download", protect, S3Controller.downloadObject);
+
+/**
+ * @swagger
+ * /api/v1/s3/download/{key}:
+ *   get:
+ *     summary: Tải trực tiếp một file bất kỳ từ S3 bằng đường dẫn (đường dẫn có chứa dấu gạch chéo '/')
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Object key của file trong S3 bucket
+ *         example: donghang/1779077292048_upload1779077292047.webm
+ *     responses:
+ *       200:
+ *         description: Trả về file stream nhị phân
+ *       400:
+ *         description: Lỗi yêu cầu
+ *       401:
+ *         description: Chưa xác thực
+ */
+router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
+
+/**
+ * @swagger
+ * /api/v1/s3/merge-videos:
+ *   post:
+ *     summary: Ghép hai video (.webm) từ S3 thành một video duy nhất bằng FFmpeg
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - mainVideoKey
+ *               - secondVideoKey
+ *             properties:
+ *               mainVideoKey:
+ *                 type: string
+ *                 description: S3 key của video chính
+ *                 example: donghang/1779077292048_upload1779077292047.webm
+ *               secondVideoKey:
+ *                 type: string
+ *                 description: S3 key của video thứ hai
+ *                 example: donghang/1779077292309_upload1779077292308.webm
+ *               clientId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: UUID của HubClient sở hữu video đã ghép (tuỳ chọn)
+ *               visibility:
+ *                 type: string
+ *                 enum: [public, private]
+ *                 default: private
+ *                 description: Chế độ hiển thị của video đã ghép
+ *     responses:
+ *       201:
+ *         description: Ghép video thành công, trả về link S3 và record DB mới
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Ghép video và upload thành công
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     key:
+ *                       type: string
+ *                       example: merged_videos/1715604000000_merged_video.webm
+ *                     url:
+ *                       type: string
+ *                       example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm
+ *                     presignedUrl:
+ *                       type: string
+ *                       example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm?AWSAccessKeyId=...
+ *                     etag:
+ *                       type: string
+ *                     record:
+ *                       type: object
+ */
+router.post("/merge-videos", protect, S3Controller.mergeVideos);
+
 module.exports = router;

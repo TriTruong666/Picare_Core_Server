@@ -14,6 +14,12 @@ const appConfig = require("../config/app.config");
 const S3Asset = require("../models/s3_asset.model");
 const S3Folder = require("../models/s3_folder.model");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
+const { BadRequestException } = require("../common/exceptions/BaseException");
+const fs = require("fs");
+const path = require("path");
+const { pipeline } = require("stream/promises");
+const { execFile } = require("child_process");
+const ffmpegPath = require("ffmpeg-static");
 
 const BUCKET = appConfig.s3.bucketName;
 const REGION = appConfig.s3.region;
@@ -275,6 +281,147 @@ class S3Service {
     }
 
     return { rows, count };
+  }
+
+  // ─── DOWNLOAD & MERGE ────────────────────────────────────────────────────────
+
+  /**
+   * Lấy stream của một object từ S3.
+   * @param {string} key - Object key
+   * @returns {Promise<import("@aws-sdk/client-s3").GetObjectCommandOutput>}
+   */
+  async getDownloadStream(key) {
+    const command = new GetObjectCommand({ Bucket: BUCKET, Key: key });
+    return s3Client.send(command);
+  }
+
+  /**
+   * Ghép 2 video bằng FFmpeg, upload video đã ghép lên S3 và tạo record trong DB.
+   * @param {Object} params
+   * @param {string} params.mainVideoKey
+   * @param {string} params.secondVideoKey
+   * @param {string} [params.clientId]
+   * @param {string} [params.userId]
+   * @param {string} [params.uploadedBy]
+   * @param {"public"|"private"} [params.visibility="private"]
+   * @returns {Promise<{key, url, etag, record: S3Asset}>}
+   */
+  async mergeVideos({
+    mainVideoKey,
+    secondVideoKey,
+    clientId = null,
+    userId = null,
+    uploadedBy = null,
+    visibility = AssetVisibility.PRIVATE,
+  }) {
+    // 1. Kiểm tra sự tồn tại của 2 video
+    const [mainExists, secondExists] = await Promise.all([
+      this.exists(mainVideoKey),
+      this.exists(secondVideoKey),
+    ]);
+
+    if (!mainExists) {
+      throw new BadRequestException(`Video chính không tồn tại: ${mainVideoKey}`);
+    }
+    if (!secondExists) {
+      throw new BadRequestException(`Video phụ không tồn tại: ${secondVideoKey}`);
+    }
+
+    // Tạo thư mục tạm trong workspace
+    const tempDir = path.join(process.cwd(), "temp_merged");
+    await fs.promises.mkdir(tempDir, { recursive: true });
+
+    const timestamp = Date.now();
+    const localMainPath = path.join(tempDir, `main_${timestamp}.webm`);
+    const localSecondPath = path.join(tempDir, `second_${timestamp}.webm`);
+    const listFilePath = path.join(tempDir, `list_${timestamp}.txt`);
+    const localOutputPath = path.join(tempDir, `merged_${timestamp}.webm`);
+
+    try {
+      // 2. Download 2 video về file tạm
+      const downloadToFile = async (key, localPath) => {
+        const streamData = await this.getDownloadStream(key);
+        const writeStream = fs.createWriteStream(localPath);
+        await pipeline(streamData.Body, writeStream);
+      };
+
+      await Promise.all([
+        downloadToFile(mainVideoKey, localMainPath),
+        downloadToFile(secondVideoKey, localSecondPath),
+      ]);
+
+      // 3. Tạo file text concat (đổi tất cả backslash thành forward slash trên Windows)
+      const listContent = [
+        `file '${localMainPath.replace(/\\/g, "/")}'`,
+        `file '${localSecondPath.replace(/\\/g, "/")}'`,
+      ].join("\n");
+
+      await fs.promises.writeFile(listFilePath, listContent, "utf8");
+
+      // 4. Thực thi FFmpeg concat demuxer (cực kỳ nhanh và giữ nguyên codec)
+      await new Promise((resolve, reject) => {
+        execFile(
+          ffmpegPath,
+          [
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            listFilePath,
+            "-c",
+            "copy",
+            localOutputPath,
+          ],
+          (error, stdout, stderr) => {
+            if (error) {
+              reject(new Error(`FFmpeg merge error: ${error.message}. Stderr: ${stderr}`));
+            } else {
+              resolve({ stdout, stderr });
+            }
+          }
+        );
+      });
+
+      // 5. Upload video đã ghép lên S3 và lưu vào DB
+      const mergedKey = this.buildKey("merged_videos", `merged_${timestamp}.webm`);
+      const fileStream = fs.createReadStream(localOutputPath);
+      const fileSize = fs.statSync(localOutputPath).size;
+
+      const result = await this.upload({
+        key: mergedKey,
+        body: fileStream,
+        mimeType: "video/webm",
+        originalName: `merged_${timestamp}.webm`,
+        fileSize,
+        folder: "merged_videos",
+        clientId,
+        userId,
+        uploadedBy,
+        visibility,
+      });
+
+      return result;
+    } finally {
+      // 6. Clean up: Xoá tất cả file tạm một cách an toàn
+      const cleanFile = async (filePath) => {
+        try {
+          if (fs.existsSync(filePath)) {
+            await fs.promises.unlink(filePath);
+          }
+        } catch (err) {
+          console.error(`Lỗi khi xoá file tạm ${filePath}:`, err.message);
+        }
+      };
+
+      await Promise.all([
+        cleanFile(localMainPath),
+        cleanFile(localSecondPath),
+        cleanFile(listFilePath),
+        cleanFile(localOutputPath),
+      ]);
+    }
   }
 
   // ─── HELPER ──────────────────────────────────────────────────────────────────

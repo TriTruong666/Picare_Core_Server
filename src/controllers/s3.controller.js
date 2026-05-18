@@ -304,6 +304,93 @@ class S3Controller {
       next(error);
     }
   }
+
+  /**
+   * GET /api/v1/s3/download/:key
+   * Tải một file trực tiếp từ S3 về máy client (hỗ trợ mọi loại file).
+   */
+  static async downloadObject(req, res, next) {
+    try {
+      const key = req.query.key || S3Controller.extractObjectKey(req);
+      if (!key) {
+        throw new BadRequestException("Thiếu key file cần tải");
+      }
+
+      // Tìm tên file gốc trong DB nếu có
+      const asset = await S3Asset.findOne({
+        where: { s3Key: key }
+      });
+      let filename = key.split("/").pop();
+      if (asset && asset.originalName) {
+        filename = asset.originalName;
+      }
+
+      const streamData = await S3Service.getDownloadStream(key);
+
+      res.setHeader("Content-Type", streamData.ContentType || "application/octet-stream");
+      if (streamData.ContentLength) {
+        res.setHeader("Content-Length", streamData.ContentLength);
+      }
+      
+      const encodedFilename = encodeURIComponent(filename);
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
+      );
+
+      streamData.Body.pipe(res);
+    } catch (error) {
+      if (error.name === "NoSuchKey") {
+        return next(new BadRequestException("File không tồn tại trên S3"));
+      }
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/v1/s3/merge-videos
+   * Ghép 2 video bằng FFmpeg và upload lên S3.
+   */
+  static async mergeVideos(req, res, next) {
+    try {
+      const mainVideoKey = req.body.mainVideoKey || req.body.firstVideoKey || req.body.videoKey1;
+      const secondVideoKey = req.body.secondVideoKey || req.body.videoKey2;
+
+      if (!mainVideoKey || !secondVideoKey) {
+        throw new BadRequestException("Thiếu mainVideoKey hoặc secondVideoKey");
+      }
+
+      const clientId = await S3Controller.resolveClientId(req.body.clientId);
+      const visibility = req.body.visibility || "private";
+      const uploadedBy = req.user?.userId || null;
+
+      const result = await S3Service.mergeVideos({
+        mainVideoKey,
+        secondVideoKey,
+        clientId,
+        uploadedBy,
+        visibility,
+      });
+
+      // Tạo presigned URL cho file đã ghép nếu nó là private để client có thể xem được ngay
+      let presignedUrl = result.url;
+      if (visibility === "private") {
+        presignedUrl = await S3Service.getPresignedUrl(result.key, 86400); // Hạn 1 ngày
+      }
+
+      return ResponseHandler.created(
+        res,
+        {
+          ...S3UploadResultDTO.from(result),
+          presignedUrl,
+          record: result.record,
+        },
+        "Ghép video và upload thành công",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = S3Controller;
