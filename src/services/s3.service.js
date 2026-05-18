@@ -334,7 +334,6 @@ class S3Service {
     const timestamp = Date.now();
     const localMainPath = path.join(tempDir, `main_${timestamp}.webm`);
     const localSecondPath = path.join(tempDir, `second_${timestamp}.webm`);
-    const listFilePath = path.join(tempDir, `list_${timestamp}.txt`);
     const localOutputPath = path.join(tempDir, `merged_${timestamp}.webm`);
 
     try {
@@ -350,33 +349,66 @@ class S3Service {
         downloadToFile(secondVideoKey, localSecondPath),
       ]);
 
-      // 3. Tạo file text concat (đổi tất cả backslash thành forward slash trên Windows)
-      const listContent = [
-        `file '${localMainPath.replace(/\\/g, "/")}'`,
-        `file '${localSecondPath.replace(/\\/g, "/")}'`,
-      ].join("\n");
+      // Helper phát hiện stream âm thanh của từng video bằng FFmpeg
+      const hasAudio = (localPath) => {
+        return new Promise((resolve) => {
+          execFile(ffmpegPath, ["-i", localPath], (error, stdout, stderr) => {
+            const output = (stderr || "") + (stdout || "");
+            const match = /Audio:/i.test(output);
+            resolve(match);
+          });
+        });
+      };
 
-      await fs.promises.writeFile(listFilePath, listContent, "utf8");
+      const [mainHasAudio, secondHasAudio] = await Promise.all([
+        hasAudio(localMainPath),
+        hasAudio(localSecondPath),
+      ]);
 
-      // 4. Thực thi FFmpeg concat demuxer (cực kỳ nhanh và giữ nguyên codec)
+      // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
+      // Scale video phụ bằng 25% (1/4) chiều rộng video chính và overlay ở góc trên bên phải (cách lề 20px)
+      let filterComplex = "[1:v][0:v]scale2ref=w=iw/4:h=-1[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
+      const mapArgs = ["-map", "[outv]"];
+
+      if (mainHasAudio && secondHasAudio) {
+        // Trộn âm thanh từ cả 2 video
+        filterComplex += "; [0:a][1:a]amix=inputs=2:duration=longest[outa]";
+        mapArgs.push("-map", "[outa]");
+      } else if (mainHasAudio) {
+        // Chỉ lấy âm thanh từ video chính
+        mapArgs.push("-map", "0:a");
+      } else if (secondHasAudio) {
+        // Chỉ lấy âm thanh từ video phụ
+        mapArgs.push("-map", "1:a");
+      }
+
+      const ffmpegArgs = [
+        "-y",
+        "-i", localMainPath,
+        "-i", localSecondPath,
+        "-filter_complex", filterComplex,
+        ...mapArgs,
+        "-c:v", "libvpx-vp9",
+        "-crf", "32",
+        "-b:v", "1500k",
+        "-deadline", "realtime",
+        "-cpu-used", "8",
+      ];
+
+      if (mainHasAudio || secondHasAudio) {
+        ffmpegArgs.push("-c:a", "libopus");
+      }
+
+      ffmpegArgs.push(localOutputPath);
+
+      // 4. Chạy FFmpeg xử lý ghép nối PiP
       await new Promise((resolve, reject) => {
         execFile(
           ffmpegPath,
-          [
-            "-y",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            listFilePath,
-            "-c",
-            "copy",
-            localOutputPath,
-          ],
+          ffmpegArgs,
           (error, stdout, stderr) => {
             if (error) {
-              reject(new Error(`FFmpeg merge error: ${error.message}. Stderr: ${stderr}`));
+              reject(new Error(`FFmpeg PIP merge error: ${error.message}. Stderr: ${stderr}`));
             } else {
               resolve({ stdout, stderr });
             }
@@ -418,7 +450,6 @@ class S3Service {
       await Promise.all([
         cleanFile(localMainPath),
         cleanFile(localSecondPath),
-        cleanFile(listFilePath),
         cleanFile(localOutputPath),
       ]);
     }
