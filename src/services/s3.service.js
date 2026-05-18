@@ -321,10 +321,14 @@ class S3Service {
     ]);
 
     if (!mainExists) {
-      throw new BadRequestException(`Video chính không tồn tại: ${mainVideoKey}`);
+      throw new BadRequestException(
+        `Video chính không tồn tại: ${mainVideoKey}`,
+      );
     }
     if (!secondExists) {
-      throw new BadRequestException(`Video phụ không tồn tại: ${secondVideoKey}`);
+      throw new BadRequestException(
+        `Video phụ không tồn tại: ${secondVideoKey}`,
+      );
     }
 
     // Tạo thư mục tạm trong workspace
@@ -366,8 +370,9 @@ class S3Service {
       ]);
 
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
-      // Scale video phụ bằng 33% (1/3) chiều rộng video chính để rõ nét hơn và overlay ở góc trên bên phải (cách lề 20px)
-      let filterComplex = "[1:v][0:v]scale2ref=w=iw/3:h=-1[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
+      // Scale video phụ bằng 45% (gần một nửa) chiều rộng video chính, áp dụng thuật toán Lanczos siêu sắc nét
+      let filterComplex =
+        "[1:v][0:v]scale2ref=w=iw/2.2:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-20:20[outv]";
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
@@ -384,15 +389,23 @@ class S3Service {
 
       const ffmpegArgs = [
         "-y",
-        "-i", localMainPath,
-        "-i", localSecondPath,
-        "-filter_complex", filterComplex,
+        "-i",
+        localMainPath,
+        "-i",
+        localSecondPath,
+        "-filter_complex",
+        filterComplex,
         ...mapArgs,
-        "-c:v", "libvpx-vp9",
-        "-crf", "22",          // Tăng chất lượng từ 32 lên 22 (HD cực kỳ sắc nét)
-        "-b:v", "0",           // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
-        "-deadline", "realtime",
-        "-cpu-used", "8",
+        "-c:v",
+        "libvpx-vp9",
+        "-crf",
+        "12", // Hạ CRF xuống 18 để đạt chất lượng tiệm cận không suy hao (Pristine Quality)
+        "-b:v",
+        "0", // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
+        "-deadline",
+        "realtime",
+        "-cpu-used",
+        "8",
       ];
 
       if (mainHasAudio || secondHasAudio) {
@@ -403,21 +416,24 @@ class S3Service {
 
       // 4. Chạy FFmpeg xử lý ghép nối PiP
       await new Promise((resolve, reject) => {
-        execFile(
-          ffmpegPath,
-          ffmpegArgs,
-          (error, stdout, stderr) => {
-            if (error) {
-              reject(new Error(`FFmpeg PIP merge error: ${error.message}. Stderr: ${stderr}`));
-            } else {
-              resolve({ stdout, stderr });
-            }
+        execFile(ffmpegPath, ffmpegArgs, (error, stdout, stderr) => {
+          if (error) {
+            reject(
+              new Error(
+                `FFmpeg PIP merge error: ${error.message}. Stderr: ${stderr}`,
+              ),
+            );
+          } else {
+            resolve({ stdout, stderr });
           }
-        );
+        });
       });
 
       // 5. Upload video đã ghép lên S3 và lưu vào DB
-      const mergedKey = this.buildKey("merged_videos", `merged_${timestamp}.webm`);
+      const mergedKey = this.buildKey(
+        "merged_videos",
+        `merged_${timestamp}.webm`,
+      );
       const fileStream = fs.createReadStream(localOutputPath);
       const fileSize = fs.statSync(localOutputPath).size;
 
