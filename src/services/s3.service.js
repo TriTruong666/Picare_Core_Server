@@ -370,9 +370,9 @@ class S3Service {
       ]);
 
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
-      // Scale video phụ bằng 45% (gần một nửa) chiều rộng video chính, áp dụng thuật toán Lanczos siêu sắc nét
+      // Crop camera phụ về khung chân dung 9:16, scale theo chiều cao video chính và dùng Lanczos để giữ nét.
       let filterComplex =
-        "[1:v]crop=ih*0.75:ih[cropped]; [cropped][0:v]scale2ref=w=iw/3:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w:0[outv]";
+        "[1:v]crop=w='if(gt(iw/ih,9/16),ih*9/16,iw)':h='if(gt(iw/ih,9/16),ih,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2'[portrait]; [portrait][0:v]scale2ref=w='min(main_h*0.94*9/16,main_w*0.42)':h='min(main_h*0.94,main_w*0.42*16/9)':flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-16:16[outv]";
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
@@ -399,13 +399,13 @@ class S3Service {
         "-c:v",
         "libvpx-vp9",
         "-crf",
-        "14", // Hạ CRF xuống 18 để đạt chất lượng tiệm cận không suy hao (Pristine Quality)
+        "10", // CRF thấp hơn giúp giữ chi tiết tốt hơn cho ô camera phụ sau khi scale.
         "-b:v",
         "0", // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
         "-deadline",
-        "realtime",
+        "good",
         "-cpu-used",
-        "8",
+        "2",
       ];
 
       if (mainHasAudio || secondHasAudio) {
