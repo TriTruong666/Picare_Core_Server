@@ -372,7 +372,7 @@ class S3Service {
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
       // Scale video phụ bằng 45% (gần một nửa) chiều rộng video chính, áp dụng thuật toán Lanczos siêu sắc nét
       let filterComplex =
-        "[1:v]crop=ih*0.6:ih*0.9[cropped]; [cropped][0:v]scale2ref=w=iw/4.5:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w:0[outv]";
+        "[1:v]crop=ih*0.75:ih[cropped]; [cropped][0:v]scale2ref=w=iw/3:h=-1:flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w:0[outv]";
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
@@ -399,7 +399,7 @@ class S3Service {
         "-c:v",
         "libvpx-vp9",
         "-crf",
-        "10", // Hạ CRF xuống 18 để đạt chất lượng tiệm cận không suy hao (Pristine Quality)
+        "14", // Hạ CRF xuống 18 để đạt chất lượng tiệm cận không suy hao (Pristine Quality)
         "-b:v",
         "0", // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
         "-deadline",
