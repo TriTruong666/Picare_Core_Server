@@ -163,13 +163,21 @@ class S3Service {
   /**
    * Xoá object khỏi S3 và đồng thời xoá record tương ứng trong DB.
    * @param {string} key - Object key cần xoá
-   * @returns {Promise<void>}
+   * @returns {Promise<{deletedRecord: boolean}>}
    */
   async deleteAndRecord(key) {
-    await Promise.all([
-      s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key })),
-      S3Asset.destroy({ where: { s3Key: key, s3Bucket: BUCKET } }),
-    ]);
+    await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+
+    const asset = await S3Asset.findOne({
+      where: { s3Key: key, s3Bucket: BUCKET },
+    });
+
+    if (!asset) {
+      return { deletedRecord: false };
+    }
+
+    await asset.destroy();
+    return { deletedRecord: true };
   }
 
   /**

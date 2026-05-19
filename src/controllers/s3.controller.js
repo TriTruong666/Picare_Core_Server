@@ -176,7 +176,7 @@ class S3Controller {
 
       // Cho phép key có chứa "/" bằng cách dùng wildcard route
       const key = S3Controller.extractObjectKey(req);
-      await S3Service.delete(key);
+      await S3Service.deleteAndRecord(key);
 
       return ResponseHandler.success(res, null, "Xoá object thành công");
     } catch (error) {
