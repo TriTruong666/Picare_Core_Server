@@ -1,7 +1,12 @@
 const { validationResult } = require("express-validator");
+const { randomUUID } = require("crypto");
 const ResponseHandler = require("../common/response.handler");
 const S3Service = require("../services/s3.service");
-const { BadRequestException } = require("../common/exceptions/BaseException");
+const { packageVideoQueue } = require("../jobs/queues");
+const {
+  BadRequestException,
+  NotFoundException,
+} = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const HubClient = require("../models/hub_client.model");
 const S3Asset = require("../models/s3_asset.model");
@@ -363,29 +368,60 @@ class S3Controller {
       const clientId = await S3Controller.resolveClientId(req.body.clientId);
       const visibility = req.body.visibility || "private";
       const uploadedBy = req.user?.userId || null;
+      const jobId = `merge-videos-${Date.now()}-${randomUUID()}`;
 
-      const result = await S3Service.mergeVideos({
-        mainVideoKey,
-        secondVideoKey,
-        clientId,
-        uploadedBy,
-        visibility,
-      });
-
-      // Tạo presigned URL cho file đã ghép nếu nó là private để client có thể xem được ngay
-      let presignedUrl = result.url;
-      if (visibility === "private") {
-        presignedUrl = await S3Service.getPresignedUrl(result.key, 86400); // Hạn 1 ngày
-      }
+      const job = await packageVideoQueue.add(
+        "merge-videos",
+        {
+          mainVideoKey,
+          secondVideoKey,
+          clientId,
+          uploadedBy,
+          visibility,
+        },
+        { jobId },
+      );
 
       return ResponseHandler.created(
         res,
         {
-          ...S3UploadResultDTO.from(result),
-          presignedUrl,
-          record: result.record,
+          jobId: job.id,
+          clientId,
         },
-        "Ghép video và upload thành công",
+        "Yêu cầu ghép video đã được tiếp nhận. Kết quả sẽ được thông báo qua hệ thống.",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/s3/merge-videos/jobs/:jobId
+   * Lấy trạng thái job ghép video.
+   */
+  static async getMergeVideoJobStatus(req, res, next) {
+    try {
+      const { jobId } = req.params;
+      const job = await packageVideoQueue.getJob(jobId);
+
+      if (!job) {
+        throw new NotFoundException("Không tìm thấy job ghép video");
+      }
+
+      const state = await job.getState();
+      const progress = job.progress;
+      const result = job.returnvalue || null;
+
+      return ResponseHandler.success(
+        res,
+        {
+          jobId: job.id,
+          status: state,
+          progress,
+          result,
+          failedReason: job.failedReason || null,
+        },
+        "Lấy trạng thái job ghép video thành công",
       );
     } catch (error) {
       next(error);

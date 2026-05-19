@@ -16,6 +16,7 @@ const socketService = require("./src/services/socket.service");
 const { startGrpcServer } = require("./src/services/grpc_server");
 const seedingRBAC = require("./src/seeds/rbac_seed");
 const seedingHubClients = require("./src/seeds/hub_client_seed");
+const { startJobs, stopJobs } = require("./src/jobs");
 
 // Khởi tạo ứng dụng express
 const app = express();
@@ -92,6 +93,7 @@ const startServer = async () => {
 
     // Khởi tạo gRPC Server (Hub for other backend services)
     startGrpcServer(config.app.grpc_port);
+    startJobs();
 
     const { port, name, version, env } = config.app;
 
@@ -114,5 +116,15 @@ const startServer = async () => {
     process.exit(1);
   }
 };
+
+process.on("SIGINT", async () => {
+  await stopJobs();
+  process.exit(0);
+});
+
+process.on("SIGTERM", async () => {
+  await stopJobs();
+  process.exit(0);
+});
 
 startServer();

@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const S3Controller = require("../controllers/s3.controller");
@@ -405,7 +405,8 @@ router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
  * @swagger
  * /api/v1/s3/merge-videos:
  *   post:
- *     summary: Ghép hai video (.webm) từ S3 thành một video duy nhất bằng FFmpeg
+ *     summary: Tạo job ghép hai video (.webm) từ S3 bằng FFmpeg
+ *     description: API trả 201 ngay sau khi đưa yêu cầu vào background queue. Kết quả hoàn thành sẽ được gửi qua Socket.io event `s3_merge_video_completed` hoặc có thể kiểm tra bằng API trạng thái job.
  *     tags: [S3]
  *     security:
  *       - cookieAuth: []
@@ -430,7 +431,8 @@ router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
  *               clientId:
  *                 type: string
  *                 format: uuid
- *                 description: UUID của HubClient sở hữu video đã ghép (tuỳ chọn)
+ *                 nullable: true
+ *                 description: UUID của HubClient sở hữu video đã ghép (tùy chọn)
  *               visibility:
  *                 type: string
  *                 enum: [public, private]
@@ -438,7 +440,7 @@ router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
  *                 description: Chế độ hiển thị của video đã ghép
  *     responses:
  *       201:
- *         description: Ghép video thành công, trả về link S3 và record DB mới
+ *         description: Job ghép video đã được tạo và sẽ xử lý trong nền
  *         content:
  *           application/json:
  *             schema:
@@ -449,24 +451,97 @@ router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
  *                   example: true
  *                 message:
  *                   type: string
- *                   example: Ghép video và upload thành công
+ *                   example: Yêu cầu ghép video đã được tiếp nhận. Kết quả sẽ được thông báo qua hệ thống.
  *                 data:
  *                   type: object
  *                   properties:
- *                     key:
+ *                     jobId:
  *                       type: string
- *                       example: merged_videos/1715604000000_merged_video.webm
- *                     url:
+ *                       example: merge-videos-1779178900000-550e8400-e29b-41d4-a716-446655440000
+ *                     clientId:
  *                       type: string
- *                       example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm
- *                     presignedUrl:
- *                       type: string
- *                       example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm?AWSAccessKeyId=...
- *                     etag:
- *                       type: string
- *                     record:
- *                       type: object
+ *                       nullable: true
+ *                       example: 550e8400-e29b-41d4-a716-446655440000
+ *       400:
+ *         description: Thiếu mainVideoKey hoặc secondVideoKey
+ *       401:
+ *         description: Chưa xác thực
  */
 router.post("/merge-videos", protect, S3Controller.mergeVideos);
 
+/**
+ * @swagger
+ * /api/v1/s3/merge-videos/jobs/{jobId}:
+ *   get:
+ *     summary: Lấy trạng thái job ghép video
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID job được trả về từ API tạo job ghép video
+ *         example: merge-videos-1779178900000-550e8400-e29b-41d4-a716-446655440000
+ *     responses:
+ *       200:
+ *         description: Lấy trạng thái job thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Lấy trạng thái job ghép video thành công
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     jobId:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                       enum: [waiting, active, completed, failed, delayed, paused]
+ *                       example: completed
+ *                     progress:
+ *                       type: integer
+ *                       example: 100
+ *                     result:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         key:
+ *                           type: string
+ *                           example: merged_videos/1715604000000_merged_video.webm
+ *                         url:
+ *                           type: string
+ *                           example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm
+ *                         presignedUrl:
+ *                           type: string
+ *                           example: https://picare-test.s3.ap-southeast-1.amazonaws.com/merged_videos/1715604000000_merged_video.webm?AWSAccessKeyId=...
+ *                         etag:
+ *                           type: string
+ *                         recordId:
+ *                           type: string
+ *                           nullable: true
+ *                     failedReason:
+ *                       type: string
+ *                       nullable: true
+ *       401:
+ *         description: Chưa xác thực
+ *       404:
+ *         description: Không tìm thấy job ghép video
+ */
+router.get(
+  "/merge-videos/jobs/:jobId",
+  protect,
+  S3Controller.getMergeVideoJobStatus,
+);
+
 module.exports = router;
+
