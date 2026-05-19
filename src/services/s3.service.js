@@ -407,13 +407,15 @@ class S3Service {
         "-c:v",
         "libvpx-vp9",
         "-crf",
-        "10", // CRF thấp hơn giúp giữ chi tiết tốt hơn cho ô camera phụ sau khi scale.
+        "30",
         "-b:v",
         "0", // Đặt bitrate bằng 0 để kích hoạt Constant Quality đích thực cho codec VP9
         "-deadline",
-        "good",
+        "realtime",
         "-cpu-used",
-        "2",
+        "6",
+        "-row-mt",
+        "1",
       ];
 
       if (mainHasAudio || secondHasAudio) {

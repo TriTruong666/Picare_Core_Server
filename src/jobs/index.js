@@ -36,7 +36,7 @@ function startJobs() {
     },
     {
       connection: bullMQConfig.connection,
-      concurrency: 1,
+      concurrency: 2,
     },
   );
 
