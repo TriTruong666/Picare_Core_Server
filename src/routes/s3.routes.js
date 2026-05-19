@@ -508,6 +508,10 @@ router.post("/merge-videos", protect, S3Controller.mergeVideos);
  *                       type: string
  *                       enum: [waiting, active, completed, failed, delayed, paused]
  *                       example: completed
+ *                     shouldPoll:
+ *                       type: boolean
+ *                       description: false khi job đã completed hoặc failed; client nên dừng gọi API status
+ *                       example: false
  *                     progress:
  *                       type: integer
  *                       example: 100
@@ -532,6 +536,22 @@ router.post("/merge-videos", protect, S3Controller.mergeVideos);
  *                     failedReason:
  *                       type: string
  *                       nullable: true
+ *                     requestedAt:
+ *                       type: string
+ *                       nullable: true
+ *                       format: date-time
+ *                     createdAt:
+ *                       type: string
+ *                       nullable: true
+ *                       format: date-time
+ *                     processedAt:
+ *                       type: string
+ *                       nullable: true
+ *                       format: date-time
+ *                     finishedAt:
+ *                       type: string
+ *                       nullable: true
+ *                       format: date-time
  *       401:
  *         description: Chưa xác thực
  *       404:

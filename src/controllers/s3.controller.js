@@ -378,6 +378,7 @@ class S3Controller {
           clientId,
           uploadedBy,
           visibility,
+          requestedAt: new Date().toISOString(),
         },
         { jobId },
       );
@@ -411,15 +412,36 @@ class S3Controller {
       const state = await job.getState();
       const progress = job.progress;
       const result = job.returnvalue || null;
+      const isTerminal = state === "completed" || state === "failed";
+
+      if (isTerminal) {
+        res.once("finish", () => {
+          job.remove().catch((error) => {
+            console.error("[S3]: failed to remove terminal merge job", {
+              jobId: job.id,
+              message: error.message,
+            });
+          });
+        });
+      }
 
       return ResponseHandler.success(
         res,
         {
           jobId: job.id,
           status: state,
+          shouldPoll: !isTerminal,
           progress,
           result,
           failedReason: job.failedReason || null,
+          requestedAt: job.data?.requestedAt || null,
+          createdAt: job.timestamp ? new Date(job.timestamp).toISOString() : null,
+          processedAt: job.processedOn
+            ? new Date(job.processedOn).toISOString()
+            : null,
+          finishedAt: job.finishedOn
+            ? new Date(job.finishedOn).toISOString()
+            : null,
         },
         "Lấy trạng thái job ghép video thành công",
       );
