@@ -46,14 +46,29 @@ const escapeFfmpegFilterValue = (value) => {
     .replace(/ /g, "\\ ");
 };
 
-const getBoldFontFile = () => {
-  const candidates = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-    "C:\\Windows\\Fonts\\arialbd.ttf",
-  ];
+const escapeAssText = (text) => {
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/\{/g, "(")
+    .replace(/\}/g, ")");
+};
 
-  return candidates.find((fontPath) => fs.existsSync(fontPath)) || null;
+const buildAssOverlayContent = (text) => {
+  return [
+    "[Script Info]",
+    "ScriptType: v4.00+",
+    "PlayResX: 640",
+    "PlayResY: 480",
+    "",
+    "[V4+ Styles]",
+    "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+    "Style: Overlay,Arial,36,&H00FFFFFF,&H00FFFFFF,&HCC000000,&H99000000,-1,0,0,0,100,100,0,0,1,4,0,1,24,24,24,1",
+    "",
+    "[Events]",
+    "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    `Dialogue: 0,0:00:00.00,9:59:59.00,Overlay,,0,0,0,,${escapeAssText(text)}`,
+    "",
+  ].join("\n");
 };
 
 /**
@@ -381,7 +396,7 @@ class S3Service {
     const localMainPath = path.join(tempDir, `main_${timestamp}.webm`);
     const localSecondPath = path.join(tempDir, `second_${timestamp}.webm`);
     const localOutputPath = path.join(tempDir, `merged_${timestamp}.webm`);
-    const localOverlayTextPath = path.join(tempDir, `overlay_${timestamp}.txt`);
+    const localOverlayTextPath = path.join(tempDir, `overlay_${timestamp}.ass`);
     const normalizedOverlayText = normalizeMergeOverlayText(overlayText);
 
     try {
@@ -421,30 +436,12 @@ class S3Service {
       if (normalizedOverlayText) {
         await fs.promises.writeFile(
           localOverlayTextPath,
-          normalizedOverlayText,
+          buildAssOverlayContent(normalizedOverlayText),
           "utf8",
         );
 
-        const boldFontFile = getBoldFontFile();
-        const drawTextOptions = [
-          `textfile=${escapeFfmpegFilterValue(localOverlayTextPath)}`,
-          "expansion=none",
-          "fontcolor=white",
-          "fontsize='max(32,h*0.075)'",
-          "borderw=4",
-          "bordercolor=black@0.85",
-          "x=24",
-          "y=h-th-24",
-        ];
-
-        if (boldFontFile) {
-          drawTextOptions.unshift(
-            `fontfile=${escapeFfmpegFilterValue(boldFontFile)}`,
-          );
-        }
-
-        filterComplex += `; [composited]drawtext=${drawTextOptions.join(
-          ":",
+        filterComplex += `; [composited]ass=${escapeFfmpegFilterValue(
+          localOverlayTextPath,
         )}[outv]`;
       } else {
         filterComplex += "; [composited]null[outv]";
