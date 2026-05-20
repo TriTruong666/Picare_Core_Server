@@ -36,8 +36,8 @@ const normalizeMergeOverlayText = (text) => {
 
 const escapeFfmpegFilterValue = (value) => {
   return String(value)
-    .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:")
+    .replace(/\\/g, "/")
+    .replace(/:/g, "\\\\:")
     .replace(/'/g, "\\'")
     .replace(/,/g, "\\,")
     .replace(/;/g, "\\;")
