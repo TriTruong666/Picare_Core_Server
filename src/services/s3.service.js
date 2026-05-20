@@ -71,6 +71,22 @@ const buildAssOverlayContent = (text) => {
   ].join("\n");
 };
 
+const pickFfmpegSubtitleLogLines = (stderr) => {
+  return String(stderr || "")
+    .split(/\r?\n/)
+    .filter((line) => {
+      return (
+        /Parsed_ass/i.test(line) ||
+        /Added subtitle file/i.test(line) ||
+        /fontselect/i.test(line) ||
+        /Error/i.test(line) ||
+        /Unable/i.test(line) ||
+        /Invalid/i.test(line)
+      );
+    })
+    .slice(-20);
+};
+
 /**
  * S3 Service – Wrapper cho các thao tác với AWS S3
  */
@@ -399,6 +415,15 @@ class S3Service {
     const localOverlayTextPath = path.join(tempDir, `overlay_${timestamp}.ass`);
     const normalizedOverlayText = normalizeMergeOverlayText(overlayText);
 
+    console.log("[S3]: merge-videos service input", {
+      mainVideoKey,
+      secondVideoKey,
+      rawOverlayText: overlayText,
+      normalizedOverlayText,
+      hasOverlayText: Boolean(normalizedOverlayText),
+      localOverlayTextPath,
+    });
+
     try {
       // 2. Download 2 video về file tạm
       const downloadToFile = async (key, localPath) => {
@@ -434,11 +459,26 @@ class S3Service {
         "[1:v]crop=w='if(gt(iw/ih,2/3),ih*2/3,iw)':h='if(gt(iw/ih,2/3),ih,iw*3/2)':x='(iw-ow)/2':y='(ih-oh)/2'[portrait]; [portrait][0:v]scale2ref=w='min(main_h*0.94*2/3,main_w*0.50)':h='min(main_h*0.94,main_w*0.50*3/2)':flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-16:16:shortest=1:eof_action=pass[composited]";
 
       if (normalizedOverlayText) {
+        const overlayAssContent =
+          buildAssOverlayContent(normalizedOverlayText);
         await fs.promises.writeFile(
           localOverlayTextPath,
-          buildAssOverlayContent(normalizedOverlayText),
+          overlayAssContent,
           "utf8",
         );
+
+        console.log("[S3]: merge-videos overlay ass written", {
+          localOverlayTextPath,
+          escapedOverlayTextPath:
+            escapeFfmpegFilterValue(localOverlayTextPath),
+          normalizedOverlayText,
+          assPreview: overlayAssContent
+            .split(/\r?\n/)
+            .filter(
+              (line) =>
+                line.startsWith("Style:") || line.startsWith("Dialogue:"),
+            ),
+        });
 
         filterComplex += `; [composited]ass=${escapeFfmpegFilterValue(
           localOverlayTextPath,
@@ -489,16 +529,31 @@ class S3Service {
 
       ffmpegArgs.push(localOutputPath);
 
+      console.log("[S3]: merge-videos ffmpeg prepared", {
+        mainHasAudio,
+        secondHasAudio,
+        filterComplex,
+        mapArgs,
+        outputPath: localOutputPath,
+      });
+
       // 4. Chạy FFmpeg xử lý ghép nối PiP
       await new Promise((resolve, reject) => {
         execFile(ffmpegPath, ffmpegArgs, (error, stdout, stderr) => {
           if (error) {
+            console.error("[S3]: merge-videos ffmpeg failed", {
+              message: error.message,
+              subtitleLogLines: pickFfmpegSubtitleLogLines(stderr),
+            });
             reject(
               new Error(
                 `FFmpeg PIP merge error: ${error.message}. Stderr: ${stderr}`,
               ),
             );
           } else {
+            console.log("[S3]: merge-videos ffmpeg completed", {
+              subtitleLogLines: pickFfmpegSubtitleLogLines(stderr),
+            });
             resolve({ stdout, stderr });
           }
         });
@@ -511,6 +566,11 @@ class S3Service {
       );
       const fileStream = fs.createReadStream(localOutputPath);
       const fileSize = fs.statSync(localOutputPath).size;
+
+      console.log("[S3]: merge-videos output ready", {
+        outputPath: localOutputPath,
+        fileSize,
+      });
 
       const result = await this.upload({
         key: mergedKey,

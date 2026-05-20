@@ -17,6 +17,14 @@ function startJobs() {
         throw new Error(`Unsupported package video job: ${job.name}`);
       }
 
+      console.log("[JOBS]: merge-videos started", {
+        jobId: job.id,
+        mainVideoKey: job.data.mainVideoKey,
+        secondVideoKey: job.data.secondVideoKey,
+        hasOverlayText: Boolean(job.data.overlayText),
+        overlayText: job.data.overlayText || null,
+      });
+
       await job.updateProgress(10);
       const result = await S3Service.mergeVideos(job.data);
       await job.updateProgress(100);

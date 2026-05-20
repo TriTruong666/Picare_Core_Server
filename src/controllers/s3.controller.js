@@ -374,6 +374,16 @@ class S3Controller {
         typeof rawOverlayText === "string" ? rawOverlayText : null;
       const jobId = `merge-videos-${Date.now()}-${randomUUID()}`;
 
+      console.log("[S3]: merge-videos enqueue", {
+        jobId,
+        mainVideoKey,
+        secondVideoKey,
+        hasOverlayText: Boolean(overlayText),
+        overlayText,
+        visibility,
+        uploadedBy,
+      });
+
       const job = await packageVideoQueue.add(
         "merge-videos",
         {
