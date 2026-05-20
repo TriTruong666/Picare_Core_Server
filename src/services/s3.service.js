@@ -23,6 +23,38 @@ const ffmpegPath = require("ffmpeg-static");
 
 const BUCKET = appConfig.s3.bucketName;
 const REGION = appConfig.s3.region;
+const MAX_MERGE_OVERLAY_TEXT_LENGTH = 160;
+
+const normalizeMergeOverlayText = (text) => {
+  if (typeof text !== "string") return null;
+
+  const normalized = text.trim().replace(/\s+/g, " ");
+  if (!normalized) return null;
+
+  return normalized.slice(0, MAX_MERGE_OVERLAY_TEXT_LENGTH);
+};
+
+const escapeFfmpegFilterValue = (value) => {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]")
+    .replace(/ /g, "\\ ");
+};
+
+const getBoldFontFile = () => {
+  const candidates = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+  ];
+
+  return candidates.find((fontPath) => fs.existsSync(fontPath)) || null;
+};
 
 /**
  * S3 Service – Wrapper cho các thao tác với AWS S3
@@ -308,6 +340,7 @@ class S3Service {
    * @param {Object} params
    * @param {string} params.mainVideoKey
    * @param {string} params.secondVideoKey
+   * @param {string} [params.overlayText]
    * @param {string} [params.clientId]
    * @param {string} [params.userId]
    * @param {string} [params.uploadedBy]
@@ -317,6 +350,7 @@ class S3Service {
   async mergeVideos({
     mainVideoKey,
     secondVideoKey,
+    overlayText = null,
     clientId = null,
     userId = null,
     uploadedBy = null,
@@ -347,6 +381,8 @@ class S3Service {
     const localMainPath = path.join(tempDir, `main_${timestamp}.webm`);
     const localSecondPath = path.join(tempDir, `second_${timestamp}.webm`);
     const localOutputPath = path.join(tempDir, `merged_${timestamp}.webm`);
+    const localOverlayTextPath = path.join(tempDir, `overlay_${timestamp}.txt`);
+    const normalizedOverlayText = normalizeMergeOverlayText(overlayText);
 
     try {
       // 2. Download 2 video về file tạm
@@ -380,7 +416,39 @@ class S3Service {
       // 3. Xây dựng bộ lọc FFmpeg Picture-in-Picture (PiP)
       // Crop camera phụ về khung chân dung 9:16, scale theo chiều cao video chính và dùng Lanczos để giữ nét.
       let filterComplex =
-        "[1:v]crop=w='if(gt(iw/ih,9/16),ih*9/16,iw)':h='if(gt(iw/ih,9/16),ih,iw*16/9)':x='(iw-ow)/2':y='(ih-oh)/2'[portrait]; [portrait][0:v]scale2ref=w='min(main_h*0.94*9/16,main_w*0.42)':h='min(main_h*0.94,main_w*0.42*16/9)':flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-16:16[outv]";
+        "[1:v]crop=w='if(gt(iw/ih,2/3),ih*2/3,iw)':h='if(gt(iw/ih,2/3),ih,iw*3/2)':x='(iw-ow)/2':y='(ih-oh)/2'[portrait]; [portrait][0:v]scale2ref=w='min(main_h*0.94*2/3,main_w*0.50)':h='min(main_h*0.94,main_w*0.50*3/2)':flags=lanczos[pip][mainv]; [mainv][pip]overlay=W-w-16:16:shortest=1:eof_action=pass[composited]";
+
+      if (normalizedOverlayText) {
+        await fs.promises.writeFile(
+          localOverlayTextPath,
+          normalizedOverlayText,
+          "utf8",
+        );
+
+        const boldFontFile = getBoldFontFile();
+        const drawTextOptions = [
+          `textfile=${escapeFfmpegFilterValue(localOverlayTextPath)}`,
+          "expansion=none",
+          "fontcolor=white",
+          "fontsize='max(32,h*0.075)'",
+          "borderw=4",
+          "bordercolor=black@0.85",
+          "x=24",
+          "y=h-th-24",
+        ];
+
+        if (boldFontFile) {
+          drawTextOptions.unshift(
+            `fontfile=${escapeFfmpegFilterValue(boldFontFile)}`,
+          );
+        }
+
+        filterComplex += `; [composited]drawtext=${drawTextOptions.join(
+          ":",
+        )}[outv]`;
+      } else {
+        filterComplex += "; [composited]null[outv]";
+      }
       const mapArgs = ["-map", "[outv]"];
 
       if (mainHasAudio && secondHasAudio) {
@@ -477,6 +545,7 @@ class S3Service {
         cleanFile(localMainPath),
         cleanFile(localSecondPath),
         cleanFile(localOutputPath),
+        cleanFile(localOverlayTextPath),
       ]);
     }
   }

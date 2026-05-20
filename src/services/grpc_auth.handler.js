@@ -74,10 +74,6 @@ const grpcAuthHandler = {
 
       const isAllowed = hasPermission || isLegacyAdmin;
 
-      console.log(
-        `[gRPC Auth]: CheckPermission -> User: ${user.email}, Permission: ${permission} -> ${isAllowed ? "ALLOWED" : "DENIED"}`,
-      );
-
       return callback(null, { allowed: isAllowed });
     } catch (error) {
       console.error("[gRPC Auth]: Lỗi khi kiểm tra quyền:", error.message);

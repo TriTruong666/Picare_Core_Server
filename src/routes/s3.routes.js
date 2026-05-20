@@ -428,6 +428,12 @@ router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
  *                 type: string
  *                 description: S3 key của video thứ hai
  *                 example: donghang/1779077292309_upload1779077292308.webm
+ *               overlayText:
+ *                 type: string
+ *                 nullable: true
+ *                 maxLength: 160
+ *                 description: Dòng chữ lớn in đậm hiển thị ở góc dưới bên trái video sau khi ghép
+ *                 example: Nguyễn Văn A - Ca khám 20/05/2026
  *               clientId:
  *                 type: string
  *                 format: uuid

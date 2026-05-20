@@ -368,6 +368,10 @@ class S3Controller {
       const clientId = await S3Controller.resolveClientId(req.body.clientId);
       const visibility = req.body.visibility || "private";
       const uploadedBy = req.user?.userId || null;
+      const rawOverlayText =
+        req.body.overlayText || req.body.mergeText || req.body.captionText;
+      const overlayText =
+        typeof rawOverlayText === "string" ? rawOverlayText : null;
       const jobId = `merge-videos-${Date.now()}-${randomUUID()}`;
 
       const job = await packageVideoQueue.add(
@@ -375,6 +379,7 @@ class S3Controller {
         {
           mainVideoKey,
           secondVideoKey,
+          overlayText,
           clientId,
           uploadedBy,
           visibility,
