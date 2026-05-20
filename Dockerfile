@@ -20,6 +20,9 @@ WORKDIR /app
 # Set environment to production
 ENV NODE_ENV=production
 
+# FFmpeg/libass needs fontconfig and real fonts to burn ASS subtitles.
+RUN apk add --no-cache fontconfig ttf-dejavu ttf-liberation
+
 # Copy built assets and dependencies from builder
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
