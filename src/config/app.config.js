@@ -76,6 +76,20 @@ const appConfig = {
     region: process.env.AWS_REGION || "",
     bucketName: process.env.AWS_S3_BUCKET_NAME || "",
   },
+
+  mail: {
+    host: process.env.SMTP_HOST || "",
+    port: parseInt(process.env.SMTP_PORT, 10) || 587,
+    secure:
+      String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.MAIL_FROM || "",
+    name: process.env.MAIL_FROM_NAME || "Picare Core Hub",
+    rejectUnauthorized:
+      String(process.env.SMTP_REJECT_UNAUTHORIZED || "true").toLowerCase() ===
+      "true",
+  },
 };
 
 /**

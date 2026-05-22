@@ -8,6 +8,7 @@ const hubClientRoutes = require("./hub_client.routes");
 const s3Routes = require("./s3.routes");
 const s3FolderRoutes = require("./s3_folder.routes");
 const contractRoutes = require("./contract.routes");
+const mailRoutes = require("./mail.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -16,5 +17,6 @@ router.use("/hub-clients", hubClientRoutes);
 router.use("/s3", s3Routes);
 router.use("/s3-folders", s3FolderRoutes);
 router.use("/contracts", contractRoutes);
+router.use("/mail", mailRoutes);
 
 module.exports = router;
