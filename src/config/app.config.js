@@ -3,7 +3,7 @@ require("dotenv").config({
   path: path.join(
     __dirname,
     "../../",
-    process.env.NODE_ENV === "production" ? ".env" : ".env.development",
+    process.env.NODE_ENV === "production" ? ".env" : ".env.development"
   ),
 });
 
@@ -36,7 +36,7 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: false,
+    force_reset: true,
     protectedTables: [""],
   },
 

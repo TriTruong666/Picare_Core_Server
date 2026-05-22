@@ -65,6 +65,7 @@ session/
 pids/
 *.seed
 local_data/
+storage/contracts/
 
 # Testing
 coverage/

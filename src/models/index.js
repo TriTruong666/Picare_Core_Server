@@ -6,7 +6,6 @@ const sequelize = require("../config/postgres.config");
 
 const db = {};
 
-// 1. Quét các model ở thư mục gốc (.model.js)
 fs.readdirSync(__dirname)
   .filter((file) => {
     return (
@@ -20,28 +19,28 @@ fs.readdirSync(__dirname)
     db[model.name] = model;
   });
 
-// 2. Import các model từ thư mục chat (nếu có)
 try {
-  const chatModels = require("./chat");
-  Object.assign(db, chatModels);
+  Object.assign(db, require("./chat"));
 } catch (err) {
-  console.warn("[MODELS]: Không tìm thấy hoặc lỗi khi load thư mục chat.");
+  console.warn("[MODELS]: Failed to load chat models.", err.message);
 }
 
-// 3. Thiết lập quan hệ (nếu model có hàm associate)
+try {
+  Object.assign(db, require("./contract"));
+} catch (err) {
+  console.warn("[MODELS]: Failed to load contract models.", err.message);
+}
+
 Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
     db[modelName].associate(db);
   }
 });
 
-// 4. Thiết lập quan hệ RBAC thủ công
 if (db.User && db.Role && db.Permission) {
-  // User belongs to one Role
   db.Role.hasMany(db.User, { foreignKey: "role_id" });
   db.User.belongsTo(db.Role, { foreignKey: "role_id" });
 
-  // Role can have many Permissions (n-n)
   db.Role.belongsToMany(db.Permission, {
     through: "role_permissions",
     foreignKey: "role_id",
@@ -54,7 +53,6 @@ if (db.User && db.Role && db.Permission) {
   });
 }
 
-// 5. HubClient ↔ S3Asset (1-n)
 if (db.HubClient && db.S3Asset) {
   db.HubClient.hasMany(db.S3Asset, {
     foreignKey: "clientId",
@@ -65,9 +63,7 @@ if (db.HubClient && db.S3Asset) {
   });
 }
 
-// 6. User ↔ S3Asset (1-n)
 if (db.User && db.S3Asset) {
-  // User owns assets (e.g. avatars)
   db.User.hasMany(db.S3Asset, {
     foreignKey: "userId",
     sourceKey: "userId",
@@ -76,7 +72,6 @@ if (db.User && db.S3Asset) {
     onUpdate: "CASCADE",
   });
 
-  // User uploaded assets
   db.User.hasMany(db.S3Asset, {
     foreignKey: "uploadedBy",
     sourceKey: "userId",

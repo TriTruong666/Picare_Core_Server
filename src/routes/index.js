@@ -7,6 +7,7 @@ const chatRoutes = require("./chat.routes");
 const hubClientRoutes = require("./hub_client.routes");
 const s3Routes = require("./s3.routes");
 const s3FolderRoutes = require("./s3_folder.routes");
+const contractRoutes = require("./contract.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -14,5 +15,6 @@ router.use("/chat", chatRoutes);
 router.use("/hub-clients", hubClientRoutes);
 router.use("/s3", s3Routes);
 router.use("/s3-folders", s3FolderRoutes);
+router.use("/contracts", contractRoutes);
 
 module.exports = router;
