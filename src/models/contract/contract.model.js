@@ -152,6 +152,22 @@ Contract.associate = (db) => {
     onDelete: "CASCADE",
     onUpdate: "CASCADE",
   });
+
+  Contract.hasMany(db.ContractDocument, {
+    foreignKey: "contractId",
+    sourceKey: "contractId",
+    as: "documents",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE",
+  });
+
+  Contract.hasMany(db.ContractSignature, {
+    foreignKey: "contractId",
+    sourceKey: "contractId",
+    as: "signatures",
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE",
+  });
 };
 
 module.exports = Contract;

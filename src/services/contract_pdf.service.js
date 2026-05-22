@@ -2,10 +2,17 @@ const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 const PDFDocument = require("pdfkit");
+const {
+  PDFDocument: PDFLibDocument,
+  StandardFonts,
+  rgb,
+} = require("pdf-lib");
+const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
 const OUTPUT_DIR =
-  process.env.CONTRACT_OUTPUT_DIR || path.join(ROOT_DIR, "storage", "contracts");
+  process.env.CONTRACT_OUTPUT_DIR ||
+  path.join(ROOT_DIR, "storage", "contracts");
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
   "C:/Windows/Fonts/times.ttf",
@@ -20,13 +27,22 @@ const DEFAULT_BOLD_FONT_PATHS = [
   "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
 ].filter(Boolean);
+const DEFAULT_SIGNATURE_LENGTH = Number(
+  process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384
+);
+const BYTE_RANGE_PLACEHOLDER = "**********";
 
 function asText(value, fallback = "") {
   return value === null || value === undefined ? fallback : String(value);
 }
 
 function getOwnerName(companyInfo = {}) {
-  return companyInfo.ownerName || companyInfo.owner || companyInfo.representative || "";
+  return (
+    companyInfo.ownerName ||
+    companyInfo.owner ||
+    companyInfo.representative ||
+    ""
+  );
 }
 
 function formatDate(value = new Date()) {
@@ -169,7 +185,9 @@ class ContractPdfBuilder {
     this.text(`Tài khoản số : ${companyInfo.bankInfo}`);
     this.text(`Mã số thuế : ${companyInfo.mst}`);
     this.text(
-      `Đại diện là Ông/Bà : ${getOwnerName(companyInfo)}    Chức vụ: ${companyInfo.role}`
+      `Đại diện là Ông/Bà : ${getOwnerName(companyInfo)}    Chức vụ: ${
+        companyInfo.role
+      }`
     );
     this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35, bold: true });
   }
@@ -293,7 +311,9 @@ class ContractPdfBuilder {
     );
     this.bullet("Căn cứ vào khả năng và nhu cầu của hai bên.");
     this.text(
-      `Hôm nay, ngày ${formatShortDate(createdAt)} tại văn phòng công ty chúng tôi gồm có:`,
+      `Hôm nay, ngày ${formatShortDate(
+        createdAt
+      )} tại văn phòng công ty chúng tôi gồm có:`,
       { gap: 0.35, bold: true }
     );
 
@@ -327,33 +347,61 @@ class ContractPdfBuilder {
 
     this.heading("ĐIỀU 3: TRÁCH NHIỆM VÀ QUYỀN LỢI CỦA CÁC BÊN");
     this.text("1. Trách nhiệm của Bên A:");
-    this.bullet("Cung cấp hàng theo đúng số lượng sản phẩm mà Bên B đã đặt hàng, theo đúng tiêu chuẩn đã đăng ký.");
-    this.bullet("Thời gian giao hàng chậm nhất không quá 03 ngày làm việc tính từ thời điểm nhận được đơn hàng.");
-    this.bullet("Giao hàng tại kho Bên B trong 1 địa điểm tại nội thành Thành Phố Hồ Chí Minh, chi phí bốc xếp đầu bên nào bên đó chịu.");
-    this.bullet("Sản phẩm giao cho bên B bị hỏng do lỗi sản xuất thì bên A phải giao bù cho bên B số hàng lỗi.");
+    this.bullet(
+      "Cung cấp hàng theo đúng số lượng sản phẩm mà Bên B đã đặt hàng, theo đúng tiêu chuẩn đã đăng ký."
+    );
+    this.bullet(
+      "Thời gian giao hàng chậm nhất không quá 03 ngày làm việc tính từ thời điểm nhận được đơn hàng."
+    );
+    this.bullet(
+      "Giao hàng tại kho Bên B trong 1 địa điểm tại nội thành Thành Phố Hồ Chí Minh, chi phí bốc xếp đầu bên nào bên đó chịu."
+    );
+    this.bullet(
+      "Sản phẩm giao cho bên B bị hỏng do lỗi sản xuất thì bên A phải giao bù cho bên B số hàng lỗi."
+    );
     this.text("2. Trách nhiệm của Bên B:");
-    this.bullet("Có đơn đặt hàng trước ít nhất 08 ngày làm việc khi có nhu cầu về sản phẩm.");
+    this.bullet(
+      "Có đơn đặt hàng trước ít nhất 08 ngày làm việc khi có nhu cầu về sản phẩm."
+    );
     this.bullet("Kinh doanh sản phẩm theo quy định của Pháp luật hiện hành.");
     this.bullet("Cam kết không được phép bán ra các khu vực khác.");
     this.bullet("Thanh toán theo đúng điều 5 của hợp đồng này.");
-    this.bullet("Mọi khiếu nại của Bên B về hàng hóa phải có chứng kiến và xác nhận của Bên A thì mới có giá trị khiếu nại.");
+    this.bullet(
+      "Mọi khiếu nại của Bên B về hàng hóa phải có chứng kiến và xác nhận của Bên A thì mới có giá trị khiếu nại."
+    );
 
     this.heading("ĐIỀU 4: KHIẾU NẠI VÀ GIẢI QUYẾT KHIẾU NẠI HÀNG HÓA");
-    this.bullet("Bên B có trách nhiệm kiểm tra kỹ số lượng, quy cách, chất lượng hàng hóa khi giao nhận. Nếu có bất cứ khiếu nại nào phải có văn bản thông báo cho Bên A.");
-    this.bullet("Thời gian khiếu nại hàng sai lệch về số lượng không quá 5 ngày, về chất lượng không quá 30 ngày kể từ ngày nhập hàng về kho bên B.");
-    this.bullet("Trong vòng 30 ngày kể từ khi nhận được công văn khiếu nại, bên A có trách nhiệm trả lời cho bên B.");
+    this.bullet(
+      "Bên B có trách nhiệm kiểm tra kỹ số lượng, quy cách, chất lượng hàng hóa khi giao nhận. Nếu có bất cứ khiếu nại nào phải có văn bản thông báo cho Bên A."
+    );
+    this.bullet(
+      "Thời gian khiếu nại hàng sai lệch về số lượng không quá 5 ngày, về chất lượng không quá 30 ngày kể từ ngày nhập hàng về kho bên B."
+    );
+    this.bullet(
+      "Trong vòng 30 ngày kể từ khi nhận được công văn khiếu nại, bên A có trách nhiệm trả lời cho bên B."
+    );
 
     this.heading("ĐIỀU 5: GIÁ CẢ VÀ PHƯƠNG THỨC THANH TOÁN");
     this.text("1. Giá cả:");
-    this.text("Giá bán được thể hiện trực tiếp trong hợp đồng và được hai bên cùng xác nhận. Bảng giá, đơn đặt hàng là một phần không tách rời của hợp đồng này.");
+    this.text(
+      "Giá bán được thể hiện trực tiếp trong hợp đồng và được hai bên cùng xác nhận. Bảng giá, đơn đặt hàng là một phần không tách rời của hợp đồng này."
+    );
     this.text("2. Phương thức thanh toán:");
     this.bullet("Thanh toán bằng chuyển khoản trong vòng 30 ngày.");
-    this.bullet("Các trường hợp đặc biệt khác phải có sự thỏa thuận của hai bên.");
+    this.bullet(
+      "Các trường hợp đặc biệt khác phải có sự thỏa thuận của hai bên."
+    );
 
     this.heading("ĐIỀU 6: ĐIỀU KHOẢN CHUNG");
-    this.bullet("Hai bên cùng cam kết thực hiện hợp đồng nguyên tắc này, nếu có khó khăn hai bên phải gặp nhau trao đổi tìm cách giải quyết.");
-    this.bullet("Trường hợp hai bên không giải quyết được bằng thương lượng sẽ đưa ra Tòa án kinh tế Hà Nội. Mọi phí tổn sẽ do bên sai phạm chịu.");
-    this.bullet("Sau khi Hợp đồng hết hiệu lực 30 ngày; nếu hai bên không có tranh chấp hoặc khiếu nại thì Hợp đồng này mặc nhiên được thanh lý.");
+    this.bullet(
+      "Hai bên cùng cam kết thực hiện hợp đồng nguyên tắc này, nếu có khó khăn hai bên phải gặp nhau trao đổi tìm cách giải quyết."
+    );
+    this.bullet(
+      "Trường hợp hai bên không giải quyết được bằng thương lượng sẽ đưa ra Tòa án kinh tế Hà Nội. Mọi phí tổn sẽ do bên sai phạm chịu."
+    );
+    this.bullet(
+      "Sau khi Hợp đồng hết hiệu lực 30 ngày; nếu hai bên không có tranh chấp hoặc khiếu nại thì Hợp đồng này mặc nhiên được thanh lý."
+    );
     this.bullet(
       `Hợp đồng nguyên tắc này được lập thành 04 bản có giá trị pháp lý ngang nhau, mỗi bên giữ 02 bản. Hợp đồng có hiệu lực kể từ ngày kí đến ngày ${formatShortDate(
         contract.contractDueDate
@@ -375,8 +423,14 @@ class ContractPdfService {
     builder.doc.end();
 
     const pdfBuffer = await pdfBufferPromise;
-    const pdfHashHex = crypto.createHash("sha256").update(pdfBuffer).digest("hex");
-    const fileName = `${contract.contractId}-${pdfHashHex.slice(0, 12)}.pdf`;
+    const pdfHashHex = crypto
+      .createHash("sha256")
+      .update(pdfBuffer)
+      .digest("hex");
+    const fileName = `hop-dong-picare-${contract.contractId}-${pdfHashHex.slice(
+      0,
+      12
+    )}.pdf`;
     const outputPath = path.join(OUTPUT_DIR, fileName);
 
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -386,7 +440,245 @@ class ContractPdfService {
       pdfHashHex,
       fileName,
       filePath: outputPath,
-      contractUrl: `/api/v1/contracts/${contract.contractId}/template-pdf`,
+    };
+  }
+
+  static async appendDigitalSignaturePage({
+    sourceFilePath,
+    contract,
+    signature,
+    signedBy,
+  }) {
+    const sourceBytes = await fs.readFile(sourceFilePath);
+    const pdfDoc = await PDFLibDocument.load(sourceBytes);
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const page = pdfDoc.addPage([595.28, 841.89]);
+    const marginX = 56;
+    let y = 760;
+
+    const drawLabel = (label, value) => {
+      page.drawText(label, {
+        x: marginX,
+        y,
+        size: 11,
+        font: boldFont,
+        color: rgb(0, 0, 0),
+      });
+      page.drawText(String(value || ""), {
+        x: 190,
+        y,
+        size: 10,
+        font,
+        color: rgb(0, 0, 0),
+        maxWidth: 340,
+      });
+      y -= 24;
+    };
+
+    page.drawText("PICARE DIGITAL SIGNATURE CONFIRMATION", {
+      x: marginX,
+      y,
+      size: 16,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
+    y -= 40;
+
+    drawLabel("Contract number:", contract.contractNumber);
+    drawLabel("Signer type:", signature.signerType);
+    drawLabel("Signer name:", signedBy || signature.signerName);
+    drawLabel("Vendor:", signature.vendor);
+    drawLabel("Signed at:", new Date().toISOString());
+    drawLabel("PDF hash before sign:", signature.pdfHashBeforeSign);
+    drawLabel("Certificate serial:", signature.certificateSerial || "N/A");
+
+    page.drawText("Signature hex preview:", {
+      x: marginX,
+      y,
+      size: 11,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
+    y -= 20;
+    page.drawText(String(signature.signatureHex || "").slice(0, 512), {
+      x: marginX,
+      y,
+      size: 8,
+      font,
+      color: rgb(0, 0, 0),
+      maxWidth: 480,
+      lineHeight: 11,
+    });
+
+    const signedBytes = await pdfDoc.save();
+    const signedBuffer = Buffer.from(signedBytes);
+    const signedPdfHash = crypto
+      .createHash("sha256")
+      .update(signedBuffer)
+      .digest("hex");
+    const fileName = `hop-dong-picare-${contract.contractId}-signed-${signedPdfHash.slice(
+      0,
+      12
+    )}.pdf`;
+    const outputPath = path.join(OUTPUT_DIR, fileName);
+
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    await fs.writeFile(outputPath, signedBuffer);
+
+    return {
+      signedPdfHash,
+      fileName,
+      filePath: outputPath,
+    };
+  }
+
+  static buildByteRange(buffer) {
+    const byteRangeToken = "/ByteRange [";
+    const byteRangeStart = buffer.indexOf(byteRangeToken);
+
+    if (byteRangeStart < 0) {
+      throw new Error("PDF signature placeholder is missing /ByteRange.");
+    }
+
+    const byteRangeEnd = buffer.indexOf("]", byteRangeStart);
+    const placeholder = buffer.slice(byteRangeStart, byteRangeEnd + 1).toString();
+    const contentsTag = "/Contents ";
+    const contentsStart = buffer.indexOf(contentsTag, byteRangeEnd);
+
+    if (contentsStart < 0) {
+      throw new Error("PDF signature placeholder is missing /Contents.");
+    }
+
+    const hexStart = buffer.indexOf("<", contentsStart);
+    const hexEnd = buffer.indexOf(">", hexStart);
+
+    if (hexStart < 0 || hexEnd < 0) {
+      throw new Error("PDF signature /Contents hex placeholder is invalid.");
+    }
+
+    const byteRange = [0, hexStart, hexEnd + 1, buffer.length - hexEnd - 1];
+    const replacement = `/ByteRange [${byteRange.join(" ")}]`;
+
+    if (replacement.length > placeholder.length) {
+      throw new Error("PDF ByteRange replacement is longer than placeholder.");
+    }
+
+    const preparedBuffer = Buffer.from(buffer);
+    preparedBuffer.write(replacement.padEnd(placeholder.length, " "), byteRangeStart);
+
+    return {
+      byteRange,
+      preparedBuffer,
+      contentsHexStart: hexStart + 1,
+      contentsHexEnd: hexEnd,
+    };
+  }
+
+  static hashByteRange(buffer, byteRange) {
+    const signedData = Buffer.concat([
+      buffer.slice(byteRange[0], byteRange[0] + byteRange[1]),
+      buffer.slice(byteRange[2], byteRange[2] + byteRange[3]),
+    ]);
+
+    return crypto.createHash("sha256").update(signedData).digest("hex");
+  }
+
+  static async prepareByteRangeSignaturePdf({
+    sourceFilePath,
+    contract,
+    signerName,
+    signerType,
+    signatureLength = DEFAULT_SIGNATURE_LENGTH,
+  }) {
+    const sourceBytes = await fs.readFile(sourceFilePath);
+    const pdfDoc = await PDFLibDocument.load(sourceBytes);
+    const pages = pdfDoc.getPages();
+    const targetPage = pages[pages.length - 1];
+
+    pdflibAddPlaceholder({
+      pdfDoc,
+      pdfPage: targetPage,
+      reason: `Picare contract ${signerType || "digital"} signature`,
+      contactInfo: "",
+      name: signerName || "",
+      location: "Vietnam",
+      signatureLength,
+      byteRangePlaceholder: BYTE_RANGE_PLACEHOLDER,
+      appName: "Picare Core Hub",
+      widgetRect: [0, 0, 0, 0],
+    });
+
+    const placeholderBytes = await pdfDoc.save({ useObjectStreams: false });
+    const { byteRange, preparedBuffer, contentsHexStart, contentsHexEnd } =
+      this.buildByteRange(Buffer.from(placeholderBytes));
+    const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
+    const fileName = `hop-dong-picare-${contract.contractId}-byte-range-${hashToSign.slice(
+      0,
+      12
+    )}.pdf`;
+    const outputPath = path.join(OUTPUT_DIR, fileName);
+
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    await fs.writeFile(outputPath, preparedBuffer);
+
+    return {
+      preparedPdfPath: outputPath,
+      preparedPdfHash: hashToSign,
+      byteRange,
+      signatureLength,
+      contentsHexStart,
+      contentsHexEnd,
+    };
+  }
+
+  static async embedByteRangeSignature({
+    preparedPdfPath,
+    signatureHex,
+    contract,
+  }) {
+    const preparedBuffer = await fs.readFile(preparedPdfPath);
+    const { byteRange, contentsHexStart, contentsHexEnd } = this.buildByteRange(
+      preparedBuffer
+    );
+    const cleanSignatureHex = String(signatureHex || "").replace(/^0x/i, "");
+    const placeholderLength = contentsHexEnd - contentsHexStart;
+
+    if (!/^[0-9a-fA-F]+$/.test(cleanSignatureHex)) {
+      throw new Error("signatureHex phải là chuỗi hex hợp lệ.");
+    }
+
+    if (cleanSignatureHex.length > placeholderLength) {
+      throw new Error(
+        `signatureHex dài hơn vùng placeholder (${cleanSignatureHex.length}/${placeholderLength}).`
+      );
+    }
+
+    const signedBuffer = Buffer.from(preparedBuffer);
+    signedBuffer.write(
+      cleanSignatureHex.padEnd(placeholderLength, "0"),
+      contentsHexStart,
+      "ascii"
+    );
+
+    const signedPdfHash = crypto
+      .createHash("sha256")
+      .update(signedBuffer)
+      .digest("hex");
+    const fileName = `hop-dong-picare-${contract.contractId}-adobe-signed-${signedPdfHash.slice(
+      0,
+      12
+    )}.pdf`;
+    const outputPath = path.join(OUTPUT_DIR, fileName);
+
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    await fs.writeFile(outputPath, signedBuffer);
+
+    return {
+      signedPdfHash,
+      fileName,
+      filePath: outputPath,
+      byteRange,
     };
   }
 }

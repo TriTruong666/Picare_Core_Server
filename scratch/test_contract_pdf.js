@@ -1,8 +1,7 @@
-const crypto = require("crypto");
-const ContractPdfService = require("../src/services/contract_pdf.service");
+const ContractService = require("../src/services/contract.service");
+const { sequelize } = require("../src/models");
 
 const payload = {
-  contractNumber: "88/05/2026/TEST",
   ownerCompanyInfo: {
     companyCode: "TEST",
     companyName: "CÔNG TY TNHH KIỂM THỬ API PICARE",
@@ -25,6 +24,8 @@ const payload = {
     role: "Giám đốc mua hàng",
   },
   contractDueDate: "2028-06-30",
+  contractType: "digital",
+  contractUrl: "https://example.com/contracts/minh-an-test-contract.pdf",
   details: [
     {
       productName: "Gel rửa tay khô Picare SafeClean 500ml",
@@ -46,27 +47,27 @@ const payload = {
 };
 
 async function main() {
-  const contract = {
-    contractId: crypto.randomUUID(),
-    contractNumber: payload.contractNumber,
-    createdAt: new Date("2026-05-22T09:15:00+07:00"),
-    contractDueDate: new Date(payload.contractDueDate),
-    ownerCompanyInfo: payload.ownerCompanyInfo,
-    partnerCompanyInfo: payload.partnerCompanyInfo,
-  };
+  const result = await ContractService.createContractTemplate(payload);
 
-  const result = await ContractPdfService.generateContractPdf(
-    contract,
-    payload.details
-  );
-
-  console.log("PDF generated:");
-  console.log(result.filePath);
+  console.log("Contract record created:");
+  console.log({
+    contractId: result.contract.contractId,
+    contractNumber: result.contract.contractNumber,
+    contractChecksum: result.contract.contractChecksum,
+    contractType: result.contract.contractType,
+    contractUrl: result.contract.contractUrl,
+    previewUrl: result.previewUrl,
+    detailsCount: result.contract.details.length,
+  });
   console.log("pdfHashHex:");
   console.log(result.pdfHashHex);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await sequelize.close();
+  });

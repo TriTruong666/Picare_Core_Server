@@ -1,13 +1,21 @@
 const { Op } = require("sequelize");
 const fs = require("fs/promises");
 const path = require("path");
-const { Contract, ContractDetail } = require("../models");
+const {
+  Contract,
+  ContractDetail,
+  ContractDocument,
+  ContractSignature,
+} = require("../models");
 const {
   ContractListDTO,
   ContractDetailDTO,
 } = require("../schemas/contract.schema");
 const ErrorCodes = require("../common/exceptions/error_codes");
-const { NotFoundException } = require("../common/exceptions/BaseException");
+const {
+  BadRequestException,
+  NotFoundException,
+} = require("../common/exceptions/BaseException");
 const ContractPdfService = require("./contract_pdf.service");
 
 const CONTRACT_OUTPUT_DIR =
@@ -16,21 +24,21 @@ const CONTRACT_OUTPUT_DIR =
 
 class ContractService {
   static async createContractTemplate({
-    contractNumber,
     ownerCompanyInfo,
     partnerCompanyInfo,
     contractDueDate,
     contractType = "default",
+    contractUrl,
     details = [],
   }) {
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.create(
         {
-          contractNumber,
           ownerCompanyInfo,
           partnerCompanyInfo,
           contractDueDate,
           contractType,
+          contractUrl,
         },
         { transaction }
       );
@@ -44,13 +52,27 @@ class ContractService {
         { transaction, returning: true }
       );
 
-      const { pdfHashHex, contractUrl } =
+      const { pdfHashHex, fileName, filePath } =
         await ContractPdfService.generateContractPdf(contract, createdDetails);
+      const documentUrl = `/api/v1/contracts/${contract.contractId}/template-pdf`;
 
       await contract.update(
         {
           contractChecksum: pdfHashHex,
-          contractUrl,
+          contractUrl: contractUrl || documentUrl,
+        },
+        { transaction }
+      );
+
+      await ContractDocument.create(
+        {
+          contractId: contract.contractId,
+          version: 1,
+          status: "unsigned",
+          fileName,
+          filePath,
+          fileUrl: documentUrl,
+          fileHash: pdfHashHex,
         },
         { transaction }
       );
@@ -60,7 +82,192 @@ class ContractService {
       return {
         contract: ContractDetailDTO.fromContract(contract),
         pdfHashHex,
-        previewUrl: contractUrl,
+        previewUrl: documentUrl,
+      };
+    });
+  }
+
+  static async getLatestContractDocument(contractId, options = {}) {
+    const document = await ContractDocument.findOne({
+      where: { contractId },
+      order: [["version", "DESC"]],
+      transaction: options.transaction,
+    });
+
+    if (!document) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    return document;
+  }
+
+  static async createSigningSession({
+    contractId,
+    signerType,
+    signerName,
+    signerEmail,
+  }) {
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      const latestDocument = await this.getLatestContractDocument(contractId, {
+        transaction,
+      });
+
+      const preparedSignaturePdf =
+        await ContractPdfService.prepareByteRangeSignaturePdf({
+          sourceFilePath: latestDocument.filePath,
+          contract,
+          signerName,
+          signerType,
+        });
+
+      const signature = await ContractSignature.create(
+        {
+          contractId,
+          contractDocumentId: latestDocument.contractDocumentId,
+          signerType,
+          signerName,
+          signerEmail,
+          signingMethod: "pdf_byte_range",
+          status: "pending",
+          pdfHashBeforeSign: latestDocument.fileHash,
+          preparedPdfPath: preparedSignaturePdf.preparedPdfPath,
+          preparedPdfHash: preparedSignaturePdf.preparedPdfHash,
+          byteRange: preparedSignaturePdf.byteRange,
+          signatureLength: preparedSignaturePdf.signatureLength,
+        },
+        { transaction }
+      );
+
+      return {
+        contractId,
+        contractSignatureId: signature.contractSignatureId,
+        contractDocumentId: latestDocument.contractDocumentId,
+        documentVersion: latestDocument.version,
+        hashToSign: preparedSignaturePdf.preparedPdfHash,
+        pdfHashBeforeSign: latestDocument.fileHash,
+        byteRange: preparedSignaturePdf.byteRange,
+        algorithm: "SHA256_WITH_RSA_PKCS7_DETACHED",
+        signatureFormat: "CMS_PKCS7_DER_HEX",
+        localSignUrl: "http://127.0.0.1:9999/sign-pdf-cms",
+      };
+    });
+  }
+
+  static async completeSigningSession({
+    contractId,
+    contractSignatureId,
+    signatureHex,
+    certificatePem,
+    certificateSerial,
+    certificateSubject,
+    certificateIssuer,
+    vendor,
+  }) {
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      const signature = await ContractSignature.findOne({
+        where: { contractId, contractSignatureId },
+        transaction,
+      });
+
+      if (!signature) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      if (signature.status !== "pending") {
+        throw new BadRequestException("Signing session không còn ở trạng thái pending");
+      }
+
+      const sourceDocument = await ContractDocument.findOne({
+        where: {
+          contractId,
+          contractDocumentId: signature.contractDocumentId,
+        },
+        transaction,
+      });
+
+      if (!sourceDocument) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      await signature.update(
+        {
+          signatureHex,
+          certificatePem,
+          certificateSerial,
+          certificateSubject,
+          certificateIssuer,
+          vendor,
+        },
+        { transaction }
+      );
+
+      const signedPdf = await ContractPdfService.embedByteRangeSignature({
+        preparedPdfPath: signature.preparedPdfPath,
+        contract,
+        signatureHex,
+      });
+      const nextVersion = sourceDocument.version + 1;
+      const nextStatus =
+        signature.signerType === "partner" ? "completed" : "owner_signed";
+      const signedPdfUrl = `/api/v1/contracts/${contractId}/template-pdf`;
+
+      const signedDocument = await ContractDocument.create(
+        {
+          contractId,
+          version: nextVersion,
+          status: nextStatus,
+          fileName: signedPdf.fileName,
+          filePath: signedPdf.filePath,
+          fileUrl: signedPdfUrl,
+          fileHash: signedPdf.signedPdfHash,
+        },
+        { transaction }
+      );
+
+      await signature.update(
+        {
+          status: "signed",
+          signedPdfHash: signedPdf.signedPdfHash,
+          signedPdfUrl,
+          signedAt: new Date(),
+        },
+        { transaction }
+      );
+
+      await contract.update(
+        {
+          contractChecksum: signedPdf.signedPdfHash,
+          contractUrl: signedPdfUrl,
+        },
+        { transaction }
+      );
+
+      return {
+        contractId,
+        contractSignatureId,
+        signedDocumentId: signedDocument.contractDocumentId,
+        signedPdfHash: signedPdf.signedPdfHash,
+        signedPdfUrl,
+        documentVersion: nextVersion,
+        status: nextStatus,
       };
     });
   }
@@ -123,6 +330,18 @@ class ContractService {
           separate: true,
           order: [["createdAt", "ASC"]],
         },
+        {
+          model: ContractDocument,
+          as: "documents",
+          separate: true,
+          order: [["version", "ASC"]],
+        },
+        {
+          model: ContractSignature,
+          as: "signatures",
+          separate: true,
+          order: [["createdAt", "ASC"]],
+        },
       ],
     });
 
@@ -140,11 +359,8 @@ class ContractService {
       throw new NotFoundException(ErrorCodes.NOT_FOUND);
     }
 
-    const filePrefix = `${contract.contractId}-${contract.contractChecksum.slice(
-      0,
-      12
-    )}`;
-    const filePath = path.join(CONTRACT_OUTPUT_DIR, `${filePrefix}.pdf`);
+    const latestDocument = await this.getLatestContractDocument(contractId);
+    const filePath = latestDocument.filePath;
 
     try {
       await fs.access(filePath);
@@ -154,7 +370,7 @@ class ContractService {
 
     return {
       filePath,
-      fileName: `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
+      fileName: latestDocument.fileName || `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
     };
   }
 }

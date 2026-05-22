@@ -71,6 +71,53 @@ class ContractController {
     }
   }
 
+  static async createSigningSession(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.createSigningSession({
+        contractId,
+        ...req.body,
+      });
+
+      return ResponseHandler.created(
+        res,
+        result,
+        "Tạo phiên ký số thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async completeSigningSession(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId, contractSignatureId } = req.params;
+      const result = await ContractService.completeSigningSession({
+        contractId,
+        contractSignatureId,
+        ...req.body,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Hoàn tất ký số hợp đồng thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async previewContractPdf(req, res, next) {
     try {
       const errors = validationResult(req);

@@ -4,6 +4,8 @@ const ContractController = require("../controllers/contract.controller");
 const { protect } = require("../middlewares/auth.middleware");
 const {
   createContractTemplateSchema,
+  createSigningSessionSchema,
+  completeSigningSessionSchema,
   getContractsPaginateSchema,
   contractIdSchema,
 } = require("../schemas/contract.schema");
@@ -35,9 +37,6 @@ const {
  *               - contractDueDate
  *               - details
  *             properties:
- *               contractNumber:
- *                 type: string
- *                 example: 1/01/2026/TH
  *               ownerCompanyInfo:
  *                 type: object
  *               partnerCompanyInfo:
@@ -46,6 +45,13 @@ const {
  *                 type: string
  *                 format: date
  *                 example: 2027-12-31
+ *               contractType:
+ *                 type: string
+ *                 enum: [digital, default]
+ *                 example: digital
+ *               contractUrl:
+ *                 type: string
+ *                 example: https://example.com/contracts/external-contract.pdf
  *               details:
  *                 type: array
  *                 items:
@@ -125,6 +131,84 @@ router.get(
   protect,
   contractIdSchema,
   ContractController.getContractById
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/signing-sessions:
+ *   post:
+ *     summary: Tạo phiên ký số PDF chuẩn ByteRange cho version mới nhất của hợp đồng
+ *     description: API tạo PDF tạm có signature placeholder, tính hash theo ByteRange và trả hashToSign để client gửi sang app ký số local qua http://127.0.0.1:9999/sign-pdf-cms. Chữ ký trả về ở bước complete phải là CMS/PKCS#7 DER dạng hex.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerType
+ *             properties:
+ *               signerType:
+ *                 type: string
+ *                 enum: [owner, partner]
+ *               signerName:
+ *                 type: string
+ *               signerEmail:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Trả về hashToSign, byteRange và signingSessionId
+ */
+router.post(
+  "/:contractId/signing-sessions",
+  protect,
+  createSigningSessionSchema,
+  ContractController.createSigningSession
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/signing-sessions/{contractSignatureId}/complete:
+ *   post:
+ *     summary: Hoàn tất ký số PDF ByteRange và tạo PDF version mới
+ *     description: signatureHex phải là CMS/PKCS#7 detached signature dạng DER hex, không phải raw RSA signature. API sẽ nhúng signature vào /Contents của PDF placeholder.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signatureHex
+ *             properties:
+ *               signatureHex:
+ *                 type: string
+ *                 description: CMS/PKCS#7 detached signature DER hex
+ *               certificatePem:
+ *                 type: string
+ *               certificateSerial:
+ *                 type: string
+ *               certificateSubject:
+ *                 type: string
+ *               certificateIssuer:
+ *                 type: string
+ *               vendor:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: PDF đã được nhúng chữ ký số ByteRange
+ */
+router.post(
+  "/:contractId/signing-sessions/:contractSignatureId/complete",
+  protect,
+  completeSigningSessionSchema,
+  ContractController.completeSigningSession
 );
 
 /**
