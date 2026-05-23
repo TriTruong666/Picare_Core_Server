@@ -3,15 +3,15 @@ const { sequelize } = require("../src/models");
 
 const payload = {
   ownerCompanyInfo: {
-    companyCode: "TEST",
-    companyName: "CÔNG TY TNHH KIỂM THỬ API PICARE",
-    address: "99 Đường Số 7, Phường An Phú, Thành Phố Thủ Đức, TP Hồ Chí Minh",
-    phone: "0909000111",
-    email: "legal@test-picare.vn",
-    bankInfo: "123456789 Ngân hàng TestBank - Chi nhánh Thủ Đức",
+    companyCode: "TH",
+    companyName: "CTY TNHH DƯỢC PHẨM TRUNG HẠNH",
+    address: "2/35 Chấn Hưng, Phường Tân Hòa, Thành Phố Hồ Chí Minh",
+    phone: "0983139320",
+    email: "cskh@trunghanh.com",
+    bankInfo: "204550429 Ngân hàng Á Châu – Chi Nhánh Bắc Hải TP HCM",
     mst: "0319999999",
-    ownerName: "Ông Nguyễn Văn Kiểm",
-    role: "Tổng giám đốc",
+    ownerName: "Bà Lê Thị Bích Hạnh",
+    role: "Giám Đốc",
   },
   partnerCompanyInfo: {
     companyName: "CÔNG TY CỔ PHẦN NHÀ THUỐC MINH AN",
@@ -25,7 +25,6 @@ const payload = {
   },
   contractDueDate: "2028-06-30",
   contractType: "digital",
-  contractUrl: "https://example.com/contracts/minh-an-test-contract.pdf",
   details: [
     {
       productName: "Gel rửa tay khô Picare SafeClean 500ml",

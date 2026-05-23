@@ -17,10 +17,70 @@ const {
   NotFoundException,
 } = require("../common/exceptions/BaseException");
 const ContractPdfService = require("./contract_pdf.service");
+const S3Service = require("./s3.service");
+const appConfig = require("../config/app.config");
 
 const CONTRACT_OUTPUT_DIR =
   process.env.CONTRACT_OUTPUT_DIR ||
   path.resolve(__dirname, "../..", "storage", "contracts");
+const CONTRACT_STATUS = {
+  UNSIGNED: "unsigned",
+  OWNER_SIGNED: "owner_signed",
+  COMPLETED: "completed",
+};
+
+function formatContractCreatedDescription(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour12: false,
+  })
+    .formatToParts(date)
+    .reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  return `Tạo vào ${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}`;
+}
+
+function buildContractPreviewUrl(contractId) {
+  return `${appConfig.client.baseUrl}/contracts/${contractId}/preview`;
+}
+
+function ensureContractSigningState(contract, signerType) {
+  if (contract.status === CONTRACT_STATUS.COMPLETED) {
+    throw new BadRequestException("Contract da hoan tat ky");
+  }
+
+  if (
+    contract.status === CONTRACT_STATUS.UNSIGNED &&
+    signerType !== "owner"
+  ) {
+    throw new BadRequestException("Owner phai ky truoc");
+  }
+
+  if (
+    contract.status === CONTRACT_STATUS.OWNER_SIGNED &&
+    signerType !== "partner"
+  ) {
+    throw new BadRequestException("Partner phai ky sau khi owner da ky");
+  }
+}
+
+function getNextContractStatus(contract, signerType) {
+  ensureContractSigningState(contract, signerType);
+
+  if (contract.status === CONTRACT_STATUS.UNSIGNED) {
+    return CONTRACT_STATUS.OWNER_SIGNED;
+  }
+
+  return CONTRACT_STATUS.COMPLETED;
+}
 
 class ContractService {
   static async createContractTemplate({
@@ -28,7 +88,6 @@ class ContractService {
     partnerCompanyInfo,
     contractDueDate,
     contractType = "default",
-    contractUrl,
     details = [],
   }) {
     return Contract.sequelize.transaction(async (transaction) => {
@@ -38,7 +97,7 @@ class ContractService {
           partnerCompanyInfo,
           contractDueDate,
           contractType,
-          contractUrl,
+          status: CONTRACT_STATUS.UNSIGNED,
         },
         { transaction }
       );
@@ -54,12 +113,28 @@ class ContractService {
 
       const { pdfHashHex, fileName, filePath } =
         await ContractPdfService.generateContractPdf(contract, createdDetails);
-      const documentUrl = `/api/v1/contracts/${contract.contractId}/template-pdf`;
+      const fileBuffer = await fs.readFile(filePath);
+      const fileSize = (await fs.stat(filePath)).size;
+      const s3Key = S3Service.buildKey("unsigned-contracts", fileName);
+      const s3Result = await S3Service.upload({
+        key: s3Key,
+        body: fileBuffer,
+        mimeType: "application/pdf",
+        originalName: fileName,
+        fileSize,
+        folder: "unsigned-contracts",
+        clientId: null,
+        description: formatContractCreatedDescription(),
+        visibility: "private",
+      });
+      const documentUrl = s3Result.url;
+      const previewUrl = buildContractPreviewUrl(contract.contractId);
 
       await contract.update(
         {
           contractChecksum: pdfHashHex,
-          contractUrl: contractUrl || documentUrl,
+          contractUrl: documentUrl,
+          status: CONTRACT_STATUS.UNSIGNED,
         },
         { transaction }
       );
@@ -68,7 +143,7 @@ class ContractService {
         {
           contractId: contract.contractId,
           version: 1,
-          status: "unsigned",
+          status: CONTRACT_STATUS.UNSIGNED,
           fileName,
           filePath,
           fileUrl: documentUrl,
@@ -82,7 +157,7 @@ class ContractService {
       return {
         contract: ContractDetailDTO.fromContract(contract),
         pdfHashHex,
-        previewUrl: documentUrl,
+        previewUrl,
       };
     });
   }
@@ -116,6 +191,8 @@ class ContractService {
       if (!contract) {
         throw new NotFoundException(ErrorCodes.NOT_FOUND);
       }
+
+      ensureContractSigningState(contract, signerType);
 
       const latestDocument = await this.getLatestContractDocument(contractId, {
         transaction,
@@ -225,8 +302,7 @@ class ContractService {
         signatureHex,
       });
       const nextVersion = sourceDocument.version + 1;
-      const nextStatus =
-        signature.signerType === "partner" ? "completed" : "owner_signed";
+      const nextStatus = getNextContractStatus(contract, signature.signerType);
       const signedPdfUrl = `/api/v1/contracts/${contractId}/template-pdf`;
 
       const signedDocument = await ContractDocument.create(
@@ -256,6 +332,7 @@ class ContractService {
         {
           contractChecksum: signedPdf.signedPdfHash,
           contractUrl: signedPdfUrl,
+          status: nextStatus,
         },
         { transaction }
       );
@@ -276,6 +353,7 @@ class ContractService {
     page = 1,
     limit = 20,
     search = "",
+    status = "",
   } = {}) {
     const pPage = parseInt(page, 10);
     const pLimit = parseInt(limit, 10);
@@ -302,6 +380,10 @@ class ContractService {
           { [Op.iLike]: `%${normalizedSearch}%` }
         ),
       ];
+    }
+
+    if (status) {
+      where.status = status.trim();
     }
 
     const { count, rows } = await Contract.findAndCountAll({

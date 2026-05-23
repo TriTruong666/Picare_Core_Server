@@ -29,6 +29,7 @@ class ContractListDTO {
     this.contractDueDate = contract.contractDueDate;
     this.contractChecksum = contract.contractChecksum;
     this.contractType = contract.contractType;
+    this.status = contract.status;
     this.contractUrl = contract.contractUrl;
     this.createdAt = contract.createdAt;
     this.updatedAt = contract.updatedAt;
@@ -99,6 +100,13 @@ const getContractsPaginateSchema = [
     .isString()
     .withMessage("search phải là chuỗi"),
 ];
+
+getContractsPaginateSchema.push(
+  query("status")
+    .optional()
+    .isIn(["unsigned", "owner_signed", "completed"])
+    .withMessage("status chá»‰ nháº­n unsigned, owner_signed hoáº·c completed")
+);
 
 const contractIdSchema = [
   param("contractId")
@@ -185,10 +193,6 @@ const createContractTemplateSchema = [
     .optional()
     .isIn(["digital", "default"])
     .withMessage("contractType chỉ nhận digital hoặc default"),
-  body("contractUrl")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage("contractUrl phải là chuỗi"),
   body("details")
     .isArray({ min: 1 })
     .withMessage("details phải là array và có ít nhất 1 sản phẩm"),

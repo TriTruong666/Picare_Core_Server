@@ -114,6 +114,14 @@ const Contract = sequelize.define(
       defaultValue: "default",
       field: "contract_type",
     },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "unsigned",
+      validate: {
+        isIn: [["unsigned", "owner_signed", "completed"]],
+      },
+    },
     contractUrl: {
       type: DataTypes.STRING,
       allowNull: true,

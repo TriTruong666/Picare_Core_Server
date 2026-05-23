@@ -31,11 +31,12 @@ class ContractController {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const { page = 1, limit = 20, search = "" } = req.query;
+      const { page = 1, limit = 20, search = "", status = "" } = req.query;
       const result = await ContractService.getContractsPaginate({
         page,
         limit,
         search,
+        status,
       });
 
       return ResponseHandler.paginate(

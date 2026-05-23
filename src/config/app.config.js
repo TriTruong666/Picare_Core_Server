@@ -29,6 +29,13 @@ const appConfig = {
     isProduction: process.env.NODE_ENV === "production",
   },
 
+  client: {
+    baseUrl:
+      process.env.NODE_ENV === "production"
+        ? "https://hub.picare.vn"
+        : "http://localhost:5173",
+  },
+
   db: {
     host: process.env.DB_HOST || "localhost",
     port: parseInt(process.env.DB_PORT, 10) || 5432,
@@ -80,8 +87,7 @@ const appConfig = {
   mail: {
     host: process.env.SMTP_HOST || "",
     port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure:
-      String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+    secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
     from: process.env.MAIL_FROM || "",

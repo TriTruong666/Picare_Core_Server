@@ -22,6 +22,7 @@ const {
  * /api/v1/contracts:
  *   post:
  *     summary: Tạo hợp đồng mẫu từ contract_template.pdf
+ *     description: API tự tạo PDF ban đầu, upload lên S3 folder unsigned-contracts với visibility private, lưu URL file vào contractUrl và trả previewUrl là đường dẫn client để xem/ký hợp đồng.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -49,9 +50,6 @@ const {
  *                 type: string
  *                 enum: [digital, default]
  *                 example: digital
- *               contractUrl:
- *                 type: string
- *                 example: https://example.com/contracts/external-contract.pdf
  *               details:
  *                 type: array
  *                 items:
@@ -142,6 +140,14 @@ router.get(
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID của hợp đồng cần tạo phiên ký
  *     requestBody:
  *       required: true
  *       content:
@@ -178,6 +184,21 @@ router.post(
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID của hợp đồng cần hoàn tất ký số
+ *       - in: path
+ *         name: contractSignatureId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID của signing session cần hoàn tất
  *     requestBody:
  *       required: true
  *       content:
