@@ -127,6 +127,12 @@ const Contract = sequelize.define(
       allowNull: true,
       field: "contract_url",
     },
+    signerCredential: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      comment:
+        "credentialId(Số CCCD), name, dob(ngày sinh), home(nguyên quán), address, sex, nationality, doe(ngày hết hạn), features(đặc điểm nhận dạng), issue_date(ngày cấp), image_first, image_second",
+    },
   },
   {
     tableName: "contract",

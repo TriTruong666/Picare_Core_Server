@@ -115,6 +115,46 @@ class ContractController {
     }
   }
 
+  static async publishOwnerSignedContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.publishOwnerSignedContract(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Publish hợp đồng owner_signed lên S3 thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async publishCompletedContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.publishCompletedContract(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Publish hợp đồng completed lên S3 thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async createSigningSession(req, res, next) {
     try {
       const errors = validationResult(req);

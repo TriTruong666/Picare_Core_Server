@@ -1,12 +1,9 @@
 const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
+const fontkit = require("@pdf-lib/fontkit");
 const PDFDocument = require("pdfkit");
-const {
-  PDFDocument: PDFLibDocument,
-  StandardFonts,
-  rgb,
-} = require("pdf-lib");
+const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 
 const ROOT_DIR = path.resolve(__dirname, "../..");
@@ -31,9 +28,18 @@ const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384
 );
 const BYTE_RANGE_PLACEHOLDER = "**********";
+const SIGNATURE_WIDGET_RECTS = {
+  owner: [85, 120, 235, 205],
+  partner: [360, 120, 510, 205],
+  default: [85, 120, 235, 205],
+};
 
 function asText(value, fallback = "") {
   return value === null || value === undefined ? fallback : String(value);
+}
+
+function normalizeVietnameseText(value, fallback = "") {
+  return asText(value, fallback).normalize("NFC");
 }
 
 function getOwnerName(companyInfo = {}) {
@@ -64,6 +70,26 @@ function formatShortDate(value = new Date()) {
   return `${day}/${month}/${year}`;
 }
 
+function formatVietnameseDateTime(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("vi-VN", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour12: false,
+  })
+    .formatToParts(value instanceof Date ? value : new Date(value))
+    .reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
 function formatMoney(value) {
   const numberValue = Number(value);
 
@@ -74,6 +100,122 @@ function formatMoney(value) {
   return new Intl.NumberFormat("en-US", {
     maximumFractionDigits: 0,
   }).format(numberValue);
+}
+
+function getSignatureWidgetRect(signerType) {
+  return (
+    SIGNATURE_WIDGET_RECTS[signerType] || SIGNATURE_WIDGET_RECTS.default
+  );
+}
+
+function topLeftRectToPdfRect(x, y, width, height, pageHeight) {
+  return [x, pageHeight - y - height, x + width, pageHeight - y];
+}
+
+function fitTextToWidth(text, font, size, maxWidth) {
+  const value = normalizeVietnameseText(text);
+
+  if (font.widthOfTextAtSize(value, size) <= maxWidth) {
+    return value;
+  }
+
+  let trimmed = value;
+
+  while (
+    trimmed.length > 3 &&
+    font.widthOfTextAtSize(`${trimmed}...`, size) > maxWidth
+  ) {
+    trimmed = trimmed.slice(0, -1);
+  }
+
+  return `${trimmed}...`;
+}
+
+function drawCenteredText(pdfPage, text, x, y, width, font, size, color) {
+  const fittedText = fitTextToWidth(text, font, size, width);
+  const textWidth = font.widthOfTextAtSize(fittedText, size);
+
+  pdfPage.drawText(fittedText, {
+    x: x + (width - textWidth) / 2,
+    y,
+    size,
+    font,
+    color,
+  });
+}
+
+function drawVisibleSignatureAppearance(
+  pdfPage,
+  widgetRect,
+  { signerName, signerType, font, boldFont, signingTime = new Date() }
+) {
+  const [x1, y1, x2, y2] = widgetRect;
+  const width = x2 - x1;
+  const height = y2 - y1;
+  const paddingX = 8;
+  const contentWidth = width - paddingX * 2;
+  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
+
+  pdfPage.drawRectangle({
+    x: x1,
+    y: y1,
+    width,
+    height,
+    color: rgb(0.96, 0.99, 0.97),
+    borderColor: rgb(0.07, 0.45, 0.24),
+    borderWidth: 0.9,
+  });
+
+  pdfPage.drawRectangle({
+    x: x1,
+    y: y2 - 15,
+    width,
+    height: 15,
+    color: rgb(0.07, 0.45, 0.24),
+  });
+
+  drawCenteredText(
+    pdfPage,
+    "ĐÃ KÝ SỐ",
+    x1,
+    y2 - 11,
+    width,
+    boldFont,
+    7.5,
+    rgb(1, 1, 1)
+  );
+  drawCenteredText(
+    pdfPage,
+    normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
+      "vi-VN"
+    ),
+    x1 + paddingX,
+    y1 + Math.max(31, height - 39),
+    contentWidth,
+    boldFont,
+    8,
+    rgb(0.04, 0.25, 0.13)
+  );
+  drawCenteredText(
+    pdfPage,
+    `Vai trò: ${signerRole}`,
+    x1 + paddingX,
+    y1 + 20,
+    contentWidth,
+    font,
+    7,
+    rgb(0.1, 0.1, 0.1)
+  );
+  drawCenteredText(
+    pdfPage,
+    `Thời gian: ${formatVietnameseDateTime(signingTime)}`,
+    x1 + paddingX,
+    y1 + 9,
+    contentWidth,
+    font,
+    6.5,
+    rgb(0.1, 0.1, 0.1)
+  );
 }
 
 async function findFontPath() {
@@ -115,18 +257,19 @@ function collectPdfBuffer(doc) {
 }
 
 class ContractPdfBuilder {
-  constructor(fontPath, boldFontPath) {
+  constructor(fontPath, boldFontPath, contract) {
     this.doc = new PDFDocument({
       size: "A4",
       margin: 56,
       bufferPages: true,
       info: {
-        Title: "Hop dong nguyen tac",
-        Author: "Picare Core Hub",
+        Title: `Hợp đồng ${contract.contractNumber}` || "Hợp đồng nguyên tắc",
+        Author: "Picare Việt Nam",
       },
     });
     this.fontPath = fontPath;
     this.boldFontPath = boldFontPath;
+    this.signatureWidgets = {};
     this.doc.font(fontPath).fontSize(10);
   }
 
@@ -173,6 +316,39 @@ class ContractPdfBuilder {
     this.text(`-    ${value}`, { gap: 0.1 });
   }
 
+  currentPageIndex() {
+    const range = this.doc.bufferedPageRange();
+    return range.start + range.count - 1;
+  }
+
+  drawSignatureBox(signerType, x, y, width, height) {
+    const doc = this.doc;
+    const pageHeight = doc.page.height;
+
+    this.signatureWidgets[signerType] = {
+      pageIndex: this.currentPageIndex(),
+      rect: topLeftRectToPdfRect(x, y, width, height, pageHeight),
+    };
+
+    doc.save();
+    doc
+      .lineWidth(0.6)
+      .dash(3, { space: 2 })
+      .strokeColor("#777777")
+      .rect(x, y, width, height)
+      .stroke()
+      .undash();
+    doc
+      .font(this.fontPath)
+      .fontSize(8)
+      .fillColor("#666666")
+      .text("Vị trí ký số", x, y + Math.floor(height / 2) - 5, {
+        width,
+        align: "center",
+      });
+    doc.restore();
+  }
+
   companyBlock(title, companyInfo, shortName) {
     this.text(`${title}: ${asText(companyInfo.companyName).toUpperCase()}`);
     this.text(`Địa chỉ : ${companyInfo.address}`);
@@ -208,13 +384,15 @@ class ContractPdfBuilder {
       ]),
     ];
 
-    rows.forEach((row, rowIndex) => {
-      const y = startY + rowIndex * rowHeight;
-      let x = startX;
+    let y = startY;
 
+    rows.forEach((row, rowIndex) => {
       if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
         doc.addPage();
+        y = doc.page.margins.top;
       }
+
+      let x = startX;
 
       row.forEach((cell, cellIndex) => {
         doc.rect(x, y, widths[cellIndex], rowHeight).stroke();
@@ -227,9 +405,11 @@ class ContractPdfBuilder {
           });
         x += widths[cellIndex];
       });
+
+      y += rowHeight;
     });
 
-    doc.y = startY + rows.length * rowHeight + 14;
+    doc.y = y + 14;
     doc.x = doc.page.margins.left;
     doc.moveDown(0.2);
   }
@@ -250,25 +430,56 @@ class ContractPdfBuilder {
     doc.text("ĐẠI DIỆN BÊN A", leftX, y, { width: 160, align: "center" });
     doc.text("ĐẠI DIỆN BÊN B", rightX, y, { width: 160, align: "center" });
     doc.font(this.fontPath).fontSize(9);
-    doc.text("(Ký, đóng dấu,ghi rõ họ và tên)", leftX - 8, y + 18, {
+    doc.text("(Ký, đóng dấu, ghi rõ họ và tên)", leftX - 8, y + 18, {
       width: 180,
       align: "center",
     });
-    doc.text("(Ký, đóng dấu,ghi rõ họ và tên)", rightX - 8, y + 18, {
+    doc.text("(Ký, đóng dấu, ghi rõ họ và tên)", rightX - 8, y + 18, {
       width: 180,
       align: "center",
     });
 
-    // Blank space from y + 42 to y + 118 is intentionally reserved for signatures.
+    const signatureBoxY = y + 44;
+    const signatureBoxWidth = 180;
+    const signatureBoxHeight = 74;
+    this.drawSignatureBox(
+      "owner",
+      leftX - 10,
+      signatureBoxY,
+      signatureBoxWidth,
+      signatureBoxHeight
+    );
+    this.drawSignatureBox(
+      "partner",
+      rightX - 10,
+      signatureBoxY,
+      signatureBoxWidth,
+      signatureBoxHeight
+    );
+
     doc.font(this.boldFontPath).fontSize(10);
-    doc.text(getOwnerName(ownerCompanyInfo).toUpperCase(), leftX, y + 128, {
-      width: 160,
-      align: "center",
-    });
-    doc.text(getOwnerName(partnerCompanyInfo).toUpperCase(), rightX, y + 128, {
-      width: 160,
-      align: "center",
-    });
+    doc.text(
+      normalizeVietnameseText(getOwnerName(ownerCompanyInfo)).toLocaleUpperCase(
+        "vi-VN"
+      ),
+      leftX,
+      y + 128,
+      {
+        width: 160,
+        align: "center",
+      }
+    );
+    doc.text(
+      normalizeVietnameseText(
+        getOwnerName(partnerCompanyInfo)
+      ).toLocaleUpperCase("vi-VN"),
+      rightX,
+      y + 128,
+      {
+        width: 160,
+        align: "center",
+      }
+    );
     doc.y = y + 150;
   }
 
@@ -277,8 +488,8 @@ class ContractPdfBuilder {
     const partner = contract.partnerCompanyInfo || {};
     const createdAt = contract.createdAt || new Date();
 
-    this.text(owner.companyName, { width: 245 });
-    this.text(`Số: ${contract.contractNumber}`, { width: 245 });
+    this.text(owner.companyName, { width: 245, bold: true });
+    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
     this.doc.y = 56;
     this.doc.x = 300;
     this.rightBlock("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
@@ -413,10 +624,10 @@ class ContractPdfBuilder {
 }
 
 class ContractPdfService {
-  static async generateContractPdf(contract, details = []) {
+  static async generateContractPdfBuffer(contract, details = []) {
     const fontPath = await findFontPath();
     const boldFontPath = await findBoldFontPath();
-    const builder = new ContractPdfBuilder(fontPath, boldFontPath);
+    const builder = new ContractPdfBuilder(fontPath, boldFontPath, contract);
     const pdfBufferPromise = builder.bufferPromise;
 
     builder.render(contract, details);
@@ -431,6 +642,18 @@ class ContractPdfService {
       0,
       12
     )}.pdf`;
+
+    return {
+      pdfBuffer,
+      pdfHashHex,
+      fileName,
+      signatureWidgets: builder.signatureWidgets,
+    };
+  }
+
+  static async generateContractPdf(contract, details = []) {
+    const { pdfBuffer, pdfHashHex, fileName, signatureWidgets } =
+      await this.generateContractPdfBuffer(contract, details);
     const outputPath = path.join(OUTPUT_DIR, fileName);
 
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -440,6 +663,7 @@ class ContractPdfService {
       pdfHashHex,
       fileName,
       filePath: outputPath,
+      signatureWidgets,
     };
   }
 
@@ -517,10 +741,9 @@ class ContractPdfService {
       .createHash("sha256")
       .update(signedBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${contract.contractId}-signed-${signedPdfHash.slice(
-      0,
-      12
-    )}.pdf`;
+    const fileName = `hop-dong-picare-${
+      contract.contractId
+    }-signed-${signedPdfHash.slice(0, 12)}.pdf`;
     const outputPath = path.join(OUTPUT_DIR, fileName);
 
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -542,7 +765,9 @@ class ContractPdfService {
     }
 
     const byteRangeEnd = buffer.indexOf("]", byteRangeStart);
-    const placeholder = buffer.slice(byteRangeStart, byteRangeEnd + 1).toString();
+    const placeholder = buffer
+      .slice(byteRangeStart, byteRangeEnd + 1)
+      .toString();
     const contentsTag = "/Contents ";
     const contentsStart = buffer.indexOf(contentsTag, byteRangeEnd);
 
@@ -565,7 +790,10 @@ class ContractPdfService {
     }
 
     const preparedBuffer = Buffer.from(buffer);
-    preparedBuffer.write(replacement.padEnd(placeholder.length, " "), byteRangeStart);
+    preparedBuffer.write(
+      replacement.padEnd(placeholder.length, " "),
+      byteRangeStart
+    );
 
     return {
       byteRange,
@@ -587,6 +815,7 @@ class ContractPdfService {
   static async prepareByteRangeSignaturePdf({
     sourceFilePath,
     contract,
+    details = [],
     signerName,
     signerType,
     signatureLength = DEFAULT_SIGNATURE_LENGTH,
@@ -594,29 +823,59 @@ class ContractPdfService {
     const sourceBytes = await fs.readFile(sourceFilePath);
     const pdfDoc = await PDFLibDocument.load(sourceBytes);
     const pages = pdfDoc.getPages();
-    const targetPage = pages[pages.length - 1];
+    const signingTime = new Date();
+    const { signatureWidgets } = await this.generateContractPdfBuffer(
+      contract,
+      details
+    );
+    const signatureWidget = signatureWidgets?.[signerType];
+    const targetPage =
+      pages[signatureWidget?.pageIndex] || pages[pages.length - 1];
+    const widgetRect =
+      signatureWidget?.rect || getSignatureWidgetRect(signerType);
+    const [fontPath, boldFontPath] = await Promise.all([
+      findFontPath(),
+      findBoldFontPath(),
+    ]);
+    const [fontBytes, boldFontBytes] = await Promise.all([
+      fs.readFile(fontPath),
+      fs.readFile(boldFontPath),
+    ]);
+    pdfDoc.registerFontkit(fontkit);
+    const [appearanceFont, appearanceBoldFont] = await Promise.all([
+      pdfDoc.embedFont(fontBytes, { subset: true }),
+      pdfDoc.embedFont(boldFontBytes, { subset: true }),
+    ]);
+
+    drawVisibleSignatureAppearance(targetPage, widgetRect, {
+      signerName,
+      signerType,
+      font: appearanceFont,
+      boldFont: appearanceBoldFont,
+      signingTime,
+    });
 
     pdflibAddPlaceholder({
       pdfDoc,
       pdfPage: targetPage,
       reason: `Picare contract ${signerType || "digital"} signature`,
       contactInfo: "",
-      name: signerName || "",
+      name: normalizeVietnameseText(signerName),
       location: "Vietnam",
+      signingTime,
       signatureLength,
       byteRangePlaceholder: BYTE_RANGE_PLACEHOLDER,
       appName: "Picare Core Hub",
-      widgetRect: [0, 0, 0, 0],
+      widgetRect,
     });
 
     const placeholderBytes = await pdfDoc.save({ useObjectStreams: false });
     const { byteRange, preparedBuffer, contentsHexStart, contentsHexEnd } =
       this.buildByteRange(Buffer.from(placeholderBytes));
     const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
-    const fileName = `hop-dong-picare-${contract.contractId}-byte-range-${hashToSign.slice(
-      0,
-      12
-    )}.pdf`;
+    const fileName = `hop-dong-picare-${
+      contract.contractId
+    }-byte-range-${hashToSign.slice(0, 12)}.pdf`;
     const outputPath = path.join(OUTPUT_DIR, fileName);
 
     await fs.mkdir(OUTPUT_DIR, { recursive: true });
@@ -638,9 +897,8 @@ class ContractPdfService {
     contract,
   }) {
     const preparedBuffer = await fs.readFile(preparedPdfPath);
-    const { byteRange, contentsHexStart, contentsHexEnd } = this.buildByteRange(
-      preparedBuffer
-    );
+    const { byteRange, contentsHexStart, contentsHexEnd } =
+      this.buildByteRange(preparedBuffer);
     const cleanSignatureHex = String(signatureHex || "").replace(/^0x/i, "");
     const placeholderLength = contentsHexEnd - contentsHexStart;
 
@@ -665,10 +923,9 @@ class ContractPdfService {
       .createHash("sha256")
       .update(signedBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${contract.contractId}-adobe-signed-${signedPdfHash.slice(
-      0,
-      12
-    )}.pdf`;
+    const fileName = `hop-dong-picare-${
+      contract.contractId
+    }-adobe-signed-${signedPdfHash.slice(0, 12)}.pdf`;
     const outputPath = path.join(OUTPUT_DIR, fileName);
 
     await fs.mkdir(OUTPUT_DIR, { recursive: true });

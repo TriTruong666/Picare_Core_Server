@@ -42,7 +42,7 @@ const ContractDocument = sequelize.define(
     },
     filePath: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: "file_path",
     },
     fileUrl: {

@@ -1,6 +1,5 @@
 const { Op } = require("sequelize");
 const fs = require("fs/promises");
-const path = require("path");
 const {
   Contract,
   ContractDetail,
@@ -20,9 +19,6 @@ const ContractPdfService = require("./contract_pdf.service");
 const S3Service = require("./s3.service");
 const appConfig = require("../config/app.config");
 
-const CONTRACT_OUTPUT_DIR =
-  process.env.CONTRACT_OUTPUT_DIR ||
-  path.resolve(__dirname, "../..", "storage", "contracts");
 const CONTRACT_STATUS = {
   DRAFT: "draft",
   UNSIGNED: "unsigned",
@@ -53,19 +49,46 @@ function buildContractPreviewUrl(contractId) {
   return `${appConfig.client.baseUrl}/contracts/${contractId}/preview`;
 }
 
+function getSignedContractFolder(status) {
+  if (status === CONTRACT_STATUS.OWNER_SIGNED) {
+    return "owner_signed";
+  }
+
+  if (status === CONTRACT_STATUS.COMPLETED) {
+    return "complete_contract";
+  }
+
+  return "signed-contracts";
+}
+
+function getPublishContractErrorMessage(status) {
+  if (status === CONTRACT_STATUS.UNSIGNED) {
+    return "Chỉ có thể phát hành hợp đồng đang ở trạng thái unsigned";
+  }
+
+  if (status === CONTRACT_STATUS.OWNER_SIGNED) {
+    return "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed";
+  }
+
+  if (status === CONTRACT_STATUS.COMPLETED) {
+    return "Chỉ có thể publish hợp đồng đang ở trạng thái completed";
+  }
+
+  return "Trạng thái hợp đồng không hợp lệ để publish";
+}
+
 function ensureContractSigningState(contract, signerType) {
   if (contract.status === CONTRACT_STATUS.DRAFT) {
-    throw new BadRequestException("Hợp đồng đang ở trạng thái nháp, cần phát hành bản unsigned trước khi ký");
+    throw new BadRequestException(
+      "Hợp đồng đang ở trạng thái nháp, cần phát hành bản unsigned trước khi ký"
+    );
   }
 
   if (contract.status === CONTRACT_STATUS.COMPLETED) {
     throw new BadRequestException("Hợp đồng đã hoàn tất ký");
   }
 
-  if (
-    contract.status === CONTRACT_STATUS.UNSIGNED &&
-    signerType !== "owner"
-  ) {
+  if (contract.status === CONTRACT_STATUS.UNSIGNED && signerType !== "owner") {
     throw new BadRequestException("Owner phải ký trước");
   }
 
@@ -88,6 +111,44 @@ function getNextContractStatus(contract, signerType) {
 }
 
 class ContractService {
+  static async getContractDetails(contractId, options = {}) {
+    return ContractDetail.findAll({
+      where: { contractId },
+      order: [["createdAt", "ASC"]],
+      transaction: options.transaction,
+    });
+  }
+
+  static async ensureContractDocumentFile(contract, document, options = {}) {
+    if (document.filePath) {
+      return document;
+    }
+
+    const details =
+      options.details ||
+      (await this.getContractDetails(contract.contractId, options));
+    const { pdfHashHex, fileName, filePath } =
+      await ContractPdfService.generateContractPdf(contract, details);
+
+    await document.update(
+      {
+        fileName,
+        filePath,
+        fileHash: pdfHashHex,
+      },
+      { transaction: options.transaction }
+    );
+
+    await contract.update(
+      {
+        contractChecksum: pdfHashHex,
+      },
+      { transaction: options.transaction }
+    );
+
+    return document;
+  }
+
   static async createContractTemplate({
     ownerCompanyInfo,
     partnerCompanyInfo,
@@ -116,8 +177,11 @@ class ContractService {
         { transaction, returning: true }
       );
 
-      const { pdfHashHex, fileName, filePath } =
-        await ContractPdfService.generateContractPdf(contract, createdDetails);
+      const { pdfHashHex, fileName } =
+        await ContractPdfService.generateContractPdfBuffer(
+          contract,
+          createdDetails
+        );
       const previewUrl = buildContractPreviewUrl(contract.contractId);
 
       await contract.update(
@@ -135,7 +199,7 @@ class ContractService {
           version: 1,
           status: CONTRACT_STATUS.DRAFT,
           fileName,
-          filePath,
+          filePath: null,
           fileUrl: null,
           fileHash: pdfHashHex,
         },
@@ -164,11 +228,21 @@ class ContractService {
       }
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
-        throw new BadRequestException("Chỉ có thể phát hành hợp đồng đang ở trạng thái nháp");
+        throw new BadRequestException(
+          "Chỉ có thể phát hành hợp đồng đang ở trạng thái nháp"
+        );
       }
 
       const latestDocument = await this.getLatestContractDocument(contractId, {
         transaction,
+      });
+      const details = await this.getContractDetails(contractId, {
+        transaction,
+      });
+
+      await this.ensureContractDocumentFile(contract, latestDocument, {
+        transaction,
+        details,
       });
 
       const fileBuffer = await fs.readFile(latestDocument.filePath);
@@ -210,6 +284,181 @@ class ContractService {
         contractDocumentId: latestDocument.contractDocumentId,
         documentVersion: latestDocument.version,
         status: CONTRACT_STATUS.UNSIGNED,
+        contractUrl: s3Result.url,
+        previewUrl: buildContractPreviewUrl(contractId),
+      };
+    });
+  }
+
+  static async publishOwnerSignedContract(contractId) {
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
+        throw new BadRequestException(
+          "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed"
+        );
+      }
+
+      const latestDocument = await this.getLatestContractDocument(contractId, {
+        transaction,
+      });
+
+      if (latestDocument.status !== CONTRACT_STATUS.OWNER_SIGNED) {
+        throw new BadRequestException(
+          "Phiên bản hợp đồng mới nhất không ở trạng thái owner_signed"
+        );
+      }
+
+      const fileBuffer = await fs.readFile(latestDocument.filePath);
+      const fileSize = (await fs.stat(latestDocument.filePath)).size;
+      const s3Key = S3Service.buildKey("owner_signed", latestDocument.fileName);
+      const s3Result = await S3Service.upload({
+        key: s3Key,
+        body: fileBuffer,
+        mimeType: "application/pdf",
+        originalName: latestDocument.fileName,
+        fileSize,
+        folder: "owner_signed",
+        clientId: null,
+        description: formatContractCreatedDescription(),
+        visibility: "private",
+      });
+
+      await latestDocument.update(
+        {
+          fileUrl: s3Result.url,
+        },
+        { transaction }
+      );
+
+      await contract.update(
+        {
+          contractUrl: s3Result.url,
+        },
+        { transaction }
+      );
+
+      const ownerSignature = await ContractSignature.findOne({
+        where: {
+          contractId,
+          signerType: "owner",
+          status: "signed",
+        },
+        order: [["updatedAt", "DESC"]],
+        transaction,
+      });
+
+      if (ownerSignature) {
+        await ownerSignature.update(
+          {
+            signedPdfUrl: s3Result.url,
+          },
+          { transaction }
+        );
+      }
+
+      return {
+        contractId,
+        contractDocumentId: latestDocument.contractDocumentId,
+        documentVersion: latestDocument.version,
+        status: CONTRACT_STATUS.OWNER_SIGNED,
+        contractUrl: s3Result.url,
+        previewUrl: buildContractPreviewUrl(contractId),
+      };
+    });
+  }
+
+  static async publishCompletedContract(contractId) {
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      if (contract.status !== CONTRACT_STATUS.COMPLETED) {
+        throw new BadRequestException(
+          "Chỉ có thể publish hợp đồng đang ở trạng thái completed"
+        );
+      }
+
+      const latestDocument = await this.getLatestContractDocument(contractId, {
+        transaction,
+      });
+
+      if (latestDocument.status !== CONTRACT_STATUS.COMPLETED) {
+        throw new BadRequestException(
+          "Phiên bản hợp đồng mới nhất không ở trạng thái completed"
+        );
+      }
+
+      const fileBuffer = await fs.readFile(latestDocument.filePath);
+      const fileSize = (await fs.stat(latestDocument.filePath)).size;
+      const s3Key = S3Service.buildKey(
+        "complete_contract",
+        latestDocument.fileName
+      );
+      const s3Result = await S3Service.upload({
+        key: s3Key,
+        body: fileBuffer,
+        mimeType: "application/pdf",
+        originalName: latestDocument.fileName,
+        fileSize,
+        folder: "complete_contract",
+        clientId: null,
+        description: formatContractCreatedDescription(),
+        visibility: "private",
+      });
+
+      await latestDocument.update(
+        {
+          fileUrl: s3Result.url,
+        },
+        { transaction }
+      );
+
+      await contract.update(
+        {
+          contractUrl: s3Result.url,
+        },
+        { transaction }
+      );
+
+      const partnerSignature = await ContractSignature.findOne({
+        where: {
+          contractId,
+          signerType: "partner",
+          status: "signed",
+        },
+        order: [["updatedAt", "DESC"]],
+        transaction,
+      });
+
+      if (partnerSignature) {
+        await partnerSignature.update(
+          {
+            signedPdfUrl: s3Result.url,
+          },
+          { transaction }
+        );
+      }
+
+      return {
+        contractId,
+        contractDocumentId: latestDocument.contractDocumentId,
+        documentVersion: latestDocument.version,
+        status: CONTRACT_STATUS.COMPLETED,
         contractUrl: s3Result.url,
         previewUrl: buildContractPreviewUrl(contractId),
       };
@@ -348,11 +597,20 @@ class ContractService {
       const latestDocument = await this.getLatestContractDocument(contractId, {
         transaction,
       });
+      const details = await this.getContractDetails(contractId, {
+        transaction,
+      });
+
+      await this.ensureContractDocumentFile(contract, latestDocument, {
+        transaction,
+        details,
+      });
 
       const preparedSignaturePdf =
         await ContractPdfService.prepareByteRangeSignaturePdf({
           sourceFilePath: latestDocument.filePath,
           contract,
+          details,
           signerName,
           signerType,
         });
@@ -420,7 +678,9 @@ class ContractService {
       }
 
       if (signature.status !== "pending") {
-        throw new BadRequestException("Phiên ký không còn ở trạng thái pending");
+        throw new BadRequestException(
+          "Phiên ký không còn ở trạng thái pending"
+        );
       }
 
       const sourceDocument = await ContractDocument.findOne({
@@ -454,7 +714,22 @@ class ContractService {
       });
       const nextVersion = sourceDocument.version + 1;
       const nextStatus = getNextContractStatus(contract, signature.signerType);
-      const signedPdfUrl = `/api/v1/contracts/${contractId}/template-pdf`;
+      const signedFolder = getSignedContractFolder(nextStatus);
+      const signedPdfBuffer = await fs.readFile(signedPdf.filePath);
+      const signedPdfFileSize = (await fs.stat(signedPdf.filePath)).size;
+      const signedS3Key = S3Service.buildKey(signedFolder, signedPdf.fileName);
+      const signedS3Result = await S3Service.upload({
+        key: signedS3Key,
+        body: signedPdfBuffer,
+        mimeType: "application/pdf",
+        originalName: signedPdf.fileName,
+        fileSize: signedPdfFileSize,
+        folder: signedFolder,
+        clientId: null,
+        description: formatContractCreatedDescription(),
+        visibility: "private",
+      });
+      const signedPdfUrl = signedS3Result.url;
 
       const signedDocument = await ContractDocument.create(
         {
@@ -593,6 +868,11 @@ class ContractService {
     }
 
     const latestDocument = await this.getLatestContractDocument(contractId);
+    const details = await this.getContractDetails(contractId);
+
+    await this.ensureContractDocumentFile(contract, latestDocument, {
+      details,
+    });
     const filePath = latestDocument.filePath;
 
     try {
@@ -603,7 +883,9 @@ class ContractService {
 
     return {
       filePath,
-      fileName: latestDocument.fileName || `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
+      fileName:
+        latestDocument.fileName ||
+        `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
     };
   }
 }

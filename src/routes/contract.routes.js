@@ -234,6 +234,62 @@ router.post(
 
 /**
  * @swagger
+ * /api/v1/contracts/{contractId}/publish-owner-signed:
+ *   post:
+ *     summary: Upload bản owner_signed hiện tại của hợp đồng lên S3
+ *     description: Chỉ áp dụng cho contract đang ở trạng thái owner_signed. Sau khi upload thành công, contractUrl sẽ được cập nhật sang bản S3 mới nhất.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     responses:
+ *       200:
+ *         description: Publish owner_signed lên S3 thành công
+ */
+router.post(
+  "/:contractId/publish-owner-signed",
+  protect,
+  contractIdSchema,
+  ContractController.publishOwnerSignedContract
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/publish-completed:
+ *   post:
+ *     summary: Upload bản completed hiện tại của hợp đồng lên S3
+ *     description: Chỉ áp dụng cho contract đang ở trạng thái completed. Sau khi upload thành công, contractUrl sẽ được cập nhật sang bản S3 mới nhất.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     responses:
+ *       200:
+ *         description: Publish completed lên S3 thành công
+ */
+router.post(
+  "/:contractId/publish-completed",
+  protect,
+  contractIdSchema,
+  ContractController.publishCompletedContract
+);
+
+/**
+ * @swagger
  * /api/v1/contracts/{contractId}/signing-sessions:
  *   post:
  *     summary: Tạo phiên ký số PDF chuẩn ByteRange cho version mới nhất của hợp đồng
