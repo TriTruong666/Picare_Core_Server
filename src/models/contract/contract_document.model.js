@@ -33,7 +33,7 @@ const ContractDocument = sequelize.define(
     status: {
       type: DataTypes.STRING,
       allowNull: false,
-      defaultValue: "unsigned",
+      defaultValue: "draft",
     },
     fileName: {
       type: DataTypes.STRING,

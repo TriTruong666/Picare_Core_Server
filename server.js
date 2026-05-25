@@ -5,7 +5,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const config = require("./src/config/app.config");
 const sequelize = require("./src/config/postgres.config");
-const db = require("./src/models");
+require("./src/models");
 const redis = require("./src/config/redis.config");
 const apiRoutes = require("./src/routes");
 const globalErrorHandler = require("./src/middlewares/error.handler");
@@ -18,25 +18,38 @@ const seedingRBAC = require("./src/seeds/rbac_seed");
 const seedingHubClients = require("./src/seeds/hub_client_seed");
 const { startJobs, stopJobs } = require("./src/jobs");
 
-// Khởi tạo ứng dụng express
 const app = express();
 const server = http.createServer(app);
 
-// Khởi tạo Socket.io
 socketService.init(server);
 
-/**
- * Middlewares cơ bản
- */
+function normalizeTableName(table) {
+  if (!table) return "";
+  if (typeof table === "string") return table;
+  if (typeof table === "object") {
+    return table.tableName || table.table_name || table.name || "";
+  }
+  return String(table);
+}
+
+function getProtectedTableSet(protectedTables = []) {
+  return new Set(protectedTables.map((table) => normalizeTableName(table)));
+}
+
+function getModelTableName(model) {
+  if (!model) return "";
+  if (typeof model.getTableName === "function") {
+    return normalizeTableName(model.getTableName());
+  }
+  return normalizeTableName(model.tableName || model?.options?.tableName);
+}
+
 app.use(morgan("dev"));
 app.use(cors({ origin: config.cors, credentials: true }));
-app.use(express.json({ limit: "50mb" })); // Parse JSON body
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
-app.use(cookieParser()); // Parse Cookies
+app.use(cookieParser());
 
-/**
- * Định tuyến (Routes)
- */
 app.get("/health", async (req, res) => {
   const redisStatus = redis.status === "ready" ? "Connected" : "Disconnected";
 
@@ -55,43 +68,82 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./src/config/swagger.config");
 const restrictLocalhost = require("./src/middlewares/localhostOnly.middleware");
 
-// Sử dụng tập hợp các API routes
 app.use("/api/v1", apiRoutes);
 
-// Cấu hình Swagger UI (Chỉ Localhost)
 app.use(
   "/api-docs",
   restrictLocalhost,
   swaggerUi.serve,
-  swaggerUi.setup(swaggerSpec),
+  swaggerUi.setup(swaggerSpec)
 );
 
-/**
- * Global Error Handler (Phải đặt ở sau cùng các route)
- */
 app.use(globalErrorHandler);
 
-/**
- * Khởi động Server
- */
 const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log("[DATABASE]: Kết nối Database thành công!");
 
-    // Đồng bộ Database
     const isForceReset = config.db.force_reset;
-    await sequelize.sync({ force: isForceReset });
-    console.log(`[DATABASE]: Database đã được đồng bộ (force: ${isForceReset}).`);
+    const isReset = config.db.reset;
+    const protectedTables = config.db.protectedTables || [];
+    const protectedTableSet = getProtectedTableSet(protectedTables);
 
-    // Hạt giống dữ liệu
-    await seedingUsers();
+    if (isForceReset && !isReset) {
+      console.log(
+        "[WARNING]: Đây là cảnh báo Force Reset DB, vui lòng kiểm tra kỹ Production."
+      );
+      console.log("[DATABASE]: Đang khởi tạo lại database...");
+      await sequelize.sync({ force: true });
+      console.log("[DATABASE]: Database đã được khởi tạo lại.");
+
+      try {
+        await redis.flushall();
+        console.log("[REDIS]: Đã dọn dẹp toàn bộ dữ liệu cache.");
+      } catch (redisErr) {
+        console.error("[REDIS ERROR]: Lỗi khi flushall dữ liệu:", redisErr.message);
+      }
+    } else if (isReset && !isForceReset) {
+      console.log(
+        "[DATABASE]: Đang khởi tạo lại database (có bảo vệ các bảng quan trọng)..."
+      );
+
+      const queryInterface = sequelize.getQueryInterface();
+      const allTables = await queryInterface.showAllTables();
+
+      for (const table of allTables) {
+        const normalizedTableName = normalizeTableName(table);
+
+        if (!protectedTableSet.has(normalizedTableName)) {
+          await queryInterface.dropTable(normalizedTableName, { cascade: true });
+        }
+      }
+
+      for (const model of Object.values(sequelize.models)) {
+        const tableName = getModelTableName(model);
+
+        if (!protectedTableSet.has(tableName)) {
+          await model.sync();
+        }
+      }
+
+      console.log(
+        `[DATABASE]: Database đã được khởi tạo lại (trừ bảng: ${protectedTables.join(
+          ", "
+        )}).`
+      );
+    } else {
+      console.log("[DATABASE]: Đang kiểm tra và đồng bộ cấu trúc database...");
+      await sequelize.sync();
+      console.log("[DATABASE]: Database đã sẵn sàng.");
+    }
+
     await seedingRBAC();
+    await seedingUsers();
     await seedingHubClients();
     await seedAppConfig();
     await loadDynamicConfig();
 
-    // Khởi tạo gRPC Server (Hub for other backend services)
     startGrpcServer(config.app.grpc_port);
     startJobs();
 
@@ -99,7 +151,7 @@ const startServer = async () => {
 
     server.listen(port, () => {
       console.log(`
-  _____  _____   _____            _____  ______ __      __ _   _ 
+  _____  _____   _____            _____  ______ __      __ _   _
  |  __ \\|_   _| / ____|    /\\    |  __ \\|  ____|\\ \\    / /| \\ | |
  | |__) | | |  | |        /  \\   | |__) | |__    \\ \\  / / |  \\| |
  |  ___/  | |  | |       / /\\ \\  |  _  /|  __|    \\ \\/ /  | . \` |

@@ -1,4 +1,5 @@
 const path = require("path");
+
 require("dotenv").config({
   path: path.join(
     __dirname,
@@ -16,9 +17,6 @@ const ALLOWED_CLIENT_URL_2 =
 const ALLOWED_CLIENT_URL_3 =
   process.env.ALLOWED_CLIENT_URL_3 || "http://localhost:2345";
 
-/**
- * Centralized Application Configuration
- */
 const appConfig = {
   app: {
     name: "Picare Core Hub",
@@ -43,8 +41,17 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: true,
-    protectedTables: [""],
+    force_reset: false,
+    protectedTables: [
+      "users",
+      "roles",
+      "permissions",
+      "role_permissions",
+      "hub_clients",
+      "s3_folders",
+      "s3_assets",
+      "app_configs",
+    ],
   },
 
   redis: {
@@ -98,11 +105,9 @@ const appConfig = {
   },
 };
 
-/**
- * Load dynamic config from DB (Simplified)
- */
 async function loadDynamicConfig() {
   const AppConfigService = require("../services/app_config.service");
+
   try {
     const record = await AppConfigService.getConfig();
     const cfg = record.appConfig || {};

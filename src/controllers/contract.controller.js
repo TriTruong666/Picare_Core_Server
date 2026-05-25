@@ -72,6 +72,49 @@ class ContractController {
     }
   }
 
+  static async updateDraftContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.updateDraftContract(
+        contractId,
+        req.body
+      );
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Cập nhật hợp đồng draft thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async publishUnsignedContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.publishUnsignedContract(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Publish hợp đồng unsigned lên S3 thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async createSigningSession(req, res, next) {
     try {
       const errors = validationResult(req);

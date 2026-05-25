@@ -4,6 +4,7 @@ const ContractController = require("../controllers/contract.controller");
 const { protect } = require("../middlewares/auth.middleware");
 const {
   createContractTemplateSchema,
+  updateDraftContractSchema,
   createSigningSessionSchema,
   completeSigningSessionSchema,
   getContractsPaginateSchema,
@@ -22,7 +23,7 @@ const {
  * /api/v1/contracts:
  *   post:
  *     summary: Tạo hợp đồng mẫu từ contract_template.pdf
- *     description: API tự tạo PDF ban đầu, upload lên S3 folder unsigned-contracts với visibility private, lưu URL file vào contractUrl và trả previewUrl là đường dẫn client để xem/ký hợp đồng.
+ *     description: API tạo contract ở trạng thái draft, sinh file PDF local và trả previewUrl để client xem hoặc chỉnh sửa trước khi publish bản unsigned lên S3.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -96,11 +97,22 @@ router.post(
  *         schema:
  *           type: string
  *         description: Tìm theo contract number hoặc company code/name
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [draft, unsigned, owner_signed, completed]
+ *         description: Lọc theo trạng thái hiện tại của hợp đồng
  *     responses:
  *       200:
- *         description: Thành công
+ *         description: Lấy danh sách hợp đồng thành công
  */
-router.get("/", protect, getContractsPaginateSchema, ContractController.getContractsPaginate);
+router.get(
+  "/",
+  protect,
+  getContractsPaginateSchema,
+  ContractController.getContractsPaginate
+);
 
 /**
  * @swagger
@@ -129,6 +141,95 @@ router.get(
   protect,
   contractIdSchema,
   ContractController.getContractById
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}:
+ *   put:
+ *     summary: Cập nhật thông tin hợp đồng draft
+ *     description: Chỉ cho phép cập nhật hợp đồng đang ở trạng thái draft. Sau khi cập nhật sẽ generate lại file PDF local và cập nhật preview.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ownerCompanyInfo
+ *               - partnerCompanyInfo
+ *               - contractDueDate
+ *               - details
+ *             properties:
+ *               ownerCompanyInfo:
+ *                 type: object
+ *               partnerCompanyInfo:
+ *                 type: object
+ *               contractDueDate:
+ *                 type: string
+ *                 format: date
+ *                 example: 2027-12-31
+ *               contractType:
+ *                 type: string
+ *                 enum: [digital, default]
+ *                 example: digital
+ *               details:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     productName:
+ *                       type: string
+ *                     price:
+ *                       type: number
+ *     responses:
+ *       200:
+ *         description: Cập nhật hợp đồng draft thành công
+ */
+router.put(
+  "/:contractId",
+  protect,
+  updateDraftContractSchema,
+  ContractController.updateDraftContract
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/publish-unsigned:
+ *   post:
+ *     summary: Upload bản unsigned hiện tại của hợp đồng lên S3
+ *     description: Chỉ áp dụng cho contract đang ở trạng thái draft. Sau khi upload thành công, contract và document hiện tại sẽ chuyển sang unsigned.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     responses:
+ *       200:
+ *         description: Publish unsigned lên S3 thành công
+ */
+router.post(
+  "/:contractId/publish-unsigned",
+  protect,
+  contractIdSchema,
+  ContractController.publishUnsignedContract
 );
 
 /**
