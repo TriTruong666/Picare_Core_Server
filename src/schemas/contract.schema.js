@@ -273,6 +273,13 @@ const updatePartnerSignerTypeSchema = [
 
 const uploadOrganizationCredentialSchema = [...contractIdSchema];
 
+const deletePartnerCredentialSchema = [
+  ...contractIdSchema,
+  body("credentialType")
+    .isIn(["individual", "organization"])
+    .withMessage("credentialType chỉ nhận individual hoặc organization"),
+];
+
 const completeHandwrittenSignatureSchema = [
   ...contractIdSchema,
   body("signerType")
@@ -298,6 +305,7 @@ module.exports = {
   uploadIndividualCredentialSchema,
   updatePartnerSignerTypeSchema,
   uploadOrganizationCredentialSchema,
+  deletePartnerCredentialSchema,
   completeHandwrittenSignatureSchema,
   getContractsPaginateSchema,
   contractIdSchema,

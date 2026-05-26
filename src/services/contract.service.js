@@ -19,6 +19,8 @@ const ContractPdfService = require("./contract_pdf.service");
 const S3Service = require("./s3.service");
 const FptAiService = require("./fpt_ai.service");
 const appConfig = require("../config/app.config");
+const JWTService = require("./jwt.service");
+
 
 const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
@@ -1158,6 +1160,54 @@ class ContractService {
     };
   }
 
+  static async deletePartnerCredential({ contractId, credentialType }) {
+    if (!["individual", "organization"].includes(credentialType)) {
+      throw new BadRequestException(
+        "credentialType chá»‰ nháº­n individual hoáº·c organization"
+      );
+    }
+
+    const contract = await Contract.findOne({ where: { contractId } });
+
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    if (contract.status === CONTRACT_STATUS.COMPLETED) {
+      throw new BadRequestException(
+        "Há»£p Ä‘á»“ng Ä‘Ã£ hoÃ n táº¥t, khÃ´ng thá»ƒ xoÃ¡ há»“ sÆ¡ kÃ½"
+      );
+    }
+
+    const credentialField =
+      credentialType === "individual"
+        ? "individualCredential"
+        : "organizationCredential";
+    const credential = contract[credentialField];
+    const s3Keys = new Set(collectCredentialS3Keys(credential));
+
+    await contract.update({ [credentialField]: null });
+
+    let s3ObjectsDeleted = 0;
+    for (const key of s3Keys) {
+      if (await deleteS3ObjectAndRecordIfExists(key)) {
+        s3ObjectsDeleted += 1;
+      }
+    }
+
+    return {
+      contractId,
+      credentialType,
+      deleted: true,
+      signerType: contract.signerType,
+      individualCredential: contract.individualCredential,
+      organizationCredential: contract.organizationCredential,
+      cleanup: {
+        s3ObjectsDeleted,
+      },
+    };
+  }
+
   static async completeHandwrittenSignature({
     contractId,
     signerType,
@@ -1511,6 +1561,40 @@ class ContractService {
       fileName:
         latestDocument.fileName ||
         `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
+    };
+  }
+
+  static async generatePartnerSigningLink(contractId) {
+    const contract = await Contract.findOne({ where: { contractId } });
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
+      throw new BadRequestException(
+        "Chỉ có thể sinh link ký cho đối tác khi hợp đồng ở trạng thái đối tác ký (owner_signed)"
+      );
+    }
+
+    const partnerEmail = contract.partnerCompanyInfo?.email || "partner@example.com";
+
+    // Sinh secure JWT token có thời gian hết hạn là 7 ngày cho đối tác
+    const token = JWTService.signJson(
+      {
+        contractId,
+        role: "partner",
+        email: partnerEmail,
+      },
+      { expiresIn: "7d" }
+    );
+
+    const signingUrl = `${appConfig.client.baseUrl}/contracts/${contractId}/sign-partner?token=${token}`;
+
+    return {
+      contractId,
+      partnerEmail,
+      token,
+      signingUrl,
     };
   }
 }

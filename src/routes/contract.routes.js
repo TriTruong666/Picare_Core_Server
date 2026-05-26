@@ -2,7 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const ContractController = require("../controllers/contract.controller");
-const { protect } = require("../middlewares/auth.middleware");
+const { protect, protectContractAccess } = require("../middlewares/auth.middleware");
 const {
   createContractTemplateSchema,
   updateDraftContractSchema,
@@ -13,6 +13,7 @@ const {
   uploadIndividualCredentialSchema,
   updatePartnerSignerTypeSchema,
   uploadOrganizationCredentialSchema,
+  deletePartnerCredentialSchema,
   completeHandwrittenSignatureSchema,
 } = require("../schemas/contract.schema");
 
@@ -146,11 +147,33 @@ router.get(
  *       404:
  *         description: Không tìm thấy hợp đồng
  */
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/signing-link:
+ *   get:
+ *     summary: Sinh link ký hợp đồng bảo mật chứa JWT Token cho đối tác
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     responses:
+ *       200:
+ *         description: Sinh link thành công
+ *       404:
+ *         description: Không tìm thấy hợp đồng
+ */
 router.get(
-  "/:contractId",
+  "/:contractId/signing-link",
   protect,
   contractIdSchema,
-  ContractController.getContractById
+  ContractController.generatePartnerSigningLink
 );
 
 /**
@@ -367,7 +390,7 @@ router.post(
  */
 router.post(
   "/:contractId/signing-sessions",
-  protect,
+  protectContractAccess,
   createSigningSessionSchema,
   ContractController.createSigningSession
 );
@@ -424,7 +447,7 @@ router.post(
  */
 router.post(
   "/:contractId/signing-sessions/:contractSignatureId/complete",
-  protect,
+  protectContractAccess,
   completeSigningSessionSchema,
   ContractController.completeSigningSession
 );
@@ -463,7 +486,7 @@ router.post(
  */
 router.patch(
   "/:contractId/partner-signer-type",
-  protect,
+  protectContractAccess,
   updatePartnerSignerTypeSchema,
   ContractController.updatePartnerSignerType
 );
@@ -508,7 +531,7 @@ router.patch(
  */
 router.post(
   "/:contractId/individual-credential",
-  protect,
+  protectContractAccess,
   credentialUpload.fields([
     { name: "first_identification_image", maxCount: 1 },
     { name: "second_identification_image", maxCount: 1 },
@@ -554,13 +577,52 @@ router.post(
  */
 router.post(
   "/:contractId/organization-credential",
-  protect,
+  protectContractAccess,
   credentialUpload.fields([
     { name: "business_license", maxCount: 1 },
     { name: "power_of_attorney_image", maxCount: 1 },
   ]),
   uploadOrganizationCredentialSchema,
   ContractController.uploadOrganizationCredential
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/credential:
+ *   delete:
+ *     summary: XoÃ¡ há»“ sÆ¡ kÃ½ cá»§a Ä‘á»‘i tÃ¡c theo loáº¡i
+ *     description: DÃ¹ng khi Ä‘á»‘i tÃ¡c Ä‘á»•i luá»“ng kÃ½ tá»« cÃ¡ nhÃ¢n sang tá»• chá»©c hoáº·c ngÆ°á»£c láº¡i. API xoÃ¡ credential JSON vÃ  cÃ¡c file S3 liÃªn quan cá»§a loáº¡i Ä‘Æ°á»£c chá»n.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - credentialType
+ *             properties:
+ *               credentialType:
+ *                 type: string
+ *                 enum: [individual, organization]
+ *     responses:
+ *       200:
+ *         description: XoÃ¡ há»“ sÆ¡ kÃ½ thÃ nh cÃ´ng
+ */
+router.delete(
+  "/:contractId/credential",
+  protectContractAccess,
+  deletePartnerCredentialSchema,
+  ContractController.deletePartnerCredential
 );
 
 /**
@@ -605,7 +667,7 @@ router.post(
  */
 router.post(
   "/:contractId/handwritten-signatures",
-  protect,
+  protectContractAccess,
   credentialUpload.single("signature_image"),
   completeHandwrittenSignatureSchema,
   ContractController.completeHandwrittenSignature
@@ -637,9 +699,16 @@ router.post(
  */
 router.get(
   "/:contractId/template-pdf",
-  protect,
+  protectContractAccess,
   contractIdSchema,
   ContractController.previewContractPdf
+);
+
+router.get(
+  "/:contractId",
+  protectContractAccess,
+  contractIdSchema,
+  ContractController.getContractById
 );
 
 module.exports = router;

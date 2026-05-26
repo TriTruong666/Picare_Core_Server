@@ -4,7 +4,7 @@ require("dotenv").config({
   path: path.join(
     __dirname,
     "../../",
-    process.env.NODE_ENV === "production" ? ".env" : ".env.development"
+    process.env.NODE_ENV === "production" ? ".env" : ".env.development",
   ),
 });
 
@@ -41,7 +41,7 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: true,
+    force_reset: false,
     protectedTables: [
       "users",
       "roles",
@@ -92,7 +92,8 @@ const appConfig = {
   },
 
   fptAi: {
-    apiKey: process.env.FPT_AI_API_KEY || "",
+    apiKey:
+      process.env.FPT_AI_API_KEY || process.env.ID_RECOGNITION_API_KEY || "",
     idRecognitionUrl:
       process.env.FPT_AI_ID_RECOGNITION_URL ||
       "https://api.fpt.ai/vision/idr/vnm/",

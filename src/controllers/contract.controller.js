@@ -4,6 +4,50 @@ const ContractService = require("../services/contract.service");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
+const base64ToMulterFile = ({
+  value,
+  fieldName,
+  filename,
+  mimeType,
+}) => {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const dataUriMatch = value.match(/^data:([^;]+);base64,(.+)$/);
+  const resolvedMimeType = dataUriMatch?.[1] || mimeType || "image/jpeg";
+  const base64Payload = dataUriMatch?.[2] || value;
+  const buffer = Buffer.from(base64Payload, "base64");
+
+  if (!buffer.length) {
+    return null;
+  }
+
+  return {
+    fieldname: fieldName,
+    originalname:
+      filename || `${fieldName}_${Date.now()}.${resolvedMimeType.split("/")[1] || "jpg"}`,
+    encoding: "7bit",
+    mimetype: resolvedMimeType,
+    buffer,
+    size: buffer.length,
+  };
+};
+
+const getFileFromRequest = (req, fieldName) => {
+  const multipartFile = req.files?.[fieldName]?.[0];
+  if (multipartFile) {
+    return multipartFile;
+  }
+
+  return base64ToMulterFile({
+    value: req.body?.[fieldName],
+    fieldName,
+    filename: req.body?.[`${fieldName}_filename`],
+    mimeType: req.body?.[`${fieldName}_mimeType`] || req.body?.[`${fieldName}_mimetype`],
+  });
+};
+
 class ContractController {
   static async createContractTemplate(req, res, next) {
     try {
@@ -255,8 +299,14 @@ class ContractController {
       const { contractId } = req.params;
       const result = await ContractService.uploadIndividualCredential({
         contractId,
-        firstIdentificationImage: req.files?.first_identification_image?.[0],
-        secondIdentificationImage: req.files?.second_identification_image?.[0],
+        firstIdentificationImage: getFileFromRequest(
+          req,
+          "first_identification_image"
+        ),
+        secondIdentificationImage: getFileFromRequest(
+          req,
+          "second_identification_image"
+        ),
         uploadedBy: req.user?.userId || null,
       });
 
@@ -289,6 +339,29 @@ class ContractController {
         res,
         result,
         "Upload hồ sơ tổ chức thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deletePartnerCredential(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.deletePartnerCredential({
+        contractId,
+        credentialType: req.body.credentialType,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "XoÃ¡ há»“ sÆ¡ kÃ½ cá»§a Ä‘á»‘i tÃ¡c thÃ nh cÃ´ng"
       );
     } catch (error) {
       next(error);
@@ -337,6 +410,26 @@ class ContractController {
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
       return res.sendFile(filePath);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async generatePartnerSigningLink(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.generatePartnerSigningLink(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Sinh đường dẫn ký hợp đồng cho đối tác thành công"
+      );
     } catch (error) {
       next(error);
     }
