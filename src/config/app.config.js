@@ -91,6 +91,13 @@ const appConfig = {
     bucketName: process.env.AWS_S3_BUCKET_NAME || "",
   },
 
+  fptAi: {
+    apiKey: process.env.FPT_AI_API_KEY || "",
+    idRecognitionUrl:
+      process.env.FPT_AI_ID_RECOGNITION_URL ||
+      "https://api.fpt.ai/vision/idr/vnm/",
+  },
+
   mail: {
     host: process.env.SMTP_HOST || "",
     port: parseInt(process.env.SMTP_PORT, 10) || 587,

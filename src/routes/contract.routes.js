@@ -1,4 +1,5 @@
 const express = require("express");
+const multer = require("multer");
 const router = express.Router();
 const ContractController = require("../controllers/contract.controller");
 const { protect } = require("../middlewares/auth.middleware");
@@ -9,7 +10,16 @@ const {
   completeSigningSessionSchema,
   getContractsPaginateSchema,
   contractIdSchema,
+  uploadIndividualCredentialSchema,
+  updatePartnerSignerTypeSchema,
+  uploadOrganizationCredentialSchema,
+  completeHandwrittenSignatureSchema,
 } = require("../schemas/contract.schema");
+
+const credentialUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 /**
  * @swagger
@@ -387,6 +397,188 @@ router.post(
   protect,
   completeSigningSessionSchema,
   ContractController.completeSigningSession
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/partner-signer-type:
+ *   patch:
+ *     summary: Cập nhật loại đối tác ký hợp đồng
+ *     description: Đối tác phải chọn individual hoặc organization trước khi đi tiếp flow hồ sơ và ký.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerType
+ *             properties:
+ *               signerType:
+ *                 type: string
+ *                 enum: [individual, organization]
+ *     responses:
+ *       200:
+ *         description: Cập nhật thành công
+ */
+router.patch(
+  "/:contractId/partner-signer-type",
+  protect,
+  updatePartnerSignerTypeSchema,
+  ContractController.updatePartnerSignerType
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/individual-credential:
+ *   post:
+ *     summary: Upload 2 mặt CMND/CCCD và trích xuất thông tin cá nhân bằng FPT AI
+ *     description: Chỉ dùng khi signerType = individual. API upload ảnh vào S3 folder individual_credential, gọi FPT.AI ID Recognition cho từng ảnh và merge thông tin OCR vào individualCredential.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - first_identification_image
+ *               - second_identification_image
+ *             properties:
+ *               first_identification_image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Ảnh mặt trước CMND/CCCD, tối đa 5MB
+ *               second_identification_image:
+ *                 type: string
+ *                 format: binary
+ *                 description: Ảnh mặt sau CMND/CCCD, tối đa 5MB
+ *     responses:
+ *       200:
+ *         description: Upload và trích xuất thông tin thành công
+ */
+router.post(
+  "/:contractId/individual-credential",
+  protect,
+  credentialUpload.fields([
+    { name: "first_identification_image", maxCount: 1 },
+    { name: "second_identification_image", maxCount: 1 },
+  ]),
+  uploadIndividualCredentialSchema,
+  ContractController.uploadIndividualCredential
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/organization-credential:
+ *   post:
+ *     summary: Upload hồ sơ tổ chức của đối tác
+ *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - business_license
+ *             properties:
+ *               business_license:
+ *                 type: string
+ *                 format: binary
+ *               power_of_attorney_image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Upload hồ sơ tổ chức thành công
+ */
+router.post(
+  "/:contractId/organization-credential",
+  protect,
+  credentialUpload.fields([
+    { name: "business_license", maxCount: 1 },
+    { name: "power_of_attorney_image", maxCount: 1 },
+  ]),
+  uploadOrganizationCredentialSchema,
+  ContractController.uploadOrganizationCredential
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}/handwritten-signatures:
+ *   post:
+ *     summary: Hoàn tất ký tay và tạo PDF version mới
+ *     description: Nhận ảnh chữ ký tay từ client editor, lưu ảnh lên S3, embed vào ô chữ ký trong PDF và cập nhật trạng thái hợp đồng.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - signerType
+ *               - signature_image
+ *             properties:
+ *               signerType:
+ *                 type: string
+ *                 enum: [owner, partner]
+ *               signerName:
+ *                 type: string
+ *               signerEmail:
+ *                 type: string
+ *               signature_image:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       200:
+ *         description: Ký tay thành công
+ */
+router.post(
+  "/:contractId/handwritten-signatures",
+  protect,
+  credentialUpload.single("signature_image"),
+  completeHandwrittenSignatureSchema,
+  ContractController.completeHandwrittenSignature
 );
 
 /**

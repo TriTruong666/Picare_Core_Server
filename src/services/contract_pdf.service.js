@@ -144,17 +144,39 @@ function drawCenteredText(pdfPage, text, x, y, width, font, size, color) {
   });
 }
 
+function getSignerCompanyInfo(contract, signerType) {
+  return signerType === "partner"
+    ? contract?.partnerCompanyInfo || {}
+    : contract?.ownerCompanyInfo || {};
+}
+
 function drawVisibleSignatureAppearance(
   pdfPage,
   widgetRect,
-  { signerName, signerType, font, boldFont, signingTime = new Date() }
+  { signerName, signerType, contract, font, boldFont, signingTime = new Date() }
 ) {
+  return drawCompanyDigitalSignatureAppearance(pdfPage, widgetRect, {
+    signerName,
+    signerType,
+    contract,
+    font,
+    boldFont,
+    signingTime,
+  });
+
   const [x1, y1, x2, y2] = widgetRect;
   const width = x2 - x1;
   const height = y2 - y1;
   const paddingX = 8;
   const contentWidth = width - paddingX * 2;
-  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
+  const companyInfo = getSignerCompanyInfo(contract, signerType);
+  const companyName = normalizeVietnameseText(
+    companyInfo.companyName || signerName || ""
+  ).toLocaleUpperCase("vi-VN");
+  const taxCode = companyInfo.mst ? `MST: ${companyInfo.mst}` : "MST: N/A";
+  const address = companyInfo.address
+    ? `Địa chỉ: ${companyInfo.address}`
+    : "Địa chỉ: N/A";
 
   pdfPage.drawRectangle({
     x: x1,
@@ -215,6 +237,177 @@ function drawVisibleSignatureAppearance(
     font,
     6.5,
     rgb(0.1, 0.1, 0.1)
+  );
+}
+
+function drawCompanyDigitalSignatureAppearance(
+  pdfPage,
+  widgetRect,
+  { signerName, signerType, contract, font, boldFont, signingTime = new Date() }
+) {
+  const [x1, y1, x2, y2] = widgetRect;
+  const width = x2 - x1;
+  const height = y2 - y1;
+  const paddingX = 8;
+  const contentWidth = width - paddingX * 2;
+  const companyInfo = getSignerCompanyInfo(contract, signerType);
+  const companyName = normalizeVietnameseText(
+    companyInfo.companyName || signerName || ""
+  ).toLocaleUpperCase("vi-VN");
+  const taxCode = companyInfo.mst ? `MST: ${companyInfo.mst}` : "MST: N/A";
+  const address = companyInfo.address
+    ? `Địa chỉ: ${companyInfo.address}`
+    : "Địa chỉ: N/A";
+
+  pdfPage.drawRectangle({
+    x: x1,
+    y: y1,
+    width,
+    height,
+    color: rgb(0.96, 0.99, 0.97),
+    borderColor: rgb(0.07, 0.45, 0.24),
+    borderWidth: 0.9,
+  });
+
+  pdfPage.drawRectangle({
+    x: x1,
+    y: y2 - 15,
+    width,
+    height: 15,
+    color: rgb(0.07, 0.45, 0.24),
+  });
+
+  drawCenteredText(
+    pdfPage,
+    "ĐÃ KÝ SỐ",
+    x1,
+    y2 - 11,
+    width,
+    boldFont,
+    7.5,
+    rgb(1, 1, 1)
+  );
+  drawCenteredText(
+    pdfPage,
+    companyName,
+    x1 + paddingX,
+    y1 + Math.max(44, height - 36),
+    contentWidth,
+    boldFont,
+    7.2,
+    rgb(0.04, 0.25, 0.13)
+  );
+  drawCenteredText(
+    pdfPage,
+    taxCode,
+    x1 + paddingX,
+    y1 + 29,
+    contentWidth,
+    font,
+    6.7,
+    rgb(0.1, 0.1, 0.1)
+  );
+  drawCenteredText(
+    pdfPage,
+    address,
+    x1 + paddingX,
+    y1 + 18,
+    contentWidth,
+    font,
+    6,
+    rgb(0.1, 0.1, 0.1)
+  );
+  drawCenteredText(
+    pdfPage,
+    `Thời gian: ${formatVietnameseDateTime(signingTime)}`,
+    x1 + paddingX,
+    y1 + 8,
+    contentWidth,
+    font,
+    5.8,
+    rgb(0.1, 0.1, 0.1)
+  );
+}
+
+async function embedImageByMimeType(pdfDoc, imageBytes, mimeType = "") {
+  const normalizedMimeType = String(mimeType).toLowerCase();
+
+  if (normalizedMimeType.includes("png")) {
+    return pdfDoc.embedPng(imageBytes);
+  }
+
+  if (
+    normalizedMimeType.includes("jpeg") ||
+    normalizedMimeType.includes("jpg")
+  ) {
+    return pdfDoc.embedJpg(imageBytes);
+  }
+
+  try {
+    return await pdfDoc.embedPng(imageBytes);
+  } catch (error) {
+    return pdfDoc.embedJpg(imageBytes);
+  }
+}
+
+function drawHandwrittenSignatureAppearance(
+  pdfPage,
+  widgetRect,
+  { image, signerName, signerType, font, boldFont, signingTime = new Date() }
+) {
+  const [x1, y1, x2, y2] = widgetRect;
+  const width = x2 - x1;
+  const height = y2 - y1;
+  const paddingX = 8;
+  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
+  const maxImageWidth = width - paddingX * 2;
+  const maxImageHeight = height - 31;
+  const scale = Math.min(
+    maxImageWidth / image.width,
+    maxImageHeight / image.height,
+    1
+  );
+  const imageWidth = image.width * scale;
+  const imageHeight = image.height * scale;
+
+  pdfPage.drawRectangle({
+    x: x1,
+    y: y1,
+    width,
+    height,
+    color: rgb(1, 1, 1),
+    borderColor: rgb(0.45, 0.45, 0.45),
+    borderWidth: 0.6,
+  });
+
+  pdfPage.drawImage(image, {
+    x: x1 + (width - imageWidth) / 2,
+    y: y1 + 24,
+    width: imageWidth,
+    height: imageHeight,
+  });
+
+  drawCenteredText(
+    pdfPage,
+    normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
+      "vi-VN"
+    ),
+    x1 + paddingX,
+    y1 + 12,
+    width - paddingX * 2,
+    boldFont,
+    8,
+    rgb(0.05, 0.05, 0.05)
+  );
+  drawCenteredText(
+    pdfPage,
+    `Ký tay lúc: ${formatVietnameseDateTime(signingTime)}`,
+    x1 + paddingX,
+    y1 + 3,
+    width - paddingX * 2,
+    font,
+    5.8,
+    rgb(0.25, 0.25, 0.25)
   );
 }
 
@@ -338,14 +531,6 @@ class ContractPdfBuilder {
       .rect(x, y, width, height)
       .stroke()
       .undash();
-    doc
-      .font(this.fontPath)
-      .fontSize(8)
-      .fillColor("#666666")
-      .text("Vị trí ký số", x, y + Math.floor(height / 2) - 5, {
-        width,
-        align: "center",
-      });
     doc.restore();
   }
 
@@ -847,9 +1032,10 @@ class ContractPdfService {
       pdfDoc.embedFont(boldFontBytes, { subset: true }),
     ]);
 
-    drawVisibleSignatureAppearance(targetPage, widgetRect, {
+    drawCompanyDigitalSignatureAppearance(targetPage, widgetRect, {
       signerName,
       signerType,
+      contract,
       font: appearanceFont,
       boldFont: appearanceBoldFont,
       signingTime,
@@ -936,6 +1122,80 @@ class ContractPdfService {
       fileName,
       filePath: outputPath,
       byteRange,
+    };
+  }
+
+  static async embedHandwrittenSignature({
+    sourceFilePath,
+    contract,
+    details = [],
+    signerType,
+    signerName,
+    signatureImageBuffer,
+    signatureImageMimeType,
+  }) {
+    const sourceBytes = await fs.readFile(sourceFilePath);
+    const pdfDoc = await PDFLibDocument.load(sourceBytes);
+    const pages = pdfDoc.getPages();
+    const signingTime = new Date();
+    const { signatureWidgets } = await this.generateContractPdfBuffer(
+      contract,
+      details
+    );
+    const signatureWidget = signatureWidgets?.[signerType];
+    const targetPage =
+      pages[signatureWidget?.pageIndex] || pages[pages.length - 1];
+    const widgetRect =
+      signatureWidget?.rect || getSignatureWidgetRect(signerType);
+    const [fontPath, boldFontPath] = await Promise.all([
+      findFontPath(),
+      findBoldFontPath(),
+    ]);
+    const [fontBytes, boldFontBytes] = await Promise.all([
+      fs.readFile(fontPath),
+      fs.readFile(boldFontPath),
+    ]);
+
+    pdfDoc.registerFontkit(fontkit);
+    const [appearanceFont, appearanceBoldFont, signatureImage] =
+      await Promise.all([
+        pdfDoc.embedFont(fontBytes, { subset: true }),
+        pdfDoc.embedFont(boldFontBytes, { subset: true }),
+        embedImageByMimeType(
+          pdfDoc,
+          signatureImageBuffer,
+          signatureImageMimeType
+        ),
+      ]);
+
+    drawHandwrittenSignatureAppearance(targetPage, widgetRect, {
+      image: signatureImage,
+      signerName,
+      signerType,
+      font: appearanceFont,
+      boldFont: appearanceBoldFont,
+      signingTime,
+    });
+
+    const signedBytes = await pdfDoc.save({ useObjectStreams: false });
+    const signedBuffer = Buffer.from(signedBytes);
+    const signedPdfHash = crypto
+      .createHash("sha256")
+      .update(signedBuffer)
+      .digest("hex");
+    const fileName = `hop-dong-picare-${
+      contract.contractId
+    }-handwritten-signed-${signedPdfHash.slice(0, 12)}.pdf`;
+    const outputPath = path.join(OUTPUT_DIR, fileName);
+
+    await fs.mkdir(OUTPUT_DIR, { recursive: true });
+    await fs.writeFile(outputPath, signedBuffer);
+
+    return {
+      signedPdfHash,
+      fileName,
+      filePath: outputPath,
+      widgetRect,
     };
   }
 }

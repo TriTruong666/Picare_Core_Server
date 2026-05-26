@@ -114,6 +114,14 @@ const Contract = sequelize.define(
       defaultValue: "default",
       field: "contract_type",
     },
+    signerType: {
+      type: DataTypes.STRING,
+      validate: {
+        isIn: [["individual", "organization"]],
+      },
+      allowNull: true,
+      field: "signer_type",
+    },
     status: {
       type: DataTypes.STRING,
       allowNull: false,
@@ -127,11 +135,18 @@ const Contract = sequelize.define(
       allowNull: true,
       field: "contract_url",
     },
-    signerCredential: {
+    individualCredential: {
       type: DataTypes.JSONB,
       allowNull: true,
+      field: "individual_credential",
       comment:
-        "credentialId(Số CCCD), name, dob(ngày sinh), home(nguyên quán), address, sex, nationality, doe(ngày hết hạn), features(đặc điểm nhận dạng), issue_date(ngày cấp), image_first, image_second",
+        "credentialId(Số CCCD), name, dob(ngày sinh), home(nguyên quán), address, sex, nationality, doe(ngày hết hạn), features(đặc điểm nhận dạng), issue_date(ngày cấp), first_identification_image, second_identification_image",
+    },
+    organizationCredential: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      field: "organization_credential",
+      comment: "business_license, power_of_attorney_image(optional)",
     },
   },
   {

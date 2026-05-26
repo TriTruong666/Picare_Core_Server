@@ -202,6 +202,106 @@ class ContractController {
     }
   }
 
+  static async updatePartnerSignerType(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.updatePartnerSignerType({
+        contractId,
+        signerType: req.body.signerType,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Cập nhật loại đối tác ký hợp đồng thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadIndividualCredential(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.uploadIndividualCredential({
+        contractId,
+        firstIdentificationImage: req.files?.first_identification_image?.[0],
+        secondIdentificationImage: req.files?.second_identification_image?.[0],
+        uploadedBy: req.user?.userId || null,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Upload và trích xuất thông tin CMND/CCCD thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async uploadOrganizationCredential(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.uploadOrganizationCredential({
+        contractId,
+        businessLicense: req.files?.business_license?.[0],
+        powerOfAttorney: req.files?.power_of_attorney_image?.[0],
+        uploadedBy: req.user?.userId || null,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Upload hồ sơ tổ chức thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async completeHandwrittenSignature(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.completeHandwrittenSignature({
+        contractId,
+        signerType: req.body.signerType,
+        signerName: req.body.signerName,
+        signerEmail: req.body.signerEmail,
+        signatureImage: req.file,
+        uploadedBy: req.user?.userId || null,
+      });
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Hoàn tất ký tay hợp đồng thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async previewContractPdf(req, res, next) {
     try {
       const errors = validationResult(req);

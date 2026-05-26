@@ -64,7 +64,7 @@ const ContractSignature = sequelize.define(
     },
     pdfHashBeforeSign: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: "pdf_hash_before_sign",
     },
     preparedPdfPath: {
@@ -91,6 +91,21 @@ const ContractSignature = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
       field: "signature_hex",
+    },
+    handwrittenSignatureImageUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "handwritten_signature_image_url",
+    },
+    handwrittenSignatureImageKey: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "handwritten_signature_image_key",
+    },
+    signatureMetadata: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      field: "signature_metadata",
     },
     certificatePem: {
       type: DataTypes.TEXT,

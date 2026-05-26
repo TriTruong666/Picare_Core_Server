@@ -17,7 +17,12 @@ const {
 } = require("../common/exceptions/BaseException");
 const ContractPdfService = require("./contract_pdf.service");
 const S3Service = require("./s3.service");
+const FptAiService = require("./fpt_ai.service");
 const appConfig = require("../config/app.config");
+
+const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
+const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
+const HANDWRITTEN_SIGNATURE_FOLDER = "handwritten_signature";
 
 const CONTRACT_STATUS = {
   DRAFT: "draft",
@@ -108,6 +113,109 @@ function getNextContractStatus(contract, signerType) {
   }
 
   return CONTRACT_STATUS.COMPLETED;
+}
+
+function ensurePartnerSignerTypeSelected(contract) {
+  if (!contract.signerType) {
+    throw new BadRequestException(
+      "Đối tác phải cập nhật signerType trước khi thực hiện flow ký"
+    );
+  }
+}
+
+function ensurePartnerCredentialReady(contract) {
+  ensurePartnerSignerTypeSelected(contract);
+
+  if (contract.signerType === "individual") {
+    const credential = contract.individualCredential || {};
+
+    if (
+      !credential.first_identification_image ||
+      !credential.second_identification_image
+    ) {
+      throw new BadRequestException(
+        "Đối tác cá nhân phải upload đủ 2 mặt CMND/CCCD trước khi ký tay"
+      );
+    }
+  }
+
+  if (contract.signerType === "organization") {
+    const credential = contract.organizationCredential || {};
+
+    if (!credential.business_license) {
+      throw new BadRequestException(
+        "Đối tác tổ chức phải upload giấy phép kinh doanh trước khi ký số"
+      );
+    }
+  }
+}
+
+function assertImageFile(file, message = "File phải là ảnh") {
+  if (!file?.buffer || !file.mimetype?.startsWith("image/")) {
+    throw new BadRequestException(message);
+  }
+}
+
+function extractFptIdData(response) {
+  return Array.isArray(response?.data) && response.data.length > 0
+    ? response.data[0]
+    : {};
+}
+
+function isBackSideIdData(data = {}) {
+  const type = String(data.type_new || data.type || "").toLowerCase();
+  return (
+    type.includes("back") ||
+    Boolean(data.issue_date) ||
+    Boolean(data.features)
+  );
+}
+
+function normalizeFptValue(value) {
+  if (value === undefined || value === null || value === "N/A") {
+    return null;
+  }
+
+  return value;
+}
+
+function buildIndividualCredentialFromOcr({
+  firstImage,
+  secondImage,
+  firstOcr,
+  secondOcr,
+}) {
+  const firstData = extractFptIdData(firstOcr);
+  const secondData = extractFptIdData(secondOcr);
+  const frontData = isBackSideIdData(firstData) ? secondData : firstData;
+  const backData = isBackSideIdData(firstData) ? firstData : secondData;
+
+  return {
+    credentialId: normalizeFptValue(frontData.id),
+    name: normalizeFptValue(frontData.name),
+    dob: normalizeFptValue(frontData.dob),
+    home: normalizeFptValue(frontData.home),
+    address: normalizeFptValue(frontData.address),
+    address_entities: normalizeFptValue(frontData.address_entities),
+    sex: normalizeFptValue(frontData.sex),
+    nationality: normalizeFptValue(frontData.nationality),
+    ethnicity: normalizeFptValue(backData.ethnicity || frontData.ethnicity),
+    religion: normalizeFptValue(backData.religion),
+    doe: normalizeFptValue(frontData.doe),
+    features: normalizeFptValue(backData.features),
+    issue_date: normalizeFptValue(backData.issue_date),
+    issue_loc: normalizeFptValue(backData.issue_loc),
+    type: normalizeFptValue(frontData.type),
+    type_new: normalizeFptValue(frontData.type_new),
+    first_identification_image: firstImage.url,
+    second_identification_image: secondImage.url,
+    first_identification_image_key: firstImage.key,
+    second_identification_image_key: secondImage.key,
+    ocr: {
+      first: firstOcr,
+      second: secondOcr,
+    },
+  };
 }
 
 class ContractService {
@@ -491,16 +599,15 @@ class ContractService {
         );
       }
 
-      await contract.update(
-        {
-          ownerCompanyInfo,
-          partnerCompanyInfo,
-          contractDueDate,
-          contractType,
-          contractUrl: null,
-        },
-        { transaction }
-      );
+      const contractUpdateData = {
+        ownerCompanyInfo,
+        partnerCompanyInfo,
+        contractDueDate,
+        contractType,
+        contractUrl: null,
+      };
+
+      await contract.update(contractUpdateData, { transaction });
 
       await ContractDetail.destroy({
         where: { contractId },
@@ -594,6 +701,16 @@ class ContractService {
 
       ensureContractSigningState(contract, signerType);
 
+      if (signerType === "partner") {
+        ensurePartnerCredentialReady(contract);
+
+        if (contract.signerType === "individual") {
+          throw new BadRequestException(
+            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay"
+          );
+        }
+      }
+
       const latestDocument = await this.getLatestContractDocument(contractId, {
         transaction,
       });
@@ -675,6 +792,16 @@ class ContractService {
 
       if (!signature) {
         throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      if (signature.signerType === "partner") {
+        ensurePartnerCredentialReady(contract);
+
+        if (contract.signerType === "individual") {
+          throw new BadRequestException(
+            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay"
+          );
+        }
       }
 
       if (signature.status !== "pending") {
@@ -766,6 +893,356 @@ class ContractService {
       return {
         contractId,
         contractSignatureId,
+        signedDocumentId: signedDocument.contractDocumentId,
+        signedPdfHash: signedPdf.signedPdfHash,
+        signedPdfUrl,
+        documentVersion: nextVersion,
+        status: nextStatus,
+      };
+    });
+  }
+
+  static async updatePartnerSignerType({ contractId, signerType }) {
+    const contract = await Contract.findOne({ where: { contractId } });
+
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    if (contract.status === CONTRACT_STATUS.COMPLETED) {
+      throw new BadRequestException(
+        "Hợp đồng đã hoàn tất, không thể cập nhật signerType"
+      );
+    }
+
+    const updateData = { signerType };
+
+    if (signerType === "individual") {
+      updateData.organizationCredential = null;
+    }
+
+    if (signerType === "organization") {
+      updateData.individualCredential = null;
+    }
+
+    await contract.update(updateData);
+
+    return {
+      contractId,
+      signerType: contract.signerType,
+      individualCredential: contract.individualCredential,
+      organizationCredential: contract.organizationCredential,
+    };
+  }
+
+  static async uploadIndividualCredential({
+    contractId,
+    firstIdentificationImage,
+    secondIdentificationImage,
+    uploadedBy = null,
+  }) {
+    if (!firstIdentificationImage || !secondIdentificationImage) {
+      throw new BadRequestException(
+        "Cần upload đủ 2 ảnh CMND/CCCD mặt trước và mặt sau"
+      );
+    }
+
+    const contract = await Contract.findOne({ where: { contractId } });
+
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    if (!contract.signerType) {
+      throw new BadRequestException(
+        "Vui lòng cập nhật signerType trước khi upload hồ sơ cá nhân"
+      );
+    }
+
+    if (contract.signerType !== "individual") {
+      throw new BadRequestException(
+        "Chỉ signerType individual mới được upload CMND/CCCD"
+      );
+    }
+
+    assertImageFile(
+      firstIdentificationImage,
+      "Ảnh mặt trước CMND/CCCD không hợp lệ"
+    );
+    assertImageFile(
+      secondIdentificationImage,
+      "Ảnh mặt sau CMND/CCCD không hợp lệ"
+    );
+
+    const [firstUpload, secondUpload] = await Promise.all([
+      S3Service.upload({
+        key: S3Service.buildKey(
+          INDIVIDUAL_CREDENTIAL_FOLDER,
+          firstIdentificationImage.originalname
+        ),
+        body: firstIdentificationImage.buffer,
+        mimeType: firstIdentificationImage.mimetype,
+        originalName: firstIdentificationImage.originalname,
+        fileSize: firstIdentificationImage.size,
+        folder: INDIVIDUAL_CREDENTIAL_FOLDER,
+        uploadedBy,
+        description: "Individual credential first identification image",
+        visibility: "private",
+      }),
+      S3Service.upload({
+        key: S3Service.buildKey(
+          INDIVIDUAL_CREDENTIAL_FOLDER,
+          secondIdentificationImage.originalname
+        ),
+        body: secondIdentificationImage.buffer,
+        mimeType: secondIdentificationImage.mimetype,
+        originalName: secondIdentificationImage.originalname,
+        fileSize: secondIdentificationImage.size,
+        folder: INDIVIDUAL_CREDENTIAL_FOLDER,
+        uploadedBy,
+        description: "Individual credential second identification image",
+        visibility: "private",
+      }),
+    ]);
+
+    const [firstOcr, secondOcr] = await Promise.all([
+      FptAiService.recognizeVietnamIdCard(firstIdentificationImage),
+      FptAiService.recognizeVietnamIdCard(secondIdentificationImage),
+    ]);
+
+    const individualCredential = buildIndividualCredentialFromOcr({
+      firstImage: firstUpload,
+      secondImage: secondUpload,
+      firstOcr,
+      secondOcr,
+    });
+
+    await contract.update({
+      individualCredential,
+    });
+
+    return {
+      contractId,
+      signerType: contract.signerType,
+      individualCredential,
+    };
+  }
+
+  static async uploadOrganizationCredential({
+    contractId,
+    businessLicense,
+    powerOfAttorney = null,
+    uploadedBy = null,
+  }) {
+    if (!businessLicense) {
+      throw new BadRequestException("Giấy phép kinh doanh là bắt buộc");
+    }
+
+    const contract = await Contract.findOne({ where: { contractId } });
+
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    if (!contract.signerType) {
+      throw new BadRequestException(
+        "Vui lòng cập nhật signerType trước khi upload hồ sơ tổ chức"
+      );
+    }
+
+    if (contract.signerType !== "organization") {
+      throw new BadRequestException(
+        "Chỉ signerType organization mới được upload hồ sơ tổ chức"
+      );
+    }
+
+    assertImageFile(businessLicense, "Giấy phép kinh doanh phải là file ảnh");
+
+    if (powerOfAttorney) {
+      assertImageFile(powerOfAttorney, "Giấy uỷ quyền phải là file ảnh");
+    }
+
+    const uploadFile = (file, description) =>
+      S3Service.upload({
+        key: S3Service.buildKey(
+          ORGANIZATION_CREDENTIAL_FOLDER,
+          file.originalname
+        ),
+        body: file.buffer,
+        mimeType: file.mimetype,
+        originalName: file.originalname,
+        fileSize: file.size,
+        folder: ORGANIZATION_CREDENTIAL_FOLDER,
+        uploadedBy,
+        description,
+        visibility: "private",
+      });
+
+    const [businessLicenseUpload, powerOfAttorneyUpload] = await Promise.all([
+      uploadFile(businessLicense, "Organization business license"),
+      powerOfAttorney
+        ? uploadFile(powerOfAttorney, "Organization power of attorney")
+        : Promise.resolve(null),
+    ]);
+
+    const organizationCredential = {
+      business_license: businessLicenseUpload.url,
+      business_license_key: businessLicenseUpload.key,
+      power_of_attorney_image: powerOfAttorneyUpload?.url || null,
+      power_of_attorney_image_key: powerOfAttorneyUpload?.key || null,
+    };
+
+    await contract.update({ organizationCredential });
+
+    return {
+      contractId,
+      signerType: contract.signerType,
+      organizationCredential,
+    };
+  }
+
+  static async completeHandwrittenSignature({
+    contractId,
+    signerType,
+    signerName,
+    signerEmail,
+    signatureImage,
+    uploadedBy = null,
+  }) {
+    assertImageFile(signatureImage, "Ảnh chữ ký tay không hợp lệ");
+
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      ensureContractSigningState(contract, signerType);
+
+      if (signerType === "partner") {
+        ensurePartnerCredentialReady(contract);
+
+        if (contract.signerType !== "individual") {
+          throw new BadRequestException(
+            "Đối tác tổ chức phải sử dụng flow ký số"
+          );
+        }
+      }
+
+      const latestDocument = await this.getLatestContractDocument(contractId, {
+        transaction,
+      });
+      const details = await this.getContractDetails(contractId, {
+        transaction,
+      });
+
+      await this.ensureContractDocumentFile(contract, latestDocument, {
+        transaction,
+        details,
+      });
+
+      const sourcePdfHash = latestDocument.fileHash || contract.contractChecksum;
+      const signatureImageUpload = await S3Service.upload({
+        key: S3Service.buildKey(
+          HANDWRITTEN_SIGNATURE_FOLDER,
+          signatureImage.originalname
+        ),
+        body: signatureImage.buffer,
+        mimeType: signatureImage.mimetype,
+        originalName: signatureImage.originalname,
+        fileSize: signatureImage.size,
+        folder: HANDWRITTEN_SIGNATURE_FOLDER,
+        uploadedBy,
+        description: "Handwritten contract signature image",
+        visibility: "private",
+      });
+
+      const signature = await ContractSignature.create(
+        {
+          contractId,
+          contractDocumentId: latestDocument.contractDocumentId,
+          signerType,
+          signerName,
+          signerEmail,
+          signingMethod: "handwritten",
+          status: "pending",
+          pdfHashBeforeSign: sourcePdfHash,
+          handwrittenSignatureImageUrl: signatureImageUpload.url,
+          handwrittenSignatureImageKey: signatureImageUpload.key,
+        },
+        { transaction }
+      );
+
+      const signedPdf = await ContractPdfService.embedHandwrittenSignature({
+        sourceFilePath: latestDocument.filePath,
+        contract,
+        details,
+        signerType,
+        signerName,
+        signatureImageBuffer: signatureImage.buffer,
+        signatureImageMimeType: signatureImage.mimetype,
+      });
+      const nextVersion = latestDocument.version + 1;
+      const nextStatus = getNextContractStatus(contract, signerType);
+      const signedFolder = getSignedContractFolder(nextStatus);
+      const signedPdfBuffer = await fs.readFile(signedPdf.filePath);
+      const signedPdfFileSize = (await fs.stat(signedPdf.filePath)).size;
+      const signedS3Key = S3Service.buildKey(signedFolder, signedPdf.fileName);
+      const signedS3Result = await S3Service.upload({
+        key: signedS3Key,
+        body: signedPdfBuffer,
+        mimeType: "application/pdf",
+        originalName: signedPdf.fileName,
+        fileSize: signedPdfFileSize,
+        folder: signedFolder,
+        clientId: null,
+        description: formatContractCreatedDescription(),
+        visibility: "private",
+      });
+      const signedPdfUrl = signedS3Result.url;
+
+      const signedDocument = await ContractDocument.create(
+        {
+          contractId,
+          version: nextVersion,
+          status: nextStatus,
+          fileName: signedPdf.fileName,
+          filePath: signedPdf.filePath,
+          fileUrl: signedPdfUrl,
+          fileHash: signedPdf.signedPdfHash,
+        },
+        { transaction }
+      );
+
+      await signature.update(
+        {
+          status: "signed",
+          signedPdfHash: signedPdf.signedPdfHash,
+          signedPdfUrl,
+          signedAt: new Date(),
+          signatureMetadata: {
+            widgetRect: signedPdf.widgetRect,
+          },
+        },
+        { transaction }
+      );
+
+      await contract.update(
+        {
+          contractChecksum: signedPdf.signedPdfHash,
+          contractUrl: signedPdfUrl,
+          status: nextStatus,
+        },
+        { transaction }
+      );
+
+      return {
+        contractId,
+        contractSignatureId: signature.contractSignatureId,
         signedDocumentId: signedDocument.contractDocumentId,
         signedPdfHash: signedPdf.signedPdfHash,
         signedPdfUrl,

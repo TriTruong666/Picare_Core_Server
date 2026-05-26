@@ -29,8 +29,11 @@ class ContractListDTO {
     this.contractDueDate = contract.contractDueDate;
     this.contractChecksum = contract.contractChecksum;
     this.contractType = contract.contractType;
+    this.signerType = contract.signerType;
     this.status = contract.status;
     this.contractUrl = contract.contractUrl;
+    this.individualCredential = contract.individualCredential;
+    this.organizationCredential = contract.organizationCredential;
     this.createdAt = contract.createdAt;
     this.updatedAt = contract.updatedAt;
   }
@@ -66,6 +69,9 @@ class ContractDetailDTO extends ContractListDTO {
       signingMethod: signature.signingMethod,
       status: signature.status,
       pdfHashBeforeSign: signature.pdfHashBeforeSign,
+      handwrittenSignatureImageUrl: signature.handwrittenSignatureImageUrl,
+      handwrittenSignatureImageKey: signature.handwrittenSignatureImageKey,
+      signatureMetadata: signature.signatureMetadata,
       preparedPdfHash: signature.preparedPdfHash,
       byteRange: signature.byteRange,
       signatureLength: signature.signatureLength,
@@ -90,87 +96,87 @@ const getContractsPaginateSchema = [
   query("page")
     .optional()
     .isInt({ min: 1 })
-    .withMessage("page phai la so nguyen lon hon 0"),
+    .withMessage("page phải là số nguyên lớn hơn 0"),
   query("limit")
     .optional()
     .isInt({ min: 1, max: 100 })
-    .withMessage("limit phai la so nguyen tu 1 den 100"),
+    .withMessage("limit phải là số nguyên từ 1 đến 100"),
   query("search")
     .optional()
     .isString()
-    .withMessage("search phai la chuoi"),
+    .withMessage("search phải là chuỗi"),
   query("status")
     .optional()
     .isIn(["draft", "unsigned", "owner_signed", "completed"])
-    .withMessage("status phai la draft, unsigned, owner_signed hoac completed"),
+    .withMessage("status phải là draft, unsigned, owner_signed hoặc completed"),
 ];
 
 const contractIdSchema = [
   param("contractId")
     .isUUID()
-    .withMessage("contractId phai la UUID hop le"),
+    .withMessage("contractId phải là UUID hợp lệ"),
 ];
 
 const contractSignatureIdSchema = [
   ...contractIdSchema,
   param("contractSignatureId")
     .isUUID()
-    .withMessage("contractSignatureId phai la UUID hop le"),
+    .withMessage("contractSignatureId phải là UUID hợp lệ"),
 ];
 
 const companyInfoSchema = (field) => [
   body(`${field}.companyName`)
     .notEmpty()
-    .withMessage(`${field}.companyName la bat buoc`)
+    .withMessage(`${field}.companyName là bắt buộc`)
     .isString()
-    .withMessage(`${field}.companyName phai la chuoi`),
+    .withMessage(`${field}.companyName phải là chuỗi`),
   body(`${field}.address`)
     .notEmpty()
-    .withMessage(`${field}.address la bat buoc`)
+    .withMessage(`${field}.address là bắt buộc`)
     .isString()
-    .withMessage(`${field}.address phai la chuoi`),
+    .withMessage(`${field}.address phải là chuỗi`),
   body(`${field}.phone`)
     .notEmpty()
-    .withMessage(`${field}.phone la bat buoc`)
+    .withMessage(`${field}.phone là bắt buộc`)
     .isString()
-    .withMessage(`${field}.phone phai la chuoi`),
+    .withMessage(`${field}.phone phải là chuỗi`),
   body(`${field}.email`)
     .optional({ nullable: true, checkFalsy: true })
     .isEmail()
-    .withMessage(`${field}.email khong hop le`),
+    .withMessage(`${field}.email không hợp lệ`),
   body(`${field}.bankInfo`)
     .notEmpty()
-    .withMessage(`${field}.bankInfo la bat buoc`)
+    .withMessage(`${field}.bankInfo là bắt buộc`)
     .isString()
-    .withMessage(`${field}.bankInfo phai la chuoi`),
+    .withMessage(`${field}.bankInfo phải là chuỗi`),
   body(`${field}.mst`)
     .notEmpty()
-    .withMessage(`${field}.mst la bat buoc`)
+    .withMessage(`${field}.mst là bắt buộc`)
     .isString()
-    .withMessage(`${field}.mst phai la chuoi`),
+    .withMessage(`${field}.mst phải là chuỗi`),
   body(`${field}.ownerName`)
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage(`${field}.ownerName phai la chuoi`),
+    .withMessage(`${field}.ownerName phải là chuỗi`),
   body(`${field}.owner`)
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage(`${field}.owner phai la chuoi`),
+    .withMessage(`${field}.owner phải là chuỗi`),
   body(`${field}.role`)
     .notEmpty()
-    .withMessage(`${field}.role la bat buoc`)
+    .withMessage(`${field}.role là bắt buộc`)
     .isString()
-    .withMessage(`${field}.role phai la chuoi`),
+    .withMessage(`${field}.role phải là chuỗi`),
 ];
 
 const createContractTemplateSchema = [
   body("ownerCompanyInfo")
     .isObject()
-    .withMessage("ownerCompanyInfo phai la object")
+    .withMessage("ownerCompanyInfo phải là object")
     .custom((ownerCompanyInfo) => {
       if (!ownerCompanyInfo?.companyCode) {
         throw new Error(
-          "ownerCompanyInfo.companyCode la bat buoc de tu tao contractNumber"
+          "ownerCompanyInfo.companyCode là bắt buộc để tự tạo contractNumber"
         );
       }
 
@@ -179,30 +185,30 @@ const createContractTemplateSchema = [
   ...companyInfoSchema("ownerCompanyInfo"),
   body("partnerCompanyInfo")
     .isObject()
-    .withMessage("partnerCompanyInfo phai la object"),
+    .withMessage("partnerCompanyInfo phải là object"),
   ...companyInfoSchema("partnerCompanyInfo"),
   body("contractDueDate")
     .notEmpty()
-    .withMessage("contractDueDate la bat buoc")
+    .withMessage("contractDueDate là bắt buộc")
     .isISO8601()
-    .withMessage("contractDueDate phai la ngay ISO8601 hop le"),
+    .withMessage("contractDueDate phải là ngày ISO8601 hợp lệ"),
   body("contractType")
     .optional()
     .isIn(["digital", "default"])
-    .withMessage("contractType chi nhan digital hoac default"),
+    .withMessage("contractType chỉ nhận digital hoặc default"),
   body("details")
     .isArray({ min: 1 })
-    .withMessage("details phai la array va co it nhat 1 san pham"),
+    .withMessage("details phải là array và có ít nhất 1 sản phẩm"),
   body("details.*.productName")
     .notEmpty()
-    .withMessage("productName la bat buoc")
+    .withMessage("productName là bắt buộc")
     .isString()
-    .withMessage("productName phai la chuoi"),
+    .withMessage("productName phải là chuỗi"),
   body("details.*.price")
     .notEmpty()
-    .withMessage("price la bat buoc")
+    .withMessage("price là bắt buộc")
     .isNumeric()
-    .withMessage("price phai la so"),
+    .withMessage("price phải là số"),
 ];
 
 const updateDraftContractSchema = [
@@ -214,46 +220,72 @@ const createSigningSessionSchema = [
   ...contractIdSchema,
   body("signerType")
     .isIn(["owner", "partner"])
-    .withMessage("signerType chi nhan owner hoac partner"),
+    .withMessage("signerType chỉ nhận owner hoặc partner"),
   body("signerName")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("signerName phai la chuoi"),
+    .withMessage("signerName phải là chuỗi"),
   body("signerEmail")
     .optional({ nullable: true, checkFalsy: true })
     .isEmail()
-    .withMessage("signerEmail khong hop le"),
+    .withMessage("signerEmail không hợp lệ"),
 ];
 
 const completeSigningSessionSchema = [
   ...contractSignatureIdSchema,
   body("signatureHex")
     .notEmpty()
-    .withMessage("signatureHex la bat buoc")
+    .withMessage("signatureHex là bắt buộc")
     .isString()
-    .withMessage("signatureHex phai la chuoi")
+    .withMessage("signatureHex phải là chuỗi")
     .matches(/^[0-9a-fA-F]+$/)
-    .withMessage("signatureHex phai la chuoi hex hop le"),
+    .withMessage("signatureHex phải là chuỗi hex hợp lệ"),
   body("certificatePem")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("certificatePem phai la chuoi"),
+    .withMessage("certificatePem phải là chuỗi"),
   body("certificateSerial")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("certificateSerial phai la chuoi"),
+    .withMessage("certificateSerial phải là chuỗi"),
   body("certificateSubject")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("certificateSubject phai la chuoi"),
+    .withMessage("certificateSubject phải là chuỗi"),
   body("certificateIssuer")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("certificateIssuer phai la chuoi"),
+    .withMessage("certificateIssuer phải là chuỗi"),
   body("vendor")
     .optional({ nullable: true, checkFalsy: true })
     .isString()
-    .withMessage("vendor phai la chuoi"),
+    .withMessage("vendor phải là chuỗi"),
+];
+
+const uploadIndividualCredentialSchema = [...contractIdSchema];
+
+const updatePartnerSignerTypeSchema = [
+  ...contractIdSchema,
+  body("signerType")
+    .isIn(["individual", "organization"])
+    .withMessage("signerType chỉ nhận individual hoặc organization"),
+];
+
+const uploadOrganizationCredentialSchema = [...contractIdSchema];
+
+const completeHandwrittenSignatureSchema = [
+  ...contractIdSchema,
+  body("signerType")
+    .isIn(["owner", "partner"])
+    .withMessage("signerType chỉ nhận owner hoặc partner"),
+  body("signerName")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("signerName phải là chuỗi"),
+  body("signerEmail")
+    .optional({ nullable: true, checkFalsy: true })
+    .isEmail()
+    .withMessage("signerEmail không hợp lệ"),
 ];
 
 module.exports = {
@@ -263,6 +295,10 @@ module.exports = {
   updateDraftContractSchema,
   createSigningSessionSchema,
   completeSigningSessionSchema,
+  uploadIndividualCredentialSchema,
+  updatePartnerSignerTypeSchema,
+  uploadOrganizationCredentialSchema,
+  completeHandwrittenSignatureSchema,
   getContractsPaginateSchema,
   contractIdSchema,
   contractSignatureIdSchema,
