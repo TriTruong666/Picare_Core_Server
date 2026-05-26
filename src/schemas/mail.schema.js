@@ -80,7 +80,7 @@ const sendTemplateMailSchema = [
     .withMessage("actionLabel phải là chuỗi"),
   body("actionUrl")
     .optional()
-    .isURL({ require_protocol: true })
+    .isURL({ require_protocol: true, require_tld: false })
     .withMessage("actionUrl phải là URL hợp lệ"),
   body("footer")
     .optional()

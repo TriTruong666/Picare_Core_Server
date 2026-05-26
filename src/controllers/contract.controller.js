@@ -72,6 +72,26 @@ class ContractController {
     }
   }
 
+  static async deleteContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.deleteContract(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Xoá hợp đồng thành công"
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async updateDraftContract(req, res, next) {
     try {
       const errors = validationResult(req);

@@ -156,6 +156,36 @@ router.get(
 /**
  * @swagger
  * /api/v1/contracts/{contractId}:
+ *   delete:
+ *     summary: Xoá hợp đồng và toàn bộ dữ liệu liên quan
+ *     description: Xoá contract, detail, document, signature, file PDF local và các object S3 liên quan đến hợp đồng.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của contract
+ *     responses:
+ *       200:
+ *         description: Xoá hợp đồng thành công
+ *       404:
+ *         description: Không tìm thấy hợp đồng
+ */
+router.delete(
+  "/:contractId",
+  protect,
+  contractIdSchema,
+  ContractController.deleteContract
+);
+
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}:
  *   put:
  *     summary: Cập nhật thông tin hợp đồng draft
  *     description: Chỉ cho phép cập nhật hợp đồng đang ở trạng thái draft. Sau khi cập nhật sẽ generate lại file PDF local và cập nhật preview.

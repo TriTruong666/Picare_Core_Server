@@ -156,6 +156,63 @@ function assertImageFile(file, message = "File phải là ảnh") {
   }
 }
 
+function extractS3KeyFromUrl(url) {
+  if (!url || typeof url !== "string") {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    const key = decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ""));
+    return key || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+function collectCredentialS3Keys(credential = {}) {
+  if (!credential || typeof credential !== "object") {
+    return [];
+  }
+
+  return [
+    credential.first_identification_image_key,
+    credential.second_identification_image_key,
+    credential.business_license_key,
+    credential.power_of_attorney_image_key,
+    extractS3KeyFromUrl(credential.first_identification_image),
+    extractS3KeyFromUrl(credential.second_identification_image),
+    extractS3KeyFromUrl(credential.business_license),
+    extractS3KeyFromUrl(credential.power_of_attorney_image),
+  ].filter(Boolean);
+}
+
+async function deleteLocalFileIfExists(filePath) {
+  if (!filePath) {
+    return false;
+  }
+
+  try {
+    await fs.unlink(filePath);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function deleteS3ObjectAndRecordIfExists(key) {
+  if (!key) {
+    return false;
+  }
+
+  try {
+    await S3Service.deleteAndRecord(key);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function extractFptIdData(response) {
   return Array.isArray(response?.data) && response.data.length > 0
     ? response.data[0]
@@ -1335,6 +1392,97 @@ class ContractService {
     }
 
     return ContractDetailDTO.fromContract(contract);
+  }
+
+  static async deleteContract(contractId) {
+    const contract = await Contract.findOne({
+      where: { contractId },
+      include: [
+        {
+          model: ContractDocument,
+          as: "documents",
+          separate: true,
+        },
+        {
+          model: ContractSignature,
+          as: "signatures",
+          separate: true,
+        },
+      ],
+    });
+
+    if (!contract) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    const localFilePaths = new Set();
+    const s3Keys = new Set();
+
+    if (contract.contractUrl) {
+      const key = extractS3KeyFromUrl(contract.contractUrl);
+      if (key) s3Keys.add(key);
+    }
+
+    collectCredentialS3Keys(contract.individualCredential).forEach((key) =>
+      s3Keys.add(key)
+    );
+    collectCredentialS3Keys(contract.organizationCredential).forEach((key) =>
+      s3Keys.add(key)
+    );
+
+    for (const document of contract.documents || []) {
+      if (document.filePath) localFilePaths.add(document.filePath);
+      const key = extractS3KeyFromUrl(document.fileUrl);
+      if (key) s3Keys.add(key);
+    }
+
+    for (const signature of contract.signatures || []) {
+      if (signature.preparedPdfPath) {
+        localFilePaths.add(signature.preparedPdfPath);
+      }
+
+      const signedPdfKey = extractS3KeyFromUrl(signature.signedPdfUrl);
+      if (signedPdfKey) s3Keys.add(signedPdfKey);
+
+      if (signature.handwrittenSignatureImageKey) {
+        s3Keys.add(signature.handwrittenSignatureImageKey);
+      }
+
+      const handwrittenKey = extractS3KeyFromUrl(
+        signature.handwrittenSignatureImageUrl
+      );
+      if (handwrittenKey) s3Keys.add(handwrittenKey);
+    }
+
+    const cleanupResult = {
+      localFilesDeleted: 0,
+      s3ObjectsDeleted: 0,
+    };
+
+    await Contract.sequelize.transaction(async (transaction) => {
+      await ContractDetail.destroy({ where: { contractId }, transaction });
+      await ContractSignature.destroy({ where: { contractId }, transaction });
+      await ContractDocument.destroy({ where: { contractId }, transaction });
+      await contract.destroy({ transaction });
+    });
+
+    for (const filePath of localFilePaths) {
+      if (await deleteLocalFileIfExists(filePath)) {
+        cleanupResult.localFilesDeleted += 1;
+      }
+    }
+
+    for (const key of s3Keys) {
+      if (await deleteS3ObjectAndRecordIfExists(key)) {
+        cleanupResult.s3ObjectsDeleted += 1;
+      }
+    }
+
+    return {
+      contractId,
+      deleted: true,
+      cleanup: cleanupResult,
+    };
   }
 
   static async getContractPdf(contractId) {
