@@ -1,6 +1,7 @@
 const { validationResult } = require("express-validator");
 const ResponseHandler = require("../common/response.handler");
 const ContractService = require("../services/contract.service");
+const S3Service = require("../services/s3.service");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
@@ -407,13 +408,14 @@ class ContractController {
       }
 
       const { contractId } = req.params;
-      const { filePath, fileName } = await ContractService.getContractPdf(
+      const { fileKey, fileName } = await ContractService.getContractPdf(
         contractId
       );
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
-      return res.sendFile(filePath);
+      const streamData = await S3Service.getDownloadStream(fileKey);
+      return streamData.Body.pipe(res);
     } catch (error) {
       next(error);
     }

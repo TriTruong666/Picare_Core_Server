@@ -5,11 +5,8 @@ const fontkit = require("@pdf-lib/fontkit");
 const PDFDocument = require("pdfkit");
 const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
+const sharp = require("sharp");
 
-const ROOT_DIR = path.resolve(__dirname, "../..");
-const OUTPUT_DIR =
-  process.env.CONTRACT_OUTPUT_DIR ||
-  path.join(ROOT_DIR, "storage", "contracts");
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
   "C:/Windows/Fonts/times.ttf",
@@ -25,7 +22,7 @@ const DEFAULT_BOLD_FONT_PATHS = [
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
 ].filter(Boolean);
 const DEFAULT_SIGNATURE_LENGTH = Number(
-  process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384
+  process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
 const BYTE_RANGE_PLACEHOLDER = "**********";
 const SIGNATURE_WIDGET_RECTS = {
@@ -42,6 +39,15 @@ function normalizeVietnameseText(value, fallback = "") {
   return asText(value, fallback).normalize("NFC");
 }
 
+function escapeXml(value) {
+  return normalizeVietnameseText(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 function escapePdfString(value) {
   return normalizeVietnameseText(value)
     .replace(/[^\x20-\x7E]/g, "")
@@ -55,9 +61,9 @@ function formatPdfDate(value = new Date()) {
   const pad = (number) => String(number).padStart(2, "0");
 
   return `D:${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(
-    date.getDate()
+    date.getDate(),
   )}${pad(date.getHours())}${pad(date.getMinutes())}${pad(
-    date.getSeconds()
+    date.getSeconds(),
   )}+00'00'`;
 }
 
@@ -66,9 +72,9 @@ function formatPdfTextDateTime(value = new Date()) {
   const pad = (number) => String(number).padStart(2, "0");
 
   return `${pad(date.getDate())}/${pad(
-    date.getMonth() + 1
+    date.getMonth() + 1,
   )}/${date.getFullYear()} ${pad(date.getHours())}:${pad(
-    date.getMinutes()
+    date.getMinutes(),
   )}:${pad(date.getSeconds())}`;
 }
 
@@ -127,19 +133,43 @@ function formatMoney(value) {
     return asText(value);
   }
 
-  return new Intl.NumberFormat("en-US", {
+  return `${new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0,
-  }).format(numberValue);
+  }).format(numberValue)} VND`;
 }
 
 function getSignatureWidgetRect(signerType) {
-  return (
-    SIGNATURE_WIDGET_RECTS[signerType] || SIGNATURE_WIDGET_RECTS.default
-  );
+  return SIGNATURE_WIDGET_RECTS[signerType] || SIGNATURE_WIDGET_RECTS.default;
 }
 
 function getPartnerIdentityText(companyInfo = {}) {
   return companyInfo.mst || companyInfo.phone || "N/A";
+}
+
+function getSignatureIdentityLine(companyInfo = {}) {
+  return `MST/SĐT: ${getPartnerIdentityText(companyInfo)}`;
+}
+
+function getDigitalSignatureAppearanceData({
+  contract,
+  signerType,
+  signerName,
+  signingTime,
+}) {
+  const companyInfo = getSignerCompanyInfo(contract, signerType);
+  const companyName = normalizeVietnameseText(
+    companyInfo.companyName || signerName || "",
+  ).toLocaleUpperCase("vi-VN");
+  const identityLine = getSignatureIdentityLine(companyInfo);
+  const addressLine = `Địa chỉ: ${formatOptionalText(companyInfo.address)}`;
+  const timeLine = `Thời gian: ${formatVietnameseDateTime(signingTime)}`;
+
+  return {
+    companyName,
+    identityLine,
+    addressLine,
+    timeLine,
+  };
 }
 
 function truncatePdfText(value, maxLength) {
@@ -152,14 +182,31 @@ function truncatePdfText(value, maxLength) {
   return `${text.slice(0, Math.max(0, maxLength - 3))}...`;
 }
 
-function getCenteredTextX(text, width, fontSize) {
-  const estimatedTextWidth = text.length * fontSize * 0.48;
-  return Math.max(6, (width - estimatedTextWidth) / 2);
+function getPdfKitFontName(font) {
+  return font === "F2" ? "Times-Bold" : "Times-Roman";
 }
 
-function pdfTextLine({ text, width, y, font = "F1", fontSize, color }) {
+function getCenteredTextX(text, width, fontSize, font = "F1", offsetX = 0) {
+  const doc = new PDFDocument({ autoFirstPage: false });
+  const textWidth = doc
+    .font(getPdfKitFontName(font))
+    .fontSize(fontSize)
+    .widthOfString(text);
+
+  return Math.max(offsetX, offsetX + (width - textWidth) / 2);
+}
+
+function pdfTextLine({
+  text,
+  width,
+  y,
+  font = "F1",
+  fontSize,
+  color,
+  offsetX = 0,
+}) {
   const safeText = text || "N/A";
-  const x = getCenteredTextX(safeText, width, fontSize);
+  const x = getCenteredTextX(safeText, width, fontSize, font, offsetX);
 
   return `BT
 /${font} ${fontSize} Tf
@@ -175,24 +222,24 @@ function getPdfSignatureAppearanceText({
   signerName,
   signingTime,
 }) {
-  const companyInfo = getSignerCompanyInfo(contract, signerType);
-  const companyName = truncatePdfText(
-    normalizeVietnameseText(
-      companyInfo.companyName || signerName || signerType || ""
-    ).toLocaleUpperCase("vi-VN"),
-    34
-  );
+  const data = getDigitalSignatureAppearanceData({
+    contract,
+    signerType,
+    signerName,
+    signingTime,
+  });
+  const companyName = truncatePdfText(data.companyName, 34);
   const taxOrPhone = truncatePdfText(
-    `MST/SDT: ${getPartnerIdentityText(companyInfo)}`,
-    36
+    data.identityLine.replace("SĐT", "SDT"),
+    36,
   );
   const address = truncatePdfText(
-    `Dia chi: ${formatOptionalText(companyInfo.address)}`,
-    42
+    data.addressLine.replace("Địa chỉ", "Dia chi"),
+    42,
   );
   const time = truncatePdfText(
-    `Thoi gian: ${formatPdfTextDateTime(signingTime)}`,
-    40
+    data.timeLine.replace("Thời gian", "Thoi gian"),
+    40,
   );
 
   return {
@@ -226,6 +273,87 @@ function fitTextToWidth(text, font, size, maxWidth) {
   return `${trimmed}...`;
 }
 
+function fitTextForImage(text, fontPath, fontSize, maxWidth) {
+  const doc = new PDFDocument({ autoFirstPage: false });
+  const value = normalizeVietnameseText(text);
+
+  doc.font(fontPath).fontSize(fontSize);
+
+  if (doc.widthOfString(value) <= maxWidth) {
+    return value;
+  }
+
+  let trimmed = value;
+
+  while (trimmed.length > 3 && doc.widthOfString(`${trimmed}...`) > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+
+  return `${trimmed}...`;
+}
+
+async function createDigitalSignatureAppearanceImage({
+  width,
+  height,
+  contract,
+  signerType,
+  signerName,
+  signingTime,
+}) {
+  const [fontPath, boldFontPath] = await Promise.all([
+    findFontPath(),
+    findBoldFontPath(),
+  ]);
+  const data = getDigitalSignatureAppearanceData({
+    contract,
+    signerType,
+    signerName,
+    signingTime,
+  });
+  const scale = 3;
+  const imageWidth = Math.round(width * scale);
+  const imageHeight = Math.round(height * scale);
+  const contentWidth = width - 16;
+  const companyName = fitTextForImage(
+    data.companyName,
+    boldFontPath,
+    7.2,
+    contentWidth,
+  );
+  const identityLine = fitTextForImage(
+    data.identityLine,
+    fontPath,
+    6.7,
+    contentWidth,
+  );
+  const addressLine = fitTextForImage(
+    data.addressLine,
+    fontPath,
+    6,
+    contentWidth,
+  );
+  const timeLine = fitTextForImage(data.timeLine, fontPath, 5.8, contentWidth);
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="0" width="${width}" height="${height}" fill="rgb(245,252,247)" stroke="rgb(18,115,61)" stroke-width="0.9"/>
+  <rect x="0" y="0" width="${width}" height="15" fill="rgb(18,115,61)"/>
+  <text x="${width / 2}" y="11" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#ffffff">ĐÃ KÝ SỐ</text>
+  <text x="${width / 2}" y="${
+    height - Math.max(44, height - 36)
+  }" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="7.2" font-weight="700" fill="rgb(10,64,33)">${escapeXml(companyName)}</text>
+  <text x="${width / 2}" y="${height - 29}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="6.7" fill="rgb(26,26,26)">${escapeXml(identityLine)}</text>
+  <text x="${width / 2}" y="${height - 18}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="6" fill="rgb(26,26,26)">${escapeXml(addressLine)}</text>
+  <text x="${width / 2}" y="${height - 8}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="5.8" fill="rgb(26,26,26)">${escapeXml(timeLine)}</text>
+</svg>`;
+  const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
+
+  return {
+    buffer,
+    width: imageWidth,
+    height: imageHeight,
+  };
+}
+
 function drawCenteredText(pdfPage, text, x, y, width, font, size, color) {
   const fittedText = fitTextToWidth(text, font, size, width);
   const textWidth = font.widthOfTextAtSize(fittedText, size);
@@ -256,7 +384,14 @@ function formatOptionalText(value, fallback = "N/A") {
 function drawVisibleSignatureAppearance(
   pdfPage,
   widgetRect,
-  { signerName, signerType, contract, font, boldFont, signingTime = new Date() }
+  {
+    signerName,
+    signerType,
+    contract,
+    font,
+    boldFont,
+    signingTime = new Date(),
+  },
 ) {
   return drawCompanyDigitalSignatureAppearance(pdfPage, widgetRect, {
     signerName,
@@ -272,12 +407,12 @@ function drawVisibleSignatureAppearance(
   const height = y2 - y1;
   const paddingX = 8;
   const contentWidth = width - paddingX * 2;
-  const companyInfo = getSignerCompanyInfo(contract, signerType);
-  const companyName = normalizeVietnameseText(
-    companyInfo.companyName || signerName || ""
-  ).toLocaleUpperCase("vi-VN");
-  const taxCode = `MST: ${formatOptionalText(companyInfo.mst)}`;
-  const address = `Địa chỉ: ${formatOptionalText(companyInfo.address)}`;
+  const appearanceData = getDigitalSignatureAppearanceData({
+    contract,
+    signerType,
+    signerName,
+    signingTime,
+  });
 
   pdfPage.drawRectangle({
     x: x1,
@@ -305,19 +440,19 @@ function drawVisibleSignatureAppearance(
     width,
     boldFont,
     7.5,
-    rgb(1, 1, 1)
+    rgb(1, 1, 1),
   );
   drawCenteredText(
     pdfPage,
     normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
-      "vi-VN"
+      "vi-VN",
     ),
     x1 + paddingX,
     y1 + Math.max(31, height - 39),
     contentWidth,
     boldFont,
     8,
-    rgb(0.04, 0.25, 0.13)
+    rgb(0.04, 0.25, 0.13),
   );
   drawCenteredText(
     pdfPage,
@@ -327,7 +462,7 @@ function drawVisibleSignatureAppearance(
     contentWidth,
     font,
     7,
-    rgb(0.1, 0.1, 0.1)
+    rgb(0.1, 0.1, 0.1),
   );
   drawCenteredText(
     pdfPage,
@@ -337,95 +472,41 @@ function drawVisibleSignatureAppearance(
     contentWidth,
     font,
     6.5,
-    rgb(0.1, 0.1, 0.1)
+    rgb(0.1, 0.1, 0.1),
   );
 }
 
-function drawCompanyDigitalSignatureAppearance(
+async function drawCompanyDigitalSignatureAppearance(
   pdfPage,
   widgetRect,
-  { signerName, signerType, contract, font, boldFont, signingTime = new Date() }
+  {
+    signerName,
+    signerType,
+    contract,
+    font,
+    boldFont,
+    signingTime = new Date(),
+  },
 ) {
   const [x1, y1, x2, y2] = widgetRect;
   const width = x2 - x1;
   const height = y2 - y1;
-  const paddingX = 8;
-  const contentWidth = width - paddingX * 2;
-  const companyInfo = getSignerCompanyInfo(contract, signerType);
-  const companyName = normalizeVietnameseText(
-    companyInfo.companyName || signerName || ""
-  ).toLocaleUpperCase("vi-VN");
-  const taxCode = `MST: ${formatOptionalText(companyInfo.mst)}`;
-  const address = `Địa chỉ: ${formatOptionalText(companyInfo.address)}`;
+  const appearanceImage = await createDigitalSignatureAppearanceImage({
+    width,
+    height,
+    contract,
+    signerType,
+    signerName,
+    signingTime,
+  });
+  const embeddedImage = await pdfPage.doc.embedJpg(appearanceImage.buffer);
 
-  pdfPage.drawRectangle({
+  pdfPage.drawImage(embeddedImage, {
     x: x1,
     y: y1,
     width,
     height,
-    color: rgb(0.96, 0.99, 0.97),
-    borderColor: rgb(0.07, 0.45, 0.24),
-    borderWidth: 0.9,
   });
-
-  pdfPage.drawRectangle({
-    x: x1,
-    y: y2 - 15,
-    width,
-    height: 15,
-    color: rgb(0.07, 0.45, 0.24),
-  });
-
-  drawCenteredText(
-    pdfPage,
-    "ĐÃ KÝ SỐ",
-    x1,
-    y2 - 11,
-    width,
-    boldFont,
-    7.5,
-    rgb(1, 1, 1)
-  );
-  drawCenteredText(
-    pdfPage,
-    companyName,
-    x1 + paddingX,
-    y1 + Math.max(44, height - 36),
-    contentWidth,
-    boldFont,
-    7.2,
-    rgb(0.04, 0.25, 0.13)
-  );
-  drawCenteredText(
-    pdfPage,
-    taxCode,
-    x1 + paddingX,
-    y1 + 29,
-    contentWidth,
-    font,
-    6.7,
-    rgb(0.1, 0.1, 0.1)
-  );
-  drawCenteredText(
-    pdfPage,
-    address,
-    x1 + paddingX,
-    y1 + 18,
-    contentWidth,
-    font,
-    6,
-    rgb(0.1, 0.1, 0.1)
-  );
-  drawCenteredText(
-    pdfPage,
-    `Thời gian: ${formatVietnameseDateTime(signingTime)}`,
-    x1 + paddingX,
-    y1 + 8,
-    contentWidth,
-    font,
-    5.8,
-    rgb(0.1, 0.1, 0.1)
-  );
 }
 
 async function embedImageByMimeType(pdfDoc, imageBytes, mimeType = "") {
@@ -452,7 +533,7 @@ async function embedImageByMimeType(pdfDoc, imageBytes, mimeType = "") {
 function drawHandwrittenSignatureAppearance(
   pdfPage,
   widgetRect,
-  { image, signerName, signerType, font, boldFont, signingTime = new Date() }
+  { image, signerName, signerType, font, boldFont, signingTime = new Date() },
 ) {
   const [x1, y1, x2, y2] = widgetRect;
   const width = x2 - x1;
@@ -464,7 +545,7 @@ function drawHandwrittenSignatureAppearance(
   const scale = Math.min(
     maxImageWidth / image.width,
     maxImageHeight / image.height,
-    1
+    1,
   );
   const imageWidth = image.width * scale;
   const imageHeight = image.height * scale;
@@ -489,14 +570,14 @@ function drawHandwrittenSignatureAppearance(
   drawCenteredText(
     pdfPage,
     normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
-      "vi-VN"
+      "vi-VN",
     ),
     x1 + paddingX,
     y1 + 12,
     width - paddingX * 2,
     boldFont,
     8,
-    rgb(0.05, 0.05, 0.05)
+    rgb(0.05, 0.05, 0.05),
   );
   drawCenteredText(
     pdfPage,
@@ -506,7 +587,7 @@ function drawHandwrittenSignatureAppearance(
     width - paddingX * 2,
     font,
     5.8,
-    rgb(0.25, 0.25, 0.25)
+    rgb(0.25, 0.25, 0.25),
   );
 }
 
@@ -521,7 +602,7 @@ async function findFontPath() {
   }
 
   throw new Error(
-    "No Unicode font found. Set CONTRACT_FONT_PATH to a .ttf font file."
+    "No Unicode font found. Set CONTRACT_FONT_PATH to a .ttf font file.",
   );
 }
 
@@ -647,7 +728,7 @@ class ContractPdfBuilder {
     this.text(
       `Đại diện là Ông/Bà : ${getOwnerName(companyInfo)}    Chức vụ: ${
         companyInfo.role
-      }`
+      }`,
     );
     this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35, bold: true });
   }
@@ -731,38 +812,38 @@ class ContractPdfBuilder {
       leftX - 10,
       signatureBoxY,
       signatureBoxWidth,
-      signatureBoxHeight
+      signatureBoxHeight,
     );
     this.drawSignatureBox(
       "partner",
       rightX - 10,
       signatureBoxY,
       signatureBoxWidth,
-      signatureBoxHeight
+      signatureBoxHeight,
     );
 
     doc.font(this.boldFontPath).fontSize(10);
     doc.text(
       normalizeVietnameseText(getOwnerName(ownerCompanyInfo)).toLocaleUpperCase(
-        "vi-VN"
+        "vi-VN",
       ),
       leftX,
       y + 128,
       {
         width: 160,
         align: "center",
-      }
+      },
     );
     doc.text(
       normalizeVietnameseText(
-        getOwnerName(partnerCompanyInfo)
+        getOwnerName(partnerCompanyInfo),
       ).toLocaleUpperCase("vi-VN"),
       rightX,
       y + 128,
       {
         width: 160,
         align: "center",
-      }
+      },
     );
     doc.y = y + 150;
   }
@@ -799,108 +880,108 @@ class ContractPdfBuilder {
     this.centered("(Về việc: Bán hàng)", 10, 0.8);
 
     this.bullet(
-      "Căn cứ Bộ Luật Dân sự số 33/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;"
+      "Căn cứ Bộ Luật Dân sự số 33/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;",
     );
     this.bullet(
-      "Căn cứ Luật Thương Mại số 36/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;"
+      "Căn cứ Luật Thương Mại số 36/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;",
     );
     this.bullet("Căn cứ vào khả năng và nhu cầu của hai bên.");
     this.text(
       `Hôm nay, ngày ${formatShortDate(
-        createdAt
+        createdAt,
       )} tại văn phòng công ty chúng tôi gồm có:`,
-      { gap: 0.35, bold: true }
+      { gap: 0.35, bold: true },
     );
 
-    this.companyBlock("BÊN BÁN ( Bên A)", owner, "Bên A");
-    this.companyBlock("Bên Mua", partner, "Bên B");
+    this.companyBlock("CÔNG TY BÁN ( Bên A)", owner, "Bên A");
+    this.companyBlock("CÔNG TY MUA ( Bên B)", partner, "Bên B");
 
     this.text(
       "Hai bên cùng tiến hành thương lượng và nhất trí ký hợp đồng nguyên tắc bán hàng về việc bán các sản phẩm mà Bên A phân phối theo các điều khoản như sau:",
-      { gap: 0.35 }
+      { gap: 0.35 },
     );
 
     this.heading("ĐIỀU 1: NGUYÊN TẮC MUA BÁN");
     this.bullet(
-      "Bên A đồng ý bán cho Bên B các loại sản phẩm do Bên A đăng ký, sản xuất để bên B phân phối sản phẩm ra thị trường, cụ thể như sau:"
+      "Bên A đồng ý bán cho Bên B các loại sản phẩm do Bên A đăng ký, sản xuất để bên B phân phối sản phẩm ra thị trường, cụ thể như sau:",
     );
     this.table(details);
     this.bullet(
-      "Số lượng sản phẩm: Được quy định chi tiết tại từng đơn đặt hàng của bên B. Số lượng hàng giao cho phép dao động ± 5% so với số lượng đặt hàng."
+      "Số lượng sản phẩm: Được quy định chi tiết tại từng đơn đặt hàng của bên B. Số lượng hàng giao cho phép dao động ± 5% so với số lượng đặt hàng.",
     );
 
     this.heading("ĐIỀU 2: QUY CÁCH, CHẤT LƯỢNG HÀNG HÓA");
     this.bullet(
-      "Quy cách, chất lượng hàng hóa dựa trên tiêu chuẩn đã được đăng ký tại Sở Y Tế trực thuộc Bộ Y Tế."
+      "Quy cách, chất lượng hàng hóa dựa trên tiêu chuẩn đã được đăng ký tại Sở Y Tế trực thuộc Bộ Y Tế.",
     );
     this.bullet(
-      "Bên B chịu trách nhiệm bảo quản, tiêu thụ đúng quy định của Sở Y Tế trực thuộc Bộ Y Tế."
+      "Bên B chịu trách nhiệm bảo quản, tiêu thụ đúng quy định của Sở Y Tế trực thuộc Bộ Y Tế.",
     );
     this.bullet(
-      "Bên A chịu trách nhiệm về chất lượng của sản phẩm theo quy chế hiện hành của Sở Y Tế trực thuộc Bộ Y Tế."
+      "Bên A chịu trách nhiệm về chất lượng của sản phẩm theo quy chế hiện hành của Sở Y Tế trực thuộc Bộ Y Tế.",
     );
 
     this.heading("ĐIỀU 3: TRÁCH NHIỆM VÀ QUYỀN LỢI CỦA CÁC BÊN");
     this.text("1. Trách nhiệm của Bên A:");
     this.bullet(
-      "Cung cấp hàng theo đúng số lượng sản phẩm mà Bên B đã đặt hàng, theo đúng tiêu chuẩn đã đăng ký."
+      "Cung cấp hàng theo đúng số lượng sản phẩm mà Bên B đã đặt hàng, theo đúng tiêu chuẩn đã đăng ký.",
     );
     this.bullet(
-      "Thời gian giao hàng chậm nhất không quá 03 ngày làm việc tính từ thời điểm nhận được đơn hàng."
+      "Thời gian giao hàng chậm nhất không quá 03 ngày làm việc tính từ thời điểm nhận được đơn hàng.",
     );
     this.bullet(
-      "Giao hàng tại kho Bên B trong 1 địa điểm tại nội thành Thành Phố Hồ Chí Minh, chi phí bốc xếp đầu bên nào bên đó chịu."
+      "Giao hàng tại kho Bên B trong 1 địa điểm tại nội thành Thành Phố Hồ Chí Minh, chi phí bốc xếp đầu bên nào bên đó chịu.",
     );
     this.bullet(
-      "Sản phẩm giao cho bên B bị hỏng do lỗi sản xuất thì bên A phải giao bù cho bên B số hàng lỗi."
+      "Sản phẩm giao cho bên B bị hỏng do lỗi sản xuất thì bên A phải giao bù cho bên B số hàng lỗi.",
     );
     this.text("2. Trách nhiệm của Bên B:");
     this.bullet(
-      "Có đơn đặt hàng trước ít nhất 08 ngày làm việc khi có nhu cầu về sản phẩm."
+      "Có đơn đặt hàng trước ít nhất 08 ngày làm việc khi có nhu cầu về sản phẩm.",
     );
     this.bullet("Kinh doanh sản phẩm theo quy định của Pháp luật hiện hành.");
     this.bullet("Cam kết không được phép bán ra các khu vực khác.");
     this.bullet("Thanh toán theo đúng điều 5 của hợp đồng này.");
     this.bullet(
-      "Mọi khiếu nại của Bên B về hàng hóa phải có chứng kiến và xác nhận của Bên A thì mới có giá trị khiếu nại."
+      "Mọi khiếu nại của Bên B về hàng hóa phải có chứng kiến và xác nhận của Bên A thì mới có giá trị khiếu nại.",
     );
 
     this.heading("ĐIỀU 4: KHIẾU NẠI VÀ GIẢI QUYẾT KHIẾU NẠI HÀNG HÓA");
     this.bullet(
-      "Bên B có trách nhiệm kiểm tra kỹ số lượng, quy cách, chất lượng hàng hóa khi giao nhận. Nếu có bất cứ khiếu nại nào phải có văn bản thông báo cho Bên A."
+      "Bên B có trách nhiệm kiểm tra kỹ số lượng, quy cách, chất lượng hàng hóa khi giao nhận. Nếu có bất cứ khiếu nại nào phải có văn bản thông báo cho Bên A.",
     );
     this.bullet(
-      "Thời gian khiếu nại hàng sai lệch về số lượng không quá 5 ngày, về chất lượng không quá 30 ngày kể từ ngày nhập hàng về kho bên B."
+      "Thời gian khiếu nại hàng sai lệch về số lượng không quá 5 ngày, về chất lượng không quá 30 ngày kể từ ngày nhập hàng về kho bên B.",
     );
     this.bullet(
-      "Trong vòng 30 ngày kể từ khi nhận được công văn khiếu nại, bên A có trách nhiệm trả lời cho bên B."
+      "Trong vòng 30 ngày kể từ khi nhận được công văn khiếu nại, bên A có trách nhiệm trả lời cho bên B.",
     );
 
     this.heading("ĐIỀU 5: GIÁ CẢ VÀ PHƯƠNG THỨC THANH TOÁN");
     this.text("1. Giá cả:");
     this.text(
-      "Giá bán được thể hiện trực tiếp trong hợp đồng và được hai bên cùng xác nhận. Bảng giá, đơn đặt hàng là một phần không tách rời của hợp đồng này."
+      "Giá bán được thể hiện trực tiếp trong hợp đồng và được hai bên cùng xác nhận. Bảng giá, đơn đặt hàng là một phần không tách rời của hợp đồng này.",
     );
     this.text("2. Phương thức thanh toán:");
     this.bullet("Thanh toán bằng chuyển khoản trong vòng 30 ngày.");
     this.bullet(
-      "Các trường hợp đặc biệt khác phải có sự thỏa thuận của hai bên."
+      "Các trường hợp đặc biệt khác phải có sự thỏa thuận của hai bên.",
     );
 
     this.heading("ĐIỀU 6: ĐIỀU KHOẢN CHUNG");
     this.bullet(
-      "Hai bên cùng cam kết thực hiện hợp đồng nguyên tắc này, nếu có khó khăn hai bên phải gặp nhau trao đổi tìm cách giải quyết."
+      "Hai bên cùng cam kết thực hiện hợp đồng nguyên tắc này, nếu có khó khăn hai bên phải gặp nhau trao đổi tìm cách giải quyết.",
     );
     this.bullet(
-      "Trường hợp hai bên không giải quyết được bằng thương lượng sẽ đưa ra Tòa án kinh tế Hà Nội. Mọi phí tổn sẽ do bên sai phạm chịu."
+      "Trường hợp hai bên không giải quyết được bằng thương lượng sẽ đưa ra Tòa án kinh tế Hà Nội. Mọi phí tổn sẽ do bên sai phạm chịu.",
     );
     this.bullet(
-      "Sau khi Hợp đồng hết hiệu lực 30 ngày; nếu hai bên không có tranh chấp hoặc khiếu nại thì Hợp đồng này mặc nhiên được thanh lý."
+      "Sau khi Hợp đồng hết hiệu lực 30 ngày; nếu hai bên không có tranh chấp hoặc khiếu nại thì Hợp đồng này mặc nhiên được thanh lý.",
     );
     this.bullet(
       `Hợp đồng nguyên tắc này được lập thành 04 bản có giá trị pháp lý ngang nhau, mỗi bên giữ 02 bản. Hợp đồng có hiệu lực kể từ ngày kí đến ngày ${formatShortDate(
-        contract.contractDueDate
-      )}. Sau đó hợp đồng được kí lại hoặc gia hạn nếu được cả hai bên cùng thống nhất.`
+        contract.contractDueDate,
+      )}. Sau đó hợp đồng được kí lại hoặc gia hạn nếu được cả hai bên cùng thống nhất.`,
     );
 
     this.signatureArea(owner, partner);
@@ -924,7 +1005,7 @@ class ContractPdfService {
       .digest("hex");
     const fileName = `hop-dong-picare-${contract.contractId}-${pdfHashHex.slice(
       0,
-      12
+      12,
     )}.pdf`;
 
     return {
@@ -938,15 +1019,11 @@ class ContractPdfService {
   static async generateContractPdf(contract, details = []) {
     const { pdfBuffer, pdfHashHex, fileName, signatureWidgets } =
       await this.generateContractPdfBuffer(contract, details);
-    const outputPath = path.join(OUTPUT_DIR, fileName);
-
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-    await fs.writeFile(outputPath, pdfBuffer);
 
     return {
+      pdfBuffer,
       pdfHashHex,
       fileName,
-      filePath: outputPath,
       signatureWidgets,
     };
   }
@@ -1028,15 +1105,10 @@ class ContractPdfService {
     const fileName = `hop-dong-picare-${
       contract.contractId
     }-signed-${signedPdfHash.slice(0, 12)}.pdf`;
-    const outputPath = path.join(OUTPUT_DIR, fileName);
-
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-    await fs.writeFile(outputPath, signedBuffer);
-
     return {
       signedPdfHash,
       fileName,
-      filePath: outputPath,
+      signedPdfBuffer: signedBuffer,
     };
   }
 
@@ -1076,7 +1148,7 @@ class ContractPdfService {
     const preparedBuffer = Buffer.from(buffer);
     preparedBuffer.write(
       replacement.padEnd(placeholder.length, " "),
-      byteRangeStart
+      byteRangeStart,
     );
 
     return {
@@ -1099,7 +1171,7 @@ class ContractPdfService {
   static getPdfObjectBody(buffer, objectNumber) {
     const objectPattern = new RegExp(
       `${objectNumber}\\s+0\\s+obj\\s*([\\s\\S]*?)\\s*endobj`,
-      "g"
+      "g",
     );
     let match;
     let body = null;
@@ -1121,11 +1193,12 @@ class ContractPdfService {
     return body.replace(/>>\s*$/, `/${key} [${item}]\n>>`);
   }
 
-  static appendIncrementalSignaturePlaceholder({
+  static async appendIncrementalSignaturePlaceholder({
     sourceBytes,
     contract,
     signerName,
     signerType,
+    widgetRect,
     signatureLength,
     signingTime,
   }) {
@@ -1135,25 +1208,15 @@ class ContractPdfService {
     const objectMatches = [...sourceText.matchAll(/(\d+)\s+0\s+obj/g)];
     const widgetMatches = [
       ...sourceText.matchAll(
-        /(\d+)\s+0\s+obj\s*<<[\s\S]*?\/Subtype\s*\/Widget[\s\S]*?\/FT\s*\/Sig[\s\S]*?\/P\s+(\d+)\s+0\s+R[\s\S]*?endobj/g
-      ),
-    ];
-    const signerWidgetMatches = [
-      ...sourceText.matchAll(
-        new RegExp(
-          `(\\d+)\\s+0\\s+obj\\s*<<[\\s\\S]*?/Subtype\\s*/Widget[\\s\\S]*?/FT\\s*/Sig[\\s\\S]*?/Rect\\s*\\[${getSignatureWidgetRect(
-            signerType
-          )
-            .map((value) => `${value}(?:\\.0+)?`)
-            .join("\\s+")}\\][\\s\\S]*?/P\\s+(\\d+)\\s+0\\s+R[\\s\\S]*?endobj`,
-          "g"
-        )
+        /(\d+)\s+0\s+obj\s*<<[\s\S]*?\/Subtype\s*\/Widget[\s\S]*?\/FT\s*\/Sig[\s\S]*?\/P\s+(\d+)\s+0\s+R[\s\S]*?endobj/g,
       ),
     ];
     const acroFormMatch = /\/AcroForm\s+(\d+)\s+0\s+R/.exec(sourceText);
 
     if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
-      throw new Error("PDF structure is not supported for incremental signing.");
+      throw new Error(
+        "PDF structure is not supported for incremental signing.",
+      );
     }
 
     if (!widgetMatches.length || !acroFormMatch) {
@@ -1161,20 +1224,21 @@ class ContractPdfService {
     }
 
     const maxObjectNumber = Math.max(
-      ...objectMatches.map((match) => Number(match[1]))
+      ...objectMatches.map((match) => Number(match[1])),
     );
     const rootObjectNumber = Number(rootMatch[1]);
     const prevStartXref = Number(startXrefMatch[1]);
     const acroFormObjectNumber = Number(acroFormMatch[1]);
-    const pageObjectNumber = Number(
-      (signerWidgetMatches[signerWidgetMatches.length - 1] ||
-        widgetMatches[widgetMatches.length - 1])[2]
-    );
+    const pageObjectNumber = Number(widgetMatches[widgetMatches.length - 1][2]);
     const signatureObjectNumber = maxObjectNumber + 1;
     const widgetObjectNumber = maxObjectNumber + 2;
     const appearanceObjectNumber = maxObjectNumber + 3;
+    const imageObjectNumber = maxObjectNumber + 4;
     const pageBody = this.getPdfObjectBody(sourceBytes, pageObjectNumber);
-    const acroFormBody = this.getPdfObjectBody(sourceBytes, acroFormObjectNumber);
+    const acroFormBody = this.getPdfObjectBody(
+      sourceBytes,
+      acroFormObjectNumber,
+    );
 
     if (!pageBody || !acroFormBody) {
       throw new Error("PDF page or AcroForm object is missing.");
@@ -1184,17 +1248,19 @@ class ContractPdfService {
     const updatedPageBody = this.replaceOrAppendArrayItem(
       pageBody,
       "Annots",
-      widgetRef
+      widgetRef,
     );
     const updatedAcroFormBody = this.replaceOrAppendArrayItem(
       acroFormBody,
       "Fields",
-      widgetRef
+      widgetRef,
     );
-    const widgetRect = getSignatureWidgetRect(signerType);
-    const widgetWidth = widgetRect[2] - widgetRect[0];
-    const widgetHeight = widgetRect[3] - widgetRect[1];
-    const appearanceText = getPdfSignatureAppearanceText({
+    const resolvedWidgetRect = widgetRect || getSignatureWidgetRect(signerType);
+    const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
+    const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
+    const appearanceImage = await createDigitalSignatureAppearanceImage({
+      width: widgetWidth,
+      height: widgetHeight,
       contract,
       signerType,
       signerName,
@@ -1218,7 +1284,7 @@ ${byteRangePlaceholder}
 /Type /Annot
 /Subtype /Widget
 /FT /Sig
-/Rect [${widgetRect.join(" ")}]
+/Rect [${resolvedWidgetRect.join(" ")}]
 /V ${signatureObjectNumber} 0 R
 /T (Signature_${escapePdfString(signerType)}_${Date.now()})
 /F 4
@@ -1226,63 +1292,16 @@ ${byteRangePlaceholder}
 /AP << /N ${appearanceObjectNumber} 0 R >>
 >>`;
     const appearanceStream = `q
-0.96 0.99 0.97 rg
-0.07 0.45 0.24 RG
-0.9 w
-0 0 ${widgetWidth} ${widgetHeight} re
-B
-0.07 0.45 0.24 rg
-0 ${widgetHeight - 15} ${widgetWidth} 15 re
-f
-${pdfTextLine({
-  text: "DA KY SO",
-  width: widgetWidth,
-  y: widgetHeight - 11,
-  font: "F2",
-  fontSize: 7.5,
-  color: "1 1 1",
-})}
-${pdfTextLine({
-  text: appearanceText.companyName,
-  width: widgetWidth,
-  y: Math.max(44, widgetHeight - 36),
-  font: "F2",
-  fontSize: 7.2,
-  color: "0.04 0.25 0.13",
-})}
-${pdfTextLine({
-  text: appearanceText.taxOrPhone,
-  width: widgetWidth,
-  y: 29,
-  font: "F1",
-  fontSize: 6.7,
-  color: "0.1 0.1 0.1",
-})}
-${pdfTextLine({
-  text: appearanceText.address,
-  width: widgetWidth,
-  y: 18,
-  font: "F1",
-  fontSize: 6,
-  color: "0.1 0.1 0.1",
-})}
-${pdfTextLine({
-  text: appearanceText.time,
-  width: widgetWidth,
-  y: 8,
-  font: "F1",
-  fontSize: 5.8,
-  color: "0.1 0.1 0.1",
-})}
+${widgetWidth} 0 0 ${widgetHeight} 0 0 cm
+/ImSig Do
 Q`;
     const appearanceObject = `<<
 /Type /XObject
 /Subtype /Form
 /BBox [0 0 ${widgetWidth} ${widgetHeight}]
 /Resources <<
-/Font <<
-/F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-/F2 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+/XObject <<
+/ImSig ${imageObjectNumber} 0 R
 >>
 >>
 /Length ${Buffer.byteLength(appearanceStream, "latin1")}
@@ -1290,39 +1309,62 @@ Q`;
 stream
 ${appearanceStream}
 endstream`;
+    const imageObject = Buffer.concat([
+      Buffer.from(
+        `<<
+/Type /XObject
+/Subtype /Image
+/Width ${appearanceImage.width}
+/Height ${appearanceImage.height}
+/ColorSpace /DeviceRGB
+/BitsPerComponent 8
+/Filter /DCTDecode
+/Length ${appearanceImage.buffer.length}
+>>
+stream
+`,
+        "latin1",
+      ),
+      appearanceImage.buffer,
+      Buffer.from("\nendstream", "latin1"),
+    ]);
     const objects = [
       [pageObjectNumber, updatedPageBody],
       [acroFormObjectNumber, updatedAcroFormBody],
       [signatureObjectNumber, signatureObject],
       [widgetObjectNumber, widgetObject],
       [appearanceObjectNumber, appearanceObject],
+      [imageObjectNumber, imageObject],
     ].sort((left, right) => left[0] - right[0]);
 
-    let incremental = "\n";
+    const chunks = [Buffer.from("\n", "latin1")];
     const offsets = [];
 
     for (const [objectNumber, body] of objects) {
-      offsets.push([
-        objectNumber,
-        sourceBytes.length + Buffer.byteLength(incremental, "latin1"),
-      ]);
-      incremental += `${objectNumber} 0 obj\n${body}\nendobj\n`;
+      const currentLength = chunks.reduce(
+        (sum, chunk) => sum + chunk.length,
+        0,
+      );
+      offsets.push([objectNumber, sourceBytes.length + currentLength]);
+      chunks.push(Buffer.from(`${objectNumber} 0 obj\n`, "latin1"));
+      chunks.push(Buffer.isBuffer(body) ? body : Buffer.from(body, "latin1"));
+      chunks.push(Buffer.from("\nendobj\n", "latin1"));
     }
 
-    const xrefOffset =
-      sourceBytes.length + Buffer.byteLength(incremental, "latin1");
-    incremental += "xref\n";
+    const incrementalBody = Buffer.concat(chunks);
+    const xrefOffset = sourceBytes.length + incrementalBody.length;
+    let trailer = "xref\n";
 
     for (const [objectNumber, offset] of offsets) {
-      incremental += `${objectNumber} 1\n${String(offset).padStart(
+      trailer += `${objectNumber} 1\n${String(offset).padStart(
         10,
-        "0"
+        "0",
       )} 00000 n \n`;
     }
 
-    incremental += `trailer
+    trailer += `trailer
 <<
-/Size ${appearanceObjectNumber + 1}
+/Size ${imageObjectNumber + 1}
 /Root ${rootObjectNumber} 0 R
 /Prev ${prevStartXref}
 >>
@@ -1331,45 +1373,54 @@ ${xrefOffset}
 %%EOF
 `;
 
-    return Buffer.concat([sourceBytes, Buffer.from(incremental, "latin1")]);
+    return Buffer.concat([
+      sourceBytes,
+      incrementalBody,
+      Buffer.from(trailer, "latin1"),
+    ]);
   }
 
   static async prepareByteRangeSignaturePdf({
-    sourceFilePath,
+    sourceBytes,
     contract,
     details = [],
     signerName,
     signerType,
     signatureLength = DEFAULT_SIGNATURE_LENGTH,
   }) {
-    const sourceBytes = await fs.readFile(sourceFilePath);
-    const isIncrementalSignature = sourceBytes.includes(
-      Buffer.from("/ByteRange [")
+    const inputBytes = Buffer.isBuffer(sourceBytes)
+      ? sourceBytes
+      : Buffer.from(sourceBytes || []);
+    const isIncrementalSignature = inputBytes.includes(
+      Buffer.from("/ByteRange ["),
     );
 
     if (isIncrementalSignature) {
       const signingTime = new Date();
-      const placeholderBytes = this.appendIncrementalSignaturePlaceholder({
-        sourceBytes,
+      const { signatureWidgets } = await this.generateContractPdfBuffer(
         contract,
-        signerName,
-        signerType,
-        signatureLength,
-        signingTime,
-      });
+        details,
+      );
+      const signatureWidget = signatureWidgets?.[signerType];
+      const placeholderBytes = await this.appendIncrementalSignaturePlaceholder(
+        {
+          sourceBytes,
+          contract,
+          signerName,
+          signerType,
+          widgetRect: signatureWidget?.rect,
+          signatureLength,
+          signingTime,
+        },
+      );
       const { byteRange, preparedBuffer, contentsHexStart, contentsHexEnd } =
         this.buildByteRange(Buffer.from(placeholderBytes));
       const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
       const fileName = `hop-dong-picare-${
         contract.contractId
       }-byte-range-${hashToSign.slice(0, 12)}.pdf`;
-      const outputPath = path.join(OUTPUT_DIR, fileName);
-
-      await fs.mkdir(OUTPUT_DIR, { recursive: true });
-      await fs.writeFile(outputPath, preparedBuffer);
-
       return {
-        preparedPdfPath: outputPath,
+        preparedPdfBuffer: preparedBuffer,
         preparedPdfHash: hashToSign,
         byteRange,
         signatureLength,
@@ -1378,12 +1429,12 @@ ${xrefOffset}
       };
     }
 
-    const pdfDoc = await PDFLibDocument.load(sourceBytes);
+    const pdfDoc = await PDFLibDocument.load(inputBytes);
     const pages = pdfDoc.getPages();
     const signingTime = new Date();
     const { signatureWidgets } = await this.generateContractPdfBuffer(
       contract,
-      details
+      details,
     );
     const signatureWidget = signatureWidgets?.[signerType];
     const targetPage =
@@ -1404,7 +1455,7 @@ ${xrefOffset}
       pdfDoc.embedFont(boldFontBytes, { subset: true }),
     ]);
 
-    drawCompanyDigitalSignatureAppearance(targetPage, widgetRect, {
+    await drawCompanyDigitalSignatureAppearance(targetPage, widgetRect, {
       signerName,
       signerType,
       contract,
@@ -1434,13 +1485,8 @@ ${xrefOffset}
     const fileName = `hop-dong-picare-${
       contract.contractId
     }-byte-range-${hashToSign.slice(0, 12)}.pdf`;
-    const outputPath = path.join(OUTPUT_DIR, fileName);
-
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-    await fs.writeFile(outputPath, preparedBuffer);
-
     return {
-      preparedPdfPath: outputPath,
+      preparedPdfBuffer: preparedBuffer,
       preparedPdfHash: hashToSign,
       byteRange,
       signatureLength,
@@ -1450,11 +1496,13 @@ ${xrefOffset}
   }
 
   static async embedByteRangeSignature({
-    preparedPdfPath,
+    preparedBytes,
     signatureHex,
     contract,
   }) {
-    const preparedBuffer = await fs.readFile(preparedPdfPath);
+    const preparedBuffer = Buffer.isBuffer(preparedBytes)
+      ? preparedBytes
+      : Buffer.from(preparedBytes || []);
     const { byteRange, contentsHexStart, contentsHexEnd } =
       this.buildByteRange(preparedBuffer);
     const cleanSignatureHex = String(signatureHex || "").replace(/^0x/i, "");
@@ -1466,7 +1514,7 @@ ${xrefOffset}
 
     if (cleanSignatureHex.length > placeholderLength) {
       throw new Error(
-        `signatureHex dài hơn vùng placeholder (${cleanSignatureHex.length}/${placeholderLength}).`
+        `signatureHex dài hơn vùng placeholder (${cleanSignatureHex.length}/${placeholderLength}).`,
       );
     }
 
@@ -1474,31 +1522,25 @@ ${xrefOffset}
     signedBuffer.write(
       cleanSignatureHex.padEnd(placeholderLength, "0"),
       contentsHexStart,
-      "ascii"
+      "ascii",
     );
 
     const signedPdfHash = crypto
       .createHash("sha256")
       .update(signedBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${
-      contract.contractId
-    }-adobe-signed-${signedPdfHash.slice(0, 12)}.pdf`;
-    const outputPath = path.join(OUTPUT_DIR, fileName);
-
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-    await fs.writeFile(outputPath, signedBuffer);
-
     return {
       signedPdfHash,
-      fileName,
-      filePath: outputPath,
+      signedPdfBuffer: signedBuffer,
+      fileName: `hop-dong-picare-${
+        contract.contractId
+      }-ky-so-${signedPdfHash.slice(0, 12)}.pdf`,
       byteRange,
     };
   }
 
   static async embedHandwrittenSignature({
-    sourceFilePath,
+    sourceBytes,
     contract,
     details = [],
     signerType,
@@ -1506,13 +1548,15 @@ ${xrefOffset}
     signatureImageBuffer,
     signatureImageMimeType,
   }) {
-    const sourceBytes = await fs.readFile(sourceFilePath);
-    const pdfDoc = await PDFLibDocument.load(sourceBytes);
+    const inputBytes = Buffer.isBuffer(sourceBytes)
+      ? sourceBytes
+      : Buffer.from(sourceBytes || []);
+    const pdfDoc = await PDFLibDocument.load(inputBytes);
     const pages = pdfDoc.getPages();
     const signingTime = new Date();
     const { signatureWidgets } = await this.generateContractPdfBuffer(
       contract,
-      details
+      details,
     );
     const signatureWidget = signatureWidgets?.[signerType];
     const targetPage =
@@ -1536,7 +1580,7 @@ ${xrefOffset}
         embedImageByMimeType(
           pdfDoc,
           signatureImageBuffer,
-          signatureImageMimeType
+          signatureImageMimeType,
         ),
       ]);
 
@@ -1555,18 +1599,12 @@ ${xrefOffset}
       .createHash("sha256")
       .update(signedBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${
-      contract.contractId
-    }-handwritten-signed-${signedPdfHash.slice(0, 12)}.pdf`;
-    const outputPath = path.join(OUTPUT_DIR, fileName);
-
-    await fs.mkdir(OUTPUT_DIR, { recursive: true });
-    await fs.writeFile(outputPath, signedBuffer);
-
     return {
       signedPdfHash,
-      fileName,
-      filePath: outputPath,
+      signedPdfBuffer: signedBuffer,
+      fileName: `hop-dong-picare-${
+        contract.contractId
+      }-ky-tay-${signedPdfHash.slice(0, 12)}.pdf`,
       widgetRect,
     };
   }

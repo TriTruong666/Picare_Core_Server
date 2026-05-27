@@ -162,6 +162,14 @@ function assertImageOrPdfFile(file, message = "File phải là ảnh hoặc PDF"
   }
 }
 
+function assertImageFile(file, message = "File phải là ảnh") {
+  const mimeType = String(file?.mimetype || "").toLowerCase();
+
+  if (!file?.buffer || !mimeType.startsWith("image/")) {
+    throw new BadRequestException(message);
+  }
+}
+
 function extractS3KeyFromUrl(url) {
   if (!url || typeof url !== "string") {
     return null;
@@ -217,6 +225,82 @@ async function deleteS3ObjectAndRecordIfExists(key) {
   } catch (error) {
     return false;
   }
+}
+
+async function readS3ObjectBuffer(key) {
+  const streamData = await S3Service.getDownloadStream(key);
+  const chunks = [];
+
+  for await (const chunk of streamData.Body) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks);
+}
+
+async function readPdfBufferFromSource(source) {
+  if (!source) {
+    throw new NotFoundException(ErrorCodes.NOT_FOUND);
+  }
+
+  if (Buffer.isBuffer(source)) {
+    return source;
+  }
+
+  if (typeof source === "string") {
+    const key = extractS3KeyFromUrl(source);
+    if (key) {
+      return readS3ObjectBuffer(key);
+    }
+
+    try {
+      return await fs.readFile(source);
+    } catch (error) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+  }
+
+  if (typeof source === "object") {
+    if (source.fileUrl) {
+      const key = extractS3KeyFromUrl(source.fileUrl);
+      if (key) {
+        return readS3ObjectBuffer(key);
+      }
+    }
+
+    if (source.filePath) {
+      try {
+        return await fs.readFile(source.filePath);
+      } catch (error) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+    }
+  }
+
+  throw new NotFoundException(ErrorCodes.NOT_FOUND);
+}
+
+async function uploadPdfBufferToS3({
+  pdfBuffer,
+  fileName,
+  folder,
+  description,
+  visibility = "private",
+}) {
+  const s3Key = S3Service.buildKey(folder, fileName);
+  const s3Result = await S3Service.upload({
+    key: s3Key,
+    body: pdfBuffer,
+    mimeType: "application/pdf",
+    originalName: fileName,
+    fileSize: pdfBuffer.length,
+    folder,
+    clientId: null,
+    description,
+    visibility,
+  });
+
+  return s3Result;
 }
 
 function extractFptIdData(response) {
@@ -291,20 +375,27 @@ class ContractService {
   }
 
   static async ensureContractDocumentFile(contract, document, options = {}) {
-    if (document.filePath) {
+    if (document.fileUrl) {
       return document;
     }
 
     const details =
       options.details ||
       (await this.getContractDetails(contract.contractId, options));
-    const { pdfHashHex, fileName, filePath } =
+    const { pdfBuffer, pdfHashHex, fileName } =
       await ContractPdfService.generateContractPdf(contract, details);
+    const generatedPdf = await uploadPdfBufferToS3({
+      pdfBuffer,
+      fileName,
+      folder: "draft-contracts",
+      description: formatContractCreatedDescription(),
+    });
 
     await document.update(
       {
         fileName,
-        filePath,
+        filePath: null,
+        fileUrl: generatedPdf.url,
         fileHash: pdfHashHex,
       },
       { transaction: options.transaction }
@@ -416,22 +507,12 @@ class ContractService {
         details,
       });
 
-      const fileBuffer = await fs.readFile(latestDocument.filePath);
-      const fileSize = (await fs.stat(latestDocument.filePath)).size;
-      const s3Key = S3Service.buildKey(
-        "unsigned-contracts",
-        latestDocument.fileName
-      );
-      const s3Result = await S3Service.upload({
-        key: s3Key,
-        body: fileBuffer,
-        mimeType: "application/pdf",
-        originalName: latestDocument.fileName,
-        fileSize,
+      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const s3Result = await uploadPdfBufferToS3({
+        pdfBuffer: sourceBuffer,
+        fileName: latestDocument.fileName,
         folder: "unsigned-contracts",
-        clientId: null,
         description: formatContractCreatedDescription(),
-        visibility: "private",
       });
 
       await latestDocument.update(
@@ -488,19 +569,12 @@ class ContractService {
         );
       }
 
-      const fileBuffer = await fs.readFile(latestDocument.filePath);
-      const fileSize = (await fs.stat(latestDocument.filePath)).size;
-      const s3Key = S3Service.buildKey("owner_signed", latestDocument.fileName);
-      const s3Result = await S3Service.upload({
-        key: s3Key,
-        body: fileBuffer,
-        mimeType: "application/pdf",
-        originalName: latestDocument.fileName,
-        fileSize,
+      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const s3Result = await uploadPdfBufferToS3({
+        pdfBuffer: sourceBuffer,
+        fileName: latestDocument.fileName,
         folder: "owner_signed",
-        clientId: null,
         description: formatContractCreatedDescription(),
-        visibility: "private",
       });
 
       await latestDocument.update(
@@ -574,22 +648,12 @@ class ContractService {
         );
       }
 
-      const fileBuffer = await fs.readFile(latestDocument.filePath);
-      const fileSize = (await fs.stat(latestDocument.filePath)).size;
-      const s3Key = S3Service.buildKey(
-        "complete_contract",
-        latestDocument.fileName
-      );
-      const s3Result = await S3Service.upload({
-        key: s3Key,
-        body: fileBuffer,
-        mimeType: "application/pdf",
-        originalName: latestDocument.fileName,
-        fileSize,
+      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const s3Result = await uploadPdfBufferToS3({
+        pdfBuffer: sourceBuffer,
+        fileName: latestDocument.fileName,
         folder: "complete_contract",
-        clientId: null,
         description: formatContractCreatedDescription(),
-        visibility: "private",
       });
 
       await latestDocument.update(
@@ -690,9 +754,15 @@ class ContractService {
         transaction,
       });
 
-      const previousFilePath = latestDocument.filePath;
-      const { pdfHashHex, fileName, filePath } =
+      const previousFileUrl = latestDocument.fileUrl;
+      const { pdfBuffer, pdfHashHex, fileName } =
         await ContractPdfService.generateContractPdf(contract, updatedDetails);
+      const uploadedDraftPdf = await uploadPdfBufferToS3({
+        pdfBuffer,
+        fileName,
+        folder: "draft-contracts",
+        description: formatContractCreatedDescription(),
+      });
 
       await contract.update(
         {
@@ -706,16 +776,19 @@ class ContractService {
         {
           status: CONTRACT_STATUS.DRAFT,
           fileName,
-          filePath,
-          fileUrl: null,
+          filePath: null,
+          fileUrl: uploadedDraftPdf.url,
           fileHash: pdfHashHex,
         },
         { transaction }
       );
 
-      if (previousFilePath && previousFilePath !== filePath) {
+      if (previousFileUrl && previousFileUrl !== uploadedDraftPdf.url) {
         try {
-          await fs.unlink(previousFilePath);
+          const previousKey = extractS3KeyFromUrl(previousFileUrl);
+          if (previousKey) {
+            await deleteS3ObjectAndRecordIfExists(previousKey);
+          }
         } catch (error) {
           // Ignore cleanup failure because it should not break contract updates.
         }
@@ -786,14 +859,23 @@ class ContractService {
         details,
       });
 
+      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
       const preparedSignaturePdf =
         await ContractPdfService.prepareByteRangeSignaturePdf({
-          sourceFilePath: latestDocument.filePath,
+          sourceBytes: sourceBuffer,
           contract,
           details,
           signerName,
           signerType,
         });
+      const preparedPdfUpload = await uploadPdfBufferToS3({
+        pdfBuffer: preparedSignaturePdf.preparedPdfBuffer,
+        fileName: `hop-dong-picare-${
+          contract.contractId
+        }-byte-range-${preparedSignaturePdf.preparedPdfHash.slice(0, 12)}.pdf`,
+        folder: "byte-range",
+        description: formatContractCreatedDescription(),
+      });
 
       const signature = await ContractSignature.create(
         {
@@ -805,7 +887,7 @@ class ContractService {
           signingMethod: "pdf_byte_range",
           status: "pending",
           pdfHashBeforeSign: latestDocument.fileHash,
-          preparedPdfPath: preparedSignaturePdf.preparedPdfPath,
+          preparedPdfPath: preparedPdfUpload.url,
           preparedPdfHash: preparedSignaturePdf.preparedPdfHash,
           byteRange: preparedSignaturePdf.byteRange,
           signatureLength: preparedSignaturePdf.signatureLength,
@@ -897,27 +979,22 @@ class ContractService {
         { transaction }
       );
 
+      const preparedPdfBuffer = await readPdfBufferFromSource(
+        signature.preparedPdfPath
+      );
       const signedPdf = await ContractPdfService.embedByteRangeSignature({
-        preparedPdfPath: signature.preparedPdfPath,
+        preparedBytes: preparedPdfBuffer,
         contract,
         signatureHex,
       });
       const nextVersion = sourceDocument.version + 1;
       const nextStatus = getNextContractStatus(contract, signature.signerType);
       const signedFolder = getSignedContractFolder(nextStatus);
-      const signedPdfBuffer = await fs.readFile(signedPdf.filePath);
-      const signedPdfFileSize = (await fs.stat(signedPdf.filePath)).size;
-      const signedS3Key = S3Service.buildKey(signedFolder, signedPdf.fileName);
-      const signedS3Result = await S3Service.upload({
-        key: signedS3Key,
-        body: signedPdfBuffer,
-        mimeType: "application/pdf",
-        originalName: signedPdf.fileName,
-        fileSize: signedPdfFileSize,
+      const signedS3Result = await uploadPdfBufferToS3({
+        pdfBuffer: signedPdf.signedPdfBuffer,
+        fileName: signedPdf.fileName,
         folder: signedFolder,
-        clientId: null,
         description: formatContractCreatedDescription(),
-        visibility: "private",
       });
       const signedPdfUrl = signedS3Result.url;
 
@@ -927,7 +1004,7 @@ class ContractService {
           version: nextVersion,
           status: nextStatus,
           fileName: signedPdf.fileName,
-          filePath: signedPdf.filePath,
+          filePath: null,
           fileUrl: signedPdfUrl,
           fileHash: signedPdf.signedPdfHash,
         },
@@ -1329,7 +1406,7 @@ class ContractService {
       );
 
       const signedPdf = await ContractPdfService.embedHandwrittenSignature({
-        sourceFilePath: latestDocument.filePath,
+        sourceBytes: await readPdfBufferFromSource(latestDocument.fileUrl),
         contract,
         details,
         signerType: "partner",
@@ -1340,19 +1417,11 @@ class ContractService {
       const nextVersion = latestDocument.version + 1;
       const nextStatus = getNextContractStatus(contract, "partner");
       const signedFolder = getSignedContractFolder(nextStatus);
-      const signedPdfBuffer = await fs.readFile(signedPdf.filePath);
-      const signedPdfFileSize = (await fs.stat(signedPdf.filePath)).size;
-      const signedS3Key = S3Service.buildKey(signedFolder, signedPdf.fileName);
-      const signedS3Result = await S3Service.upload({
-        key: signedS3Key,
-        body: signedPdfBuffer,
-        mimeType: "application/pdf",
-        originalName: signedPdf.fileName,
-        fileSize: signedPdfFileSize,
+      const signedS3Result = await uploadPdfBufferToS3({
+        pdfBuffer: signedPdf.signedPdfBuffer,
+        fileName: signedPdf.fileName,
         folder: signedFolder,
-        clientId: null,
         description: formatContractCreatedDescription(),
-        visibility: "private",
       });
       const signedPdfUrl = signedS3Result.url;
 
@@ -1362,7 +1431,7 @@ class ContractService {
           version: nextVersion,
           status: nextStatus,
           fileName: signedPdf.fileName,
-          filePath: signedPdf.filePath,
+          filePath: null,
           fileUrl: signedPdfUrl,
           fileHash: signedPdf.signedPdfHash,
         },
@@ -1533,7 +1602,12 @@ class ContractService {
 
     for (const signature of contract.signatures || []) {
       if (signature.preparedPdfPath) {
-        localFilePaths.add(signature.preparedPdfPath);
+        const preparedKey = extractS3KeyFromUrl(signature.preparedPdfPath);
+        if (preparedKey) {
+          s3Keys.add(preparedKey);
+        } else {
+          localFilePaths.add(signature.preparedPdfPath);
+        }
       }
 
       const signedPdfKey = extractS3KeyFromUrl(signature.signedPdfUrl);
@@ -1593,16 +1667,16 @@ class ContractService {
     await this.ensureContractDocumentFile(contract, latestDocument, {
       details,
     });
-    const filePath = latestDocument.filePath;
+    const fileUrl = latestDocument.fileUrl || contract.contractUrl;
+    const fileKey = extractS3KeyFromUrl(fileUrl);
 
-    try {
-      await fs.access(filePath);
-    } catch (error) {
+    if (!fileKey) {
       throw new NotFoundException(ErrorCodes.NOT_FOUND);
     }
 
     return {
-      filePath,
+      fileUrl,
+      fileKey,
       fileName:
         latestDocument.fileName ||
         `${contract.contractNumber}.pdf`.replace(/[\\/]/g, "-"),
