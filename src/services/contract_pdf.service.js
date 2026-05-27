@@ -11,6 +11,8 @@ const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
   "C:/Windows/Fonts/times.ttf",
   "C:/Windows/Fonts/arial.ttf",
+  "/usr/share/fonts/TTF/DejaVuSans.ttf",
+  "/usr/share/fonts/TTF/LiberationSans-Regular.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
 ].filter(Boolean);
@@ -18,9 +20,30 @@ const DEFAULT_BOLD_FONT_PATHS = [
   process.env.CONTRACT_BOLD_FONT_PATH,
   "C:/Windows/Fonts/timesbd.ttf",
   "C:/Windows/Fonts/arialbd.ttf",
+  "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+  "/usr/share/fonts/TTF/LiberationSans-Bold.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
 ].filter(Boolean);
+const FONT_SEARCH_DIRS = [
+  "/usr/share/fonts",
+  "/usr/local/share/fonts",
+  "C:/Windows/Fonts",
+];
+const REGULAR_FONT_FILE_NAMES = [
+  "DejaVuSans.ttf",
+  "LiberationSans-Regular.ttf",
+  "Arial.ttf",
+  "arial.ttf",
+  "times.ttf",
+];
+const BOLD_FONT_FILE_NAMES = [
+  "DejaVuSans-Bold.ttf",
+  "LiberationSans-Bold.ttf",
+  "Arial Bold.ttf",
+  "arialbd.ttf",
+  "timesbd.ttf",
+];
 const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
@@ -601,6 +624,12 @@ async function findFontPath() {
     }
   }
 
+  const discoveredFontPath = await findSystemFontPath(REGULAR_FONT_FILE_NAMES);
+
+  if (discoveredFontPath) {
+    return discoveredFontPath;
+  }
+
   throw new Error(
     "No Unicode font found. Set CONTRACT_FONT_PATH to a .ttf font file.",
   );
@@ -616,7 +645,57 @@ async function findBoldFontPath() {
     }
   }
 
+  const discoveredFontPath = await findSystemFontPath(BOLD_FONT_FILE_NAMES);
+
+  if (discoveredFontPath) {
+    return discoveredFontPath;
+  }
+
   return findFontPath();
+}
+
+async function findSystemFontPath(fileNames) {
+  const targetFileNames = new Set(
+    fileNames.map((fileName) => fileName.toLowerCase()),
+  );
+
+  for (const searchDir of FONT_SEARCH_DIRS) {
+    const fontPath = await findFontPathInDir(searchDir, targetFileNames);
+
+    if (fontPath) {
+      return fontPath;
+    }
+  }
+
+  return null;
+}
+
+async function findFontPathInDir(dirPath, targetFileNames) {
+  let entries;
+
+  try {
+    entries = await fs.readdir(dirPath, { withFileTypes: true });
+  } catch (error) {
+    return null;
+  }
+
+  for (const entry of entries) {
+    const entryPath = path.join(dirPath, entry.name);
+
+    if (entry.isFile() && targetFileNames.has(entry.name.toLowerCase())) {
+      return entryPath;
+    }
+
+    if (entry.isDirectory()) {
+      const fontPath = await findFontPathInDir(entryPath, targetFileNames);
+
+      if (fontPath) {
+        return fontPath;
+      }
+    }
+  }
+
+  return null;
 }
 
 function collectPdfBuffer(doc) {
