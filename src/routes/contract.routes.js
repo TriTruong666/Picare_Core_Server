@@ -571,6 +571,24 @@ router.post(
  *               power_of_attorney_image:
  *                 type: string
  *                 format: binary
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               signerType:
+ *                 type: string
+ *                 enum: [owner, partner, individual]
+ *               signerName:
+ *                 type: string
+ *               signerEmail:
+ *                 type: string
+ *               signature_image:
+ *                 type: string
+ *                 description: Base64 raw hoặc data URI dạng data:image/png;base64,...
+ *               signature_image_filename:
+ *                 type: string
+ *               signature_image_mimeType:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Upload hồ sơ tổ chức thành công

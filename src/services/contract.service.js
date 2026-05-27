@@ -1024,6 +1024,10 @@ class ContractService {
       );
     }
 
+    const oldCredentialS3Keys = new Set(
+      collectCredentialS3Keys(contract.individualCredential)
+    );
+
     assertImageFile(
       firstIdentificationImage,
       "Ảnh mặt trước CMND/CCCD không hợp lệ"
@@ -1080,10 +1084,20 @@ class ContractService {
       individualCredential,
     });
 
+    let oldS3ObjectsDeleted = 0;
+    for (const key of oldCredentialS3Keys) {
+      if (await deleteS3ObjectAndRecordIfExists(key)) {
+        oldS3ObjectsDeleted += 1;
+      }
+    }
+
     return {
       contractId,
       signerType: contract.signerType,
       individualCredential,
+      cleanup: {
+        oldS3ObjectsDeleted,
+      },
     };
   }
 

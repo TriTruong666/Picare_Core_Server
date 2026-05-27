@@ -35,6 +35,10 @@ const base64ToMulterFile = ({
 };
 
 const getFileFromRequest = (req, fieldName) => {
+  if (fieldName === "signature_image" && req.file) {
+    return req.file;
+  }
+
   const multipartFile = req.files?.[fieldName]?.[0];
   if (multipartFile) {
     return multipartFile;
@@ -376,12 +380,14 @@ class ContractController {
       }
 
       const { contractId } = req.params;
+      const signerType =
+        req.user?.role === "partner" ? "partner" : req.body.signerType;
       const result = await ContractService.completeHandwrittenSignature({
         contractId,
-        signerType: req.body.signerType,
+        signerType,
         signerName: req.body.signerName,
         signerEmail: req.body.signerEmail,
-        signatureImage: req.file,
+        signatureImage: getFileFromRequest(req, "signature_image"),
         uploadedBy: req.user?.userId || null,
       });
 
