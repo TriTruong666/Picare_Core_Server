@@ -124,10 +124,12 @@ const contractSignatureIdSchema = [
     .withMessage("contractSignatureId phải là UUID hợp lệ"),
 ];
 
-const companyInfoSchema = (field) => [
+const companyInfoSchema = (field, options = {}) => [
   body(`${field}.companyName`)
-    .notEmpty()
-    .withMessage(`${field}.companyName là bắt buộc`)
+    .optional({
+      nullable: Boolean(options.allowNullCompanyName),
+      checkFalsy: Boolean(options.allowNullCompanyName),
+    })
     .isString()
     .withMessage(`${field}.companyName phải là chuỗi`),
   body(`${field}.address`)
@@ -136,8 +138,7 @@ const companyInfoSchema = (field) => [
     .isString()
     .withMessage(`${field}.address phải là chuỗi`),
   body(`${field}.phone`)
-    .notEmpty()
-    .withMessage(`${field}.phone là bắt buộc`)
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage(`${field}.phone phải là chuỗi`),
   body(`${field}.email`)
@@ -150,8 +151,7 @@ const companyInfoSchema = (field) => [
     .isString()
     .withMessage(`${field}.bankInfo phải là chuỗi`),
   body(`${field}.mst`)
-    .notEmpty()
-    .withMessage(`${field}.mst là bắt buộc`)
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage(`${field}.mst phải là chuỗi`),
   body(`${field}.ownerName`)
@@ -186,7 +186,9 @@ const createContractTemplateSchema = [
   body("partnerCompanyInfo")
     .isObject()
     .withMessage("partnerCompanyInfo phải là object"),
-  ...companyInfoSchema("partnerCompanyInfo"),
+  ...companyInfoSchema("partnerCompanyInfo", {
+    allowNullCompanyName: true,
+  }),
   body("contractDueDate")
     .notEmpty()
     .withMessage("contractDueDate là bắt buộc")
@@ -283,6 +285,7 @@ const deletePartnerCredentialSchema = [
 const completeHandwrittenSignatureSchema = [
   ...contractIdSchema,
   body("signerType")
+    .optional({ nullable: true, checkFalsy: true })
     .isIn(["individual", "organization"])
     .withMessage("signerType chỉ nhận individual hoặc organization"),
   body("signerName")

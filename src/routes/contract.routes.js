@@ -52,8 +52,22 @@ const credentialUpload = multer({
  *             properties:
  *               ownerCompanyInfo:
  *                 type: object
+ *                 properties:
+ *                   phone:
+ *                     type: string
+ *                     nullable: true
+ *                   mst:
+ *                     type: string
+ *                     nullable: true
  *               partnerCompanyInfo:
  *                 type: object
+ *                 properties:
+ *                   phone:
+ *                     type: string
+ *                     nullable: true
+ *                   mst:
+ *                     type: string
+ *                     nullable: true
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -545,7 +559,7 @@ router.post(
  * /api/v1/contracts/{contractId}/organization-credential:
  *   post:
  *     summary: Upload hồ sơ tổ chức của đối tác
- *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc.
+ *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc. Mỗi file có thể là ảnh hoặc PDF.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -568,9 +582,11 @@ router.post(
  *               business_license:
  *                 type: string
  *                 format: binary
+ *                 description: Ảnh hoặc PDF
  *               power_of_attorney_image:
  *                 type: string
  *                 format: binary
+ *                 description: Ảnh hoặc PDF
  *         application/json:
  *           schema:
  *             type: object
@@ -608,8 +624,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/credential:
  *   delete:
- *     summary: XoÃ¡ há»“ sÆ¡ kÃ½ cá»§a Ä‘á»‘i tÃ¡c theo loáº¡i
- *     description: DÃ¹ng khi Ä‘á»‘i tÃ¡c Ä‘á»•i luá»“ng kÃ½ tá»« cÃ¡ nhÃ¢n sang tá»• chá»©c hoáº·c ngÆ°á»£c láº¡i. API xoÃ¡ credential JSON vÃ  cÃ¡c file S3 liÃªn quan cá»§a loáº¡i Ä‘Æ°á»£c chá»n.
+ *     summary: Xoá hồ sơ ký của đối tác theo loại
+ *     description: Dùng khi đối tác đổi luồng ký từ cá nhân sang tổ chức hoặc ngược lại. API xoá credential JSON và các file S3 liên quan của loại được chọn.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -666,7 +682,6 @@ router.delete(
  *           schema:
  *             type: object
  *             required:
- *               - signerType
  *               - signature_image
  *             properties:
  *               signerType:

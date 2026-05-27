@@ -152,8 +152,12 @@ function ensurePartnerCredentialReady(contract) {
   }
 }
 
-function assertImageFile(file, message = "File phải là ảnh") {
-  if (!file?.buffer || !file.mimetype?.startsWith("image/")) {
+function assertImageOrPdfFile(file, message = "File phải là ảnh hoặc PDF") {
+  const mimeType = String(file?.mimetype || "").toLowerCase();
+  const isImage = mimeType.startsWith("image/");
+  const isPdf = mimeType === "application/pdf";
+
+  if (!file?.buffer || (!isImage && !isPdf)) {
     throw new BadRequestException(message);
   }
 }
@@ -1129,10 +1133,16 @@ class ContractService {
       );
     }
 
-    assertImageFile(businessLicense, "Giấy phép kinh doanh phải là file ảnh");
+    assertImageOrPdfFile(
+      businessLicense,
+      "Giấy phép kinh doanh phải là file ảnh hoặc PDF"
+    );
 
     if (powerOfAttorney) {
-      assertImageFile(powerOfAttorney, "Giấy uỷ quyền phải là file ảnh");
+      assertImageOrPdfFile(
+        powerOfAttorney,
+        "Giấy uỷ quyền phải là file ảnh hoặc PDF"
+      );
     }
 
     const uploadFile = (file, description) =>
@@ -1177,7 +1187,7 @@ class ContractService {
   static async deletePartnerCredential({ contractId, credentialType }) {
     if (!["individual", "organization"].includes(credentialType)) {
       throw new BadRequestException(
-        "credentialType chá»‰ nháº­n individual hoáº·c organization"
+        "credentialType chỉ nhận individual hoặc organization"
       );
     }
 
@@ -1242,22 +1252,33 @@ class ContractService {
         throw new NotFoundException(ErrorCodes.NOT_FOUND);
       }
 
-      if (!["individual", "organization"].includes(partnerSignerType)) {
+      const resolvedPartnerSignerType =
+        partnerSignerType || contract.signerType || null;
+
+      ensureContractSigningState(contract, "partner");
+      ensurePartnerCredentialReady(contract);
+
+      if (!resolvedPartnerSignerType) {
+        throw new BadRequestException(
+          "Đối tác phải cập nhật signerType trước khi thực hiện flow ký tay"
+        );
+      }
+
+      if (
+        !["individual", "organization"].includes(resolvedPartnerSignerType)
+      ) {
         throw new BadRequestException(
           "signerType chỉ nhận individual hoặc organization"
         );
       }
 
-      ensureContractSigningState(contract, "partner");
-      ensurePartnerCredentialReady(contract);
-
-      if (contract.signerType !== partnerSignerType) {
+      if (contract.signerType !== resolvedPartnerSignerType) {
         throw new BadRequestException(
           "signerType không khớp với loại đối tác đã cập nhật trên hợp đồng"
         );
       }
 
-      if (partnerSignerType !== "individual") {
+      if (resolvedPartnerSignerType !== "individual") {
         throw new BadRequestException(
           "Đối tác tổ chức phải sử dụng flow ký số"
         );
@@ -1372,7 +1393,7 @@ class ContractService {
 
       return {
         contractId,
-        signerType: partnerSignerType,
+        signerType: resolvedPartnerSignerType,
         contractSignatureId: signature.contractSignatureId,
         signedDocumentId: signedDocument.contractDocumentId,
         signedPdfHash: signedPdf.signedPdfHash,
