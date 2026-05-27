@@ -1224,7 +1224,7 @@ class ContractService {
 
   static async completeHandwrittenSignature({
     contractId,
-    signerType,
+    partnerSignerType,
     signerName,
     signerEmail,
     signatureImage,
@@ -1242,16 +1242,25 @@ class ContractService {
         throw new NotFoundException(ErrorCodes.NOT_FOUND);
       }
 
-      ensureContractSigningState(contract, signerType);
+      if (!["individual", "organization"].includes(partnerSignerType)) {
+        throw new BadRequestException(
+          "signerType chỉ nhận individual hoặc organization"
+        );
+      }
 
-      if (signerType === "partner") {
-        ensurePartnerCredentialReady(contract);
+      ensureContractSigningState(contract, "partner");
+      ensurePartnerCredentialReady(contract);
 
-        if (contract.signerType !== "individual") {
-          throw new BadRequestException(
-            "Đối tác tổ chức phải sử dụng flow ký số"
-          );
-        }
+      if (contract.signerType !== partnerSignerType) {
+        throw new BadRequestException(
+          "signerType không khớp với loại đối tác đã cập nhật trên hợp đồng"
+        );
+      }
+
+      if (partnerSignerType !== "individual") {
+        throw new BadRequestException(
+          "Đối tác tổ chức phải sử dụng flow ký số"
+        );
       }
 
       const latestDocument = await this.getLatestContractDocument(contractId, {
@@ -1286,7 +1295,7 @@ class ContractService {
         {
           contractId,
           contractDocumentId: latestDocument.contractDocumentId,
-          signerType,
+          signerType: "partner",
           signerName,
           signerEmail,
           signingMethod: "handwritten",
@@ -1302,13 +1311,13 @@ class ContractService {
         sourceFilePath: latestDocument.filePath,
         contract,
         details,
-        signerType,
+        signerType: "partner",
         signerName,
         signatureImageBuffer: signatureImage.buffer,
         signatureImageMimeType: signatureImage.mimetype,
       });
       const nextVersion = latestDocument.version + 1;
-      const nextStatus = getNextContractStatus(contract, signerType);
+      const nextStatus = getNextContractStatus(contract, "partner");
       const signedFolder = getSignedContractFolder(nextStatus);
       const signedPdfBuffer = await fs.readFile(signedPdf.filePath);
       const signedPdfFileSize = (await fs.stat(signedPdf.filePath)).size;
@@ -1363,6 +1372,7 @@ class ContractService {
 
       return {
         contractId,
+        signerType: partnerSignerType,
         contractSignatureId: signature.contractSignatureId,
         signedDocumentId: signedDocument.contractDocumentId,
         signedPdfHash: signedPdf.signedPdfHash,

@@ -283,19 +283,8 @@ const deletePartnerCredentialSchema = [
 const completeHandwrittenSignatureSchema = [
   ...contractIdSchema,
   body("signerType")
-    .optional({ nullable: true, checkFalsy: true })
-    .custom((value, { req }) => {
-      if (value === undefined || value === null || value === "") {
-        return req.user?.role === "partner";
-      }
-
-      if (req.user?.role === "partner") {
-        return ["partner", "individual"].includes(value);
-      }
-
-      return ["owner", "partner"].includes(value);
-    })
-    .withMessage("signerType chỉ nhận owner hoặc partner"),
+    .isIn(["individual", "organization"])
+    .withMessage("signerType chỉ nhận individual hoặc organization"),
   body("signerName")
     .optional({ nullable: true, checkFalsy: true })
     .isString()

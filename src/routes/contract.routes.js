@@ -671,7 +671,7 @@ router.delete(
  *             properties:
  *               signerType:
  *                 type: string
- *                 enum: [owner, partner]
+ *                 enum: [individual, organization]
  *               signerName:
  *                 type: string
  *               signerEmail:

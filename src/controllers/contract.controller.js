@@ -380,11 +380,9 @@ class ContractController {
       }
 
       const { contractId } = req.params;
-      const signerType =
-        req.user?.role === "partner" ? "partner" : req.body.signerType;
       const result = await ContractService.completeHandwrittenSignature({
         contractId,
-        signerType,
+        partnerSignerType: req.body.signerType,
         signerName: req.body.signerName,
         signerEmail: req.body.signerEmail,
         signatureImage: getFileFromRequest(req, "signature_image"),
