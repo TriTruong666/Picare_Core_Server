@@ -6,6 +6,12 @@ const PDFDocument = require("pdfkit");
 const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 const sharp = require("sharp");
+const PICARE_WATERMARK_LOGO_PATH = path.join(
+  __dirname,
+  "..",
+  "..",
+  "picare_logo_light.svg",
+);
 
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
@@ -44,6 +50,7 @@ const BOLD_FONT_FILE_NAMES = [
   "arialbd.ttf",
   "timesbd.ttf",
 ];
+let picareWatermarkLogoDataUriPromise;
 const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
@@ -315,6 +322,27 @@ function fitTextForImage(text, fontPath, fontSize, maxWidth) {
   return `${trimmed}...`;
 }
 
+async function getPicareWatermarkLogoDataUri() {
+  if (!picareWatermarkLogoDataUriPromise) {
+    picareWatermarkLogoDataUriPromise = fs
+      .readFile(PICARE_WATERMARK_LOGO_PATH, "utf8")
+      .then(async (svg) => {
+        const cleanedSvg = svg.replace(
+          /<path[^>]*fill="#FDFDFD"[^>]*\/>\s*/i,
+          "",
+        );
+        const trimmedLogoBuffer = await sharp(Buffer.from(cleanedSvg, "utf8"))
+          .trim({ background: "#ffffff" })
+          .png()
+          .toBuffer();
+
+        return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
+      });
+  }
+
+  return picareWatermarkLogoDataUriPromise;
+}
+
 async function createDigitalSignatureAppearanceImage({
   width,
   height,
@@ -336,37 +364,46 @@ async function createDigitalSignatureAppearanceImage({
   const scale = 3;
   const imageWidth = Math.round(width * scale);
   const imageHeight = Math.round(height * scale);
-  const contentWidth = width - 16;
+  const contentWidth = width - 14;
   const companyName = fitTextForImage(
     data.companyName,
     boldFontPath,
-    7.2,
+    9.2,
     contentWidth,
   );
   const identityLine = fitTextForImage(
     data.identityLine,
     fontPath,
-    6.7,
+    8.2,
     contentWidth,
   );
   const addressLine = fitTextForImage(
     data.addressLine,
     fontPath,
-    6,
+    7.8,
     contentWidth,
   );
-  const timeLine = fitTextForImage(data.timeLine, fontPath, 5.8, contentWidth);
+  const timeLine = fitTextForImage(
+    data.timeLine,
+    fontPath,
+    7.4,
+    contentWidth,
+  );
+  const logoDataUri = await getPicareWatermarkLogoDataUri();
+  const watermarkWidth = Math.max(24, width - 8);
+  const watermarkHeight = watermarkWidth * (500 / 1200);
+  const watermarkX = (width - watermarkWidth) / 2;
+  const watermarkY = (height - watermarkHeight) / 2 + 6;
+  const borderInset = 1.2;
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
-  <rect x="0" y="0" width="${width}" height="${height}" fill="rgb(245,252,247)" stroke="rgb(18,115,61)" stroke-width="0.9"/>
-  <rect x="0" y="0" width="${width}" height="15" fill="rgb(18,115,61)"/>
-  <text x="${width / 2}" y="11" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="7.5" font-weight="700" fill="#ffffff">ĐÃ KÝ SỐ</text>
-  <text x="${width / 2}" y="${
-    height - Math.max(44, height - 36)
-  }" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="7.2" font-weight="700" fill="rgb(10,64,33)">${escapeXml(companyName)}</text>
-  <text x="${width / 2}" y="${height - 29}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="6.7" fill="rgb(26,26,26)">${escapeXml(identityLine)}</text>
-  <text x="${width / 2}" y="${height - 18}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="6" fill="rgb(26,26,26)">${escapeXml(addressLine)}</text>
-  <text x="${width / 2}" y="${height - 8}" text-anchor="middle" font-family="Times New Roman, Arial, sans-serif" font-size="5.8" fill="rgb(26,26,26)">${escapeXml(timeLine)}</text>
+  <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
+  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#00995d" stroke-width="1.2"/>
+  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="0.12" preserveAspectRatio="xMidYMid meet"/>
+  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="9.2" font-weight="700" fill="#0b5b41">${escapeXml(companyName)}</text>
+  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" fill="#111111">${escapeXml(identityLine)}</text>
+  <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
+  <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.4" fill="#111111">${escapeXml(timeLine)}</text>
 </svg>`;
   const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
 
@@ -1105,6 +1142,24 @@ class ContractPdfService {
       fileName,
       signatureWidgets,
     };
+  }
+
+  static async generateDigitalSignaturePreview({
+    contract,
+    signerType = "owner",
+    signerName,
+    signingTime = new Date(),
+    width = 430,
+    height = 145,
+  }) {
+    return createDigitalSignatureAppearanceImage({
+      width,
+      height,
+      contract,
+      signerType,
+      signerName,
+      signingTime,
+    });
   }
 
   static async appendDigitalSignaturePage({
