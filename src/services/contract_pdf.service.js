@@ -12,6 +12,35 @@ const PICARE_WATERMARK_LOGO_PATH = path.join(
   "..",
   "picare_logo_light.svg",
 );
+const TRUNGHANH_WATERMARK_LOGO_PATH = path.join(
+  __dirname,
+  "..",
+  "..",
+  "trunghanh.svg",
+);
+const SIGNATURE_APPEARANCE_THEMES = {
+  PIC: {
+    logoPath: PICARE_WATERMARK_LOGO_PATH,
+    watermarkWidthInset: 6,
+    watermarkHeightScale: 2.2,
+    watermarkYOffset: 8,
+    watermarkOpacity: 0.2,
+  },
+  TH: {
+    logoPath: TRUNGHANH_WATERMARK_LOGO_PATH,
+    watermarkWidthInset: 0.4,
+    watermarkHeightScale: 0.6,
+    watermarkYOffset: 10,
+    watermarkOpacity: 0.16,
+  },
+  default: {
+    logoPath: PICARE_WATERMARK_LOGO_PATH,
+    watermarkWidthInset: 6,
+    watermarkHeightScale: 2.2,
+    watermarkYOffset: 8,
+    watermarkOpacity: 0.2,
+  },
+};
 
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
@@ -50,7 +79,7 @@ const BOLD_FONT_FILE_NAMES = [
   "arialbd.ttf",
   "timesbd.ttf",
 ];
-let picareWatermarkLogoDataUriPromise;
+const watermarkLogoDataUriPromises = new Map();
 const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
@@ -191,17 +220,18 @@ function getDigitalSignatureAppearanceData({
     companyInfo.companyName || signerName || "",
   ).toLocaleUpperCase("vi-VN");
   const identityLine = getSignatureIdentityLine(companyInfo);
-  const addressLine = `Địa chỉ: ${formatOptionalText(companyInfo.address)}`;
-  const timeLine = `Thời gian: ${formatVietnameseDateTime(signingTime)}`;
+  const addressLine = `\u0110\u1ecba ch\u1ec9: ${formatOptionalText(companyInfo.address)}`;
+  const timeLine = `Th\u1eddi gian: ${formatVietnameseDateTime(signingTime)}`;
+  const signatureTheme = getSignatureAppearanceTheme(companyInfo);
 
   return {
     companyName,
     identityLine,
     addressLine,
     timeLine,
+    signatureTheme,
   };
 }
-
 function truncatePdfText(value, maxLength) {
   const text = escapePdfString(value);
 
@@ -322,11 +352,22 @@ function fitTextForImage(text, fontPath, fontSize, maxWidth) {
   return `${trimmed}...`;
 }
 
-async function getPicareWatermarkLogoDataUri() {
-  if (!picareWatermarkLogoDataUriPromise) {
-    picareWatermarkLogoDataUriPromise = fs
-      .readFile(PICARE_WATERMARK_LOGO_PATH, "utf8")
-      .then(async (svg) => {
+function getSignatureAppearanceTheme(companyInfo = {}) {
+  const companyCode = String(companyInfo.companyCode || "")
+    .trim()
+    .toUpperCase();
+
+  return (
+    SIGNATURE_APPEARANCE_THEMES[companyCode] ||
+    SIGNATURE_APPEARANCE_THEMES.default
+  );
+}
+
+async function getWatermarkLogoDataUri(logoPath) {
+  if (!watermarkLogoDataUriPromises.has(logoPath)) {
+    watermarkLogoDataUriPromises.set(
+      logoPath,
+      fs.readFile(logoPath, "utf8").then(async (svg) => {
         const cleanedSvg = svg.replace(
           /<path[^>]*fill="#FDFDFD"[^>]*\/>\s*/i,
           "",
@@ -337,10 +378,11 @@ async function getPicareWatermarkLogoDataUri() {
           .toBuffer();
 
         return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
-      });
+      }),
+    );
   }
 
-  return picareWatermarkLogoDataUriPromise;
+  return watermarkLogoDataUriPromises.get(logoPath);
 }
 
 async function createDigitalSignatureAppearanceImage({
@@ -384,18 +426,27 @@ async function createDigitalSignatureAppearanceImage({
     contentWidth,
   );
   const timeLine = fitTextForImage(data.timeLine, fontPath, 7.4, contentWidth);
-  const logoDataUri = await getPicareWatermarkLogoDataUri();
-  const watermarkWidth = Math.max(24, width - 6);
-  const watermarkHeight = Math.max(24, height * 2.2);
+  const logoDataUri = await getWatermarkLogoDataUri(
+    data.signatureTheme.logoPath,
+  );
+  const watermarkWidth = Math.max(
+    24,
+    width - data.signatureTheme.watermarkWidthInset,
+  );
+  const watermarkHeight = Math.max(
+    24,
+    height * data.signatureTheme.watermarkHeightScale,
+  );
   const watermarkX = (width - watermarkWidth) / 2;
-  const watermarkY = (height - watermarkHeight) / 2 + 8;
+  const watermarkY =
+    (height - watermarkHeight) / 2 + data.signatureTheme.watermarkYOffset;
   const borderInset = 1.2;
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
-  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#00995d" stroke-width="1.2"/>
-  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="0.2" preserveAspectRatio="none"/>
-  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="12.2" font-weight="700" fill="#0b5b41">${escapeXml(companyName)}</text>
+  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#000000" stroke-width="1.1"/>
+  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="${data.signatureTheme.watermarkOpacity}" preserveAspectRatio="none"/>
+  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="12.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
   <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="10.2" fill="#111111">${escapeXml(identityLine)}</text>
   <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.8" fill="#111111">${escapeXml(addressLine)}</text>
   <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.4" fill="#111111">${escapeXml(timeLine)}</text>
