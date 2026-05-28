@@ -470,8 +470,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/partner-signer-type:
  *   patch:
- *     summary: Cập nhật loại đối tác ký hợp đồng
- *     description: Đối tác phải chọn individual hoặc organization trước khi đi tiếp flow hồ sơ và ký.
+ *     summary: Cap nhat loai doi tac ky hop dong
+ *     description: Doi tac phai chon individual hoac organization truoc khi di tiep flow ho so va ky.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -496,7 +496,7 @@ router.post(
  *                 enum: [individual, organization]
  *     responses:
  *       200:
- *         description: Cập nhật thành công
+ *         description: Cap nhat thanh cong
  */
 router.patch(
   "/:contractId/partner-signer-type",
@@ -509,8 +509,8 @@ router.patch(
  * @swagger
  * /api/v1/contracts/{contractId}/individual-credential:
  *   post:
- *     summary: Upload 2 mặt CMND/CCCD và trích xuất thông tin cá nhân bằng FPT AI
- *     description: Chỉ dùng khi signerType = individual. API upload ảnh vào S3 folder individual_credential, gọi FPT.AI ID Recognition cho từng ảnh và merge thông tin OCR vào individualCredential.
+ *     summary: Upload 2 mat CMND/CCCD va trich xuat thong tin ca nhan bang FPT AI
+ *     description: Chi dung khi signerType = individual. API upload anh vao S3 folder individual_credential, goi FPT.AI ID Recognition cho tung anh va merge thong tin OCR vao individualCredential.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -534,14 +534,14 @@ router.patch(
  *               first_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh mặt trước CMND/CCCD, tối đa 5MB
+ *                 description: Anh mat truoc CMND/CCCD, toi da 5MB
  *               second_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh mặt sau CMND/CCCD, tối đa 5MB
+ *                 description: Anh mat sau CMND/CCCD, toi da 5MB
  *     responses:
  *       200:
- *         description: Upload và trích xuất thông tin thành công
+ *         description: Upload va trich xuat thong tin thanh cong
  */
 router.post(
   "/:contractId/individual-credential",
@@ -558,8 +558,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/organization-credential:
  *   post:
- *     summary: Upload hồ sơ tổ chức của đối tác
- *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc. Mỗi file có thể là ảnh hoặc PDF.
+ *     summary: Upload ho so to chuc cua doi tac
+ *     description: Chi dung khi signerType = organization. business_license la bat buoc, power_of_attorney_image la khong bat buoc. Moi file co the la anh hoac PDF.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -582,11 +582,11 @@ router.post(
  *               business_license:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh hoặc PDF
+ *                 description: Anh hoac PDF
  *               power_of_attorney_image:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh hoặc PDF
+ *                 description: Anh hoac PDF
  *         application/json:
  *           schema:
  *             type: object
@@ -600,14 +600,14 @@ router.post(
  *                 type: string
  *               signature_image:
  *                 type: string
- *                 description: Base64 raw hoặc data URI dạng data:image/png;base64,...
+ *                 description: Base64 raw hoac data URI dang data:image/png;base64,...
  *               signature_image_filename:
  *                 type: string
  *               signature_image_mimeType:
  *                 type: string
  *     responses:
  *       200:
- *         description: Upload hồ sơ tổ chức thành công
+ *         description: Upload ho so to chuc thanh cong
  */
 router.post(
   "/:contractId/organization-credential",
@@ -624,8 +624,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/credential:
  *   delete:
- *     summary: Xoá hồ sơ ký của đối tác theo loại
- *     description: Dùng khi đối tác đổi luồng ký từ cá nhân sang tổ chức hoặc ngược lại. API xoá credential JSON và các file S3 liên quan của loại được chọn.
+ *     summary: Xoa ho so ky cua doi tac theo loai
+ *     description: Dung khi doi tac doi luong ky tu ca nhan sang to chuc hoac nguoc lai. API xoa credential JSON va cac file S3 lien quan cua loai duoc chon.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -650,7 +650,7 @@ router.post(
  *                 enum: [individual, organization]
  *     responses:
  *       200:
- *         description: XoÃ¡ há»“ sÆ¡ kÃ½ thÃ nh cÃ´ng
+ *         description: Xoa ho so ky thanh cong
  */
 router.delete(
   "/:contractId/credential",

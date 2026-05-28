@@ -444,12 +444,10 @@ async function createDigitalSignatureAppearanceImage({
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
-  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#000000" stroke-width="1.1"/>
-  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="${data.signatureTheme.watermarkOpacity}" preserveAspectRatio="none"/>
-  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="12.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
-  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="10.2" fill="#111111">${escapeXml(identityLine)}</text>
-  <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.8" fill="#111111">${escapeXml(addressLine)}</text>
-  <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.4" fill="#111111">${escapeXml(timeLine)}</text>
+  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#000000" stroke-width="1.1"/  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
+  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.2" fill="#111111">${escapeXml(identityLine)}</text>
+  <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
+  <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.4" fill="#111111">${escapeXml(timeLine)}</text>
 </svg>`;
   const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
 

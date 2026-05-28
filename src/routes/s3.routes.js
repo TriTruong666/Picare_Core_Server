@@ -399,7 +399,7 @@ router.get("/download", protect, S3Controller.downloadObject);
  *       401:
  *         description: Chưa xác thực
  */
-router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
+router.get(/^\/download\/(.+)$/, S3Controller.downloadObject);
 
 /**
  * @swagger
@@ -570,4 +570,3 @@ router.get(
 );
 
 module.exports = router;
-

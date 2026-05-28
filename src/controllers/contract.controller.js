@@ -287,7 +287,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Cập nhật loại đối tác ký hợp đồng thành công"
+        "C\u1eadp nh\u1eadt lo\u1ea1i \u0111\u1ed1i t\u00e1c k\u00fd h\u1ee3p \u0111\u1ed3ng th\u00e0nh c\u00f4ng"
       );
     } catch (error) {
       next(error);
@@ -318,7 +318,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Upload và trích xuất thông tin CMND/CCCD thành công"
+        "Upload v\u00e0 tr\u00edch xu\u1ea5t th\u00f4ng tin CMND/CCCD th\u00e0nh c\u00f4ng"
       );
     } catch (error) {
       next(error);
@@ -343,7 +343,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Upload hồ sơ tổ chức thành công"
+        "Upload h\u1ed3 s\u01a1 t\u1ed5 ch\u1ee9c th\u00e0nh c\u00f4ng"
       );
     } catch (error) {
       next(error);
@@ -366,7 +366,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "XoÃ¡ há»“ sÆ¡ kÃ½ cá»§a Ä‘á»‘i tÃ¡c thÃ nh cÃ´ng"
+        "Xo\u00e1 h\u1ed3 s\u01a1 k\u00fd c\u1ee7a \u0111\u1ed1i t\u00e1c th\u00e0nh c\u00f4ng"
       );
     } catch (error) {
       next(error);

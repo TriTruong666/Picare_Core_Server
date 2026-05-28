@@ -1057,14 +1057,6 @@ class ContractService {
 
     const updateData = { signerType };
 
-    if (signerType === "individual") {
-      updateData.organizationCredential = null;
-    }
-
-    if (signerType === "organization") {
-      updateData.individualCredential = null;
-    }
-
     await contract.update(updateData);
 
     return {
@@ -1264,7 +1256,7 @@ class ContractService {
   static async deletePartnerCredential({ contractId, credentialType }) {
     if (!["individual", "organization"].includes(credentialType)) {
       throw new BadRequestException(
-        "credentialType chỉ nhận individual hoặc organization"
+        "credentialType ch\u1ec9 nh\u1eadn individual ho\u1eb7c organization"
       );
     }
 
@@ -1276,7 +1268,7 @@ class ContractService {
 
     if (contract.status === CONTRACT_STATUS.COMPLETED) {
       throw new BadRequestException(
-        "Há»£p Ä‘á»“ng Ä‘Ã£ hoÃ n táº¥t, khÃ´ng thá»ƒ xoÃ¡ há»“ sÆ¡ kÃ½"
+        "H\u1ee3p \u0111\u1ed3ng \u0111\u00e3 ho\u00e0n t\u1ea5t, kh\u00f4ng th\u1ec3 xo\u00e1 h\u1ed3 s\u01a1 k\u00fd"
       );
     }
 
