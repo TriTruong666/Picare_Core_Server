@@ -383,27 +383,22 @@ async function createDigitalSignatureAppearanceImage({
     7.8,
     contentWidth,
   );
-  const timeLine = fitTextForImage(
-    data.timeLine,
-    fontPath,
-    7.4,
-    contentWidth,
-  );
+  const timeLine = fitTextForImage(data.timeLine, fontPath, 7.4, contentWidth);
   const logoDataUri = await getPicareWatermarkLogoDataUri();
-  const watermarkWidth = Math.max(24, width - 8);
-  const watermarkHeight = watermarkWidth * (500 / 1200);
+  const watermarkWidth = Math.max(24, width - 6);
+  const watermarkHeight = Math.max(24, height * 2.2);
   const watermarkX = (width - watermarkWidth) / 2;
-  const watermarkY = (height - watermarkHeight) / 2 + 6;
+  const watermarkY = (height - watermarkHeight) / 2 + 8;
   const borderInset = 1.2;
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
   <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#00995d" stroke-width="1.2"/>
-  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="0.12" preserveAspectRatio="xMidYMid meet"/>
-  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="9.2" font-weight="700" fill="#0b5b41">${escapeXml(companyName)}</text>
-  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" fill="#111111">${escapeXml(identityLine)}</text>
-  <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
-  <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.4" fill="#111111">${escapeXml(timeLine)}</text>
+  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="0.2" preserveAspectRatio="none"/>
+  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="12.2" font-weight="700" fill="#0b5b41">${escapeXml(companyName)}</text>
+  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="10.2" fill="#111111">${escapeXml(identityLine)}</text>
+  <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.8" fill="#111111">${escapeXml(addressLine)}</text>
+  <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.4" fill="#111111">${escapeXml(timeLine)}</text>
 </svg>`;
   const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
 
