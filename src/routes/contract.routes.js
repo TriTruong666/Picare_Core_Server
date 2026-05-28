@@ -2,7 +2,10 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const ContractController = require("../controllers/contract.controller");
-const { protect, protectContractAccess } = require("../middlewares/auth.middleware");
+const {
+  protect,
+  protectContractAccess,
+} = require("../middlewares/auth.middleware");
 const {
   createContractTemplateSchema,
   updateDraftContractSchema,
@@ -93,7 +96,7 @@ router.post(
   "/",
   protect,
   createContractTemplateSchema,
-  ContractController.createContractTemplate
+  ContractController.createContractTemplate,
 );
 
 /**
@@ -136,7 +139,7 @@ router.get(
   "/",
   protect,
   getContractsPaginateSchema,
-  ContractController.getContractsPaginate
+  ContractController.getContractsPaginate,
 );
 
 /**
@@ -187,7 +190,7 @@ router.get(
   "/:contractId/signing-link",
   protect,
   contractIdSchema,
-  ContractController.generatePartnerSigningLink
+  ContractController.generatePartnerSigningLink,
 );
 
 /**
@@ -217,7 +220,7 @@ router.delete(
   "/:contractId",
   protect,
   contractIdSchema,
-  ContractController.deleteContract
+  ContractController.deleteContract,
 );
 
 /**
@@ -278,7 +281,7 @@ router.put(
   "/:contractId",
   protect,
   updateDraftContractSchema,
-  ContractController.updateDraftContract
+  ContractController.updateDraftContract,
 );
 
 /**
@@ -306,7 +309,7 @@ router.post(
   "/:contractId/publish-unsigned",
   protect,
   contractIdSchema,
-  ContractController.publishUnsignedContract
+  ContractController.publishUnsignedContract,
 );
 
 /**
@@ -334,7 +337,7 @@ router.post(
   "/:contractId/publish-owner-signed",
   protect,
   contractIdSchema,
-  ContractController.publishOwnerSignedContract
+  ContractController.publishOwnerSignedContract,
 );
 
 /**
@@ -360,9 +363,9 @@ router.post(
  */
 router.post(
   "/:contractId/publish-completed",
-  protect,
+  protectContractAccess,
   contractIdSchema,
-  ContractController.publishCompletedContract
+  ContractController.publishCompletedContract,
 );
 
 /**
@@ -406,7 +409,7 @@ router.post(
   "/:contractId/signing-sessions",
   protectContractAccess,
   createSigningSessionSchema,
-  ContractController.createSigningSession
+  ContractController.createSigningSession,
 );
 
 /**
@@ -463,7 +466,7 @@ router.post(
   "/:contractId/signing-sessions/:contractSignatureId/complete",
   protectContractAccess,
   completeSigningSessionSchema,
-  ContractController.completeSigningSession
+  ContractController.completeSigningSession,
 );
 
 /**
@@ -502,7 +505,7 @@ router.patch(
   "/:contractId/partner-signer-type",
   protectContractAccess,
   updatePartnerSignerTypeSchema,
-  ContractController.updatePartnerSignerType
+  ContractController.updatePartnerSignerType,
 );
 
 /**
@@ -551,7 +554,7 @@ router.post(
     { name: "second_identification_image", maxCount: 1 },
   ]),
   uploadIndividualCredentialSchema,
-  ContractController.uploadIndividualCredential
+  ContractController.uploadIndividualCredential,
 );
 
 /**
@@ -617,7 +620,7 @@ router.post(
     { name: "power_of_attorney_image", maxCount: 1 },
   ]),
   uploadOrganizationCredentialSchema,
-  ContractController.uploadOrganizationCredential
+  ContractController.uploadOrganizationCredential,
 );
 
 /**
@@ -656,7 +659,7 @@ router.delete(
   "/:contractId/credential",
   protectContractAccess,
   deletePartnerCredentialSchema,
-  ContractController.deletePartnerCredential
+  ContractController.deletePartnerCredential,
 );
 
 /**
@@ -703,7 +706,7 @@ router.post(
   protectContractAccess,
   credentialUpload.single("signature_image"),
   completeHandwrittenSignatureSchema,
-  ContractController.completeHandwrittenSignature
+  ContractController.completeHandwrittenSignature,
 );
 
 /**
@@ -734,14 +737,14 @@ router.get(
   "/:contractId/template-pdf",
   protectContractAccess,
   contractIdSchema,
-  ContractController.previewContractPdf
+  ContractController.previewContractPdf,
 );
 
 router.get(
   "/:contractId",
   protectContractAccess,
   contractIdSchema,
-  ContractController.getContractById
+  ContractController.getContractById,
 );
 
 module.exports = router;
