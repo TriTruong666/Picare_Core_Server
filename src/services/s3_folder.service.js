@@ -1,4 +1,6 @@
 const S3Folder = require("../models/s3_folder.model");
+const S3Asset = require("../models/s3_asset.model");
+const S3Service = require("./s3.service");
 const { BadRequestException, NotFoundException } = require("../common/exceptions/BaseException");
 const { Op } = require("sequelize");
 
@@ -63,16 +65,28 @@ class S3FolderService {
   }
 
   /**
-   * Xóa thư mục (Cascade delete assets)
+   * Xóa thư mục và toàn bộ asset + object S3 liên quan.
    */
   static async delete(folderId) {
     const folder = await this.getById(folderId);
-    
-    // Lưu ý: Ràng buộc Cascade Delete đã được định nghĩa trong Model Association.
-    // Khi xóa Folder record này, Postgres sẽ tự động xóa các S3Asset record liên quan.
+
+    const assets = await S3Asset.findAll({
+      where: { folderId },
+      attributes: ["id", "s3Key"],
+    });
+
+    const keys = assets.map((asset) => asset.s3Key).filter(Boolean);
+    if (keys.length > 0) {
+      await S3Service.deleteMany(keys);
+    }
+
+    for (const asset of assets) {
+      await asset.destroy();
+    }
+
     await folder.destroy();
-    
-    return { message: "Xóa thư mục và các asset liên quan thành công" };
+
+    return { message: "Xóa thư mục, asset DB và dữ liệu S3 liên quan thành công" };
   }
 }
 
