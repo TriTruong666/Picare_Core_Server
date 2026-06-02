@@ -46,8 +46,8 @@ function getModelTableName(model) {
 
 app.use(morgan("dev"));
 app.use(cors({ origin: config.cors, credentials: true }));
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "500mb" }));
+app.use(express.urlencoded({ limit: "500mb", extended: true }));
 app.use(cookieParser());
 
 app.get("/health", async (req, res) => {
@@ -74,7 +74,7 @@ app.use(
   "/api-docs",
   restrictLocalhost,
   swaggerUi.serve,
-  swaggerUi.setup(swaggerSpec)
+  swaggerUi.setup(swaggerSpec),
 );
 
 app.use(globalErrorHandler);
@@ -91,7 +91,7 @@ const startServer = async () => {
 
     if (isForceReset && !isReset) {
       console.log(
-        "[WARNING]: Đây là cảnh báo Force Reset DB, vui lòng kiểm tra kỹ Production."
+        "[WARNING]: Đây là cảnh báo Force Reset DB, vui lòng kiểm tra kỹ Production.",
       );
       console.log("[DATABASE]: Đang khởi tạo lại database...");
       await sequelize.sync({ force: true });
@@ -101,11 +101,14 @@ const startServer = async () => {
         await redis.flushall();
         console.log("[REDIS]: Đã dọn dẹp toàn bộ dữ liệu cache.");
       } catch (redisErr) {
-        console.error("[REDIS ERROR]: Lỗi khi flushall dữ liệu:", redisErr.message);
+        console.error(
+          "[REDIS ERROR]: Lỗi khi flushall dữ liệu:",
+          redisErr.message,
+        );
       }
     } else if (isReset && !isForceReset) {
       console.log(
-        "[DATABASE]: Đang khởi tạo lại database (có bảo vệ các bảng quan trọng)..."
+        "[DATABASE]: Đang khởi tạo lại database (có bảo vệ các bảng quan trọng)...",
       );
 
       const queryInterface = sequelize.getQueryInterface();
@@ -115,7 +118,9 @@ const startServer = async () => {
         const normalizedTableName = normalizeTableName(table);
 
         if (!protectedTableSet.has(normalizedTableName)) {
-          await queryInterface.dropTable(normalizedTableName, { cascade: true });
+          await queryInterface.dropTable(normalizedTableName, {
+            cascade: true,
+          });
         }
       }
 
@@ -129,8 +134,8 @@ const startServer = async () => {
 
       console.log(
         `[DATABASE]: Database đã được khởi tạo lại (trừ bảng: ${protectedTables.join(
-          ", "
-        )}).`
+          ", ",
+        )}).`,
       );
     } else {
       console.log("[DATABASE]: Đang kiểm tra và đồng bộ cấu trúc database...");
