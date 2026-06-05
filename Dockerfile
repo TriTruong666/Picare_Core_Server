@@ -31,6 +31,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/proto ./proto
 COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/picare_logo_light.svg ./picare_logo_light.svg
+COPY --from=builder /app/trunghanh.svg ./trunghanh.svg
 
 # Expose ports (Express and gRPC)
 EXPOSE 1905

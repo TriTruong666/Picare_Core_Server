@@ -6,18 +6,12 @@ const PDFDocument = require("pdfkit");
 const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 const sharp = require("sharp");
-const PICARE_WATERMARK_LOGO_PATH = path.join(
-  __dirname,
-  "..",
-  "..",
-  "picare_logo_light.svg",
-);
-const TRUNGHANH_WATERMARK_LOGO_PATH = path.join(
-  __dirname,
-  "..",
-  "..",
-  "trunghanh.svg",
-);
+function resolveAssetPath(fileName) {
+  return path.resolve(__dirname, "..", "..", fileName);
+}
+
+const PICARE_WATERMARK_LOGO_PATH = resolveAssetPath("picare_logo_light.svg");
+const TRUNGHANH_WATERMARK_LOGO_PATH = resolveAssetPath("trunghanh.svg");
 const SIGNATURE_APPEARANCE_THEMES = {
   PIC: {
     logoPath: PICARE_WATERMARK_LOGO_PATH,
@@ -378,6 +372,12 @@ async function getWatermarkLogoDataUri(logoPath) {
           .toBuffer();
 
         return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
+      }).catch((error) => {
+        if (error?.code === "ENOENT") {
+          throw new Error(`Watermark logo asset not found at ${logoPath}`);
+        }
+
+        throw error;
       }),
     );
   }
