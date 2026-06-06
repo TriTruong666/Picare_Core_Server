@@ -31,6 +31,12 @@ try {
   console.warn("[MODELS]: Failed to load contract models.", err.message);
 }
 
+try {
+  Object.assign(db, require("./product_qr"));
+} catch (err) {
+  console.warn("[MODELS]: Failed to load product_qr models.", err.message);
+}
+
 Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
     db[modelName].associate(db);
