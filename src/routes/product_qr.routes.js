@@ -95,10 +95,12 @@ router.get("/:productId", productIdSchema, ProductQRController.getProductQRById)
  *               rawContent:
  *                 type: string
  *                 description: Nội dung plain text hoặc HTML từ rich text editor
- *               image:
- *                 type: string
- *                 format: binary
- *                 description: Ảnh sản phẩm upload lên S3, lưu tại imageUrl
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Danh sách ảnh sản phẩm upload lên S3, lưu tại imageUrl
  *               note:
  *                 type: string
  *                 nullable: true
@@ -113,7 +115,7 @@ router.get("/:productId", productIdSchema, ProductQRController.getProductQRById)
 router.post(
   "/",
   protect,
-  upload.single("image"),
+  upload.array("images", 10),
   createProductQRSchema,
   ProductQRController.create,
 );
@@ -144,9 +146,11 @@ router.post(
  *                 type: string
  *               rawContent:
  *                 type: string
- *               image:
- *                 type: string
- *                 format: binary
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
  *               note:
  *                 type: string
  *                 nullable: true
@@ -161,7 +165,7 @@ router.post(
 router.put(
   "/:productId",
   protect,
-  upload.single("image"),
+  upload.array("images", 10),
   updateProductQRSchema,
   ProductQRController.update,
 );

@@ -17,6 +17,7 @@ const LOGO_SIZE = 180;
 
 const FIELD_DEFINITIONS = [
   { key: "productName", labels: ["Tên sản phẩm"] },
+  { key: "sku", labels: ["Mã sản phẩm"] },
   { key: "notificationNumber", labels: ["Số công bố"] },
   { key: "uses", labels: ["Công dụng"] },
   { key: "usageInstructions", labels: ["Cách sử dụng"] },
@@ -211,21 +212,35 @@ class ProductQRService {
       .toBuffer();
   }
 
-  async uploadProductImage(imageFile, uploadedBy) {
-    if (!imageFile) return null;
+  async uploadProductImages(imageFiles, uploadedBy) {
+    if (!Array.isArray(imageFiles) || imageFiles.length === 0) return [];
 
-    const key = S3Service.buildKey(QR_FOLDER, imageFile.originalname);
-    return S3Service.upload({
-      key,
-      body: imageFile.buffer,
-      mimeType: imageFile.mimetype,
-      originalName: imageFile.originalname,
-      fileSize: imageFile.size,
-      folder: QR_FOLDER,
-      uploadedBy,
-      description: `Product QR source image ${imageFile.originalname}`,
-      visibility: AssetVisibility.PUBLIC,
-    });
+    return Promise.all(
+      imageFiles.map((imageFile) => {
+        const key = S3Service.buildKey(QR_FOLDER, imageFile.originalname);
+        return S3Service.upload({
+          key,
+          body: imageFile.buffer,
+          mimeType: imageFile.mimetype,
+          originalName: imageFile.originalname,
+          fileSize: imageFile.size,
+          folder: QR_FOLDER,
+          uploadedBy,
+          description: `Product QR source image ${imageFile.originalname}`,
+          visibility: AssetVisibility.PUBLIC,
+        });
+      }),
+    );
+  }
+
+  extractS3KeysFromUrls(fileUrls) {
+    const normalizedUrls = Array.isArray(fileUrls)
+      ? fileUrls
+      : (fileUrls ? [fileUrls] : []);
+
+    return normalizedUrls
+      .map((fileUrl) => this.extractS3KeyFromUrl(fileUrl))
+      .filter(Boolean);
   }
 
   async getProductQRsPaginate({ page = 1, limit = 20, search = "" } = {}) {
@@ -265,7 +280,13 @@ class ProductQRService {
     return ProductQRDTO.fromProductQR(productQR);
   }
 
-  async create({ linkUrl, rawContent, note = null, uploadedBy = null, imageFile = null }) {
+  async create({
+    linkUrl,
+    rawContent,
+    note = null,
+    uploadedBy = null,
+    imageFiles = [],
+  }) {
     const productId = randomUUID();
     const resolvedLinkUrl = linkUrl || this.buildClientQrUrl(productId);
     const jsonContent = this.buildJsonContent(productId, resolvedLinkUrl, rawContent);
@@ -273,7 +294,7 @@ class ProductQRService {
     const qrFilename = `${productId}.png`;
     const qrKey = S3Service.buildKey(QR_FOLDER, qrFilename);
     let uploadedQrAsset = null;
-    let uploadedImageAsset = null;
+    let uploadedImageAssets = [];
 
     try {
       uploadedQrAsset = await S3Service.upload({
@@ -288,7 +309,7 @@ class ProductQRService {
         visibility: AssetVisibility.PUBLIC,
       });
 
-      uploadedImageAsset = await this.uploadProductImage(imageFile, uploadedBy);
+      uploadedImageAssets = await this.uploadProductImages(imageFiles, uploadedBy);
 
       const productQR = await ProductQR.create({
         productId,
@@ -296,7 +317,7 @@ class ProductQRService {
         jsonContent,
         qrImage: uploadedQrAsset.url,
         linkUrl: resolvedLinkUrl,
-        imageUrl: uploadedImageAsset?.url || null,
+        imageUrl: uploadedImageAssets.map((asset) => asset.url),
         note,
       });
 
@@ -313,7 +334,9 @@ class ProductQRService {
         }
       }
 
-      if (uploadedImageAsset?.key) {
+      for (const uploadedImageAsset of uploadedImageAssets) {
+        if (!uploadedImageAsset?.key) continue;
+
         try {
           await S3Service.deleteAndRecord(uploadedImageAsset.key);
         } catch (cleanupError) {
@@ -330,7 +353,7 @@ class ProductQRService {
   async update(
     productId,
     updateData,
-    { imageFile = null, uploadedBy = null } = {},
+    { imageFiles = [], uploadedBy = null } = {},
   ) {
     const productQR = await this.getProductQRModelByProductId(productId);
     const nextLinkUrl =
@@ -342,8 +365,8 @@ class ProductQRService {
         ? updateData.rawContent
         : productQR.rawContent;
     const payload = {};
-    let uploadedImageAsset = null;
-    const oldImageKey = this.extractS3KeyFromUrl(productQR.imageUrl);
+    let uploadedImageAssets = [];
+    const oldImageKeys = this.extractS3KeysFromUrls(productQR.imageUrl);
 
     if (Object.prototype.hasOwnProperty.call(updateData, "linkUrl")) {
       payload.linkUrl = updateData.linkUrl;
@@ -365,18 +388,22 @@ class ProductQRService {
     }
 
     try {
-      if (imageFile) {
-        uploadedImageAsset = await this.uploadProductImage(imageFile, uploadedBy);
-        payload.imageUrl = uploadedImageAsset.url;
+      if (Array.isArray(imageFiles) && imageFiles.length > 0) {
+        uploadedImageAssets = await this.uploadProductImages(imageFiles, uploadedBy);
+        payload.imageUrl = uploadedImageAssets.map((asset) => asset.url);
       }
 
       await productQR.update(payload);
 
-      if (imageFile && oldImageKey) {
-        await S3Service.deleteAndRecord(oldImageKey);
+      if (uploadedImageAssets.length > 0) {
+        for (const oldImageKey of oldImageKeys) {
+          await S3Service.deleteAndRecord(oldImageKey);
+        }
       }
     } catch (error) {
-      if (uploadedImageAsset?.key) {
+      for (const uploadedImageAsset of uploadedImageAssets) {
+        if (!uploadedImageAsset?.key) continue;
+
         try {
           await S3Service.deleteAndRecord(uploadedImageAsset.key);
         } catch (cleanupError) {
@@ -396,13 +423,13 @@ class ProductQRService {
   async delete(productId) {
     const productQR = await this.getProductQRModelByProductId(productId);
     const qrKey = this.extractS3KeyFromUrl(productQR.qrImage);
-    const imageKey = this.extractS3KeyFromUrl(productQR.imageUrl);
+    const imageKeys = this.extractS3KeysFromUrls(productQR.imageUrl);
 
     if (qrKey) {
       await S3Service.deleteAndRecord(qrKey);
     }
 
-    if (imageKey) {
+    for (const imageKey of imageKeys) {
       await S3Service.deleteAndRecord(imageKey);
     }
 

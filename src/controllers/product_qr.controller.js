@@ -58,7 +58,7 @@ class ProductQRController {
         rawContent: req.body.rawContent,
         note: req.body.note,
         uploadedBy: req.user?.userId || null,
-        imageFile: req.file || null,
+        imageFiles: req.files || [],
       });
 
       return ResponseHandler.created(
@@ -80,7 +80,7 @@ class ProductQRController {
 
       const { productId } = req.params;
       const productQR = await ProductQRService.update(productId, req.body, {
-        imageFile: req.file || null,
+        imageFiles: req.files || [],
         uploadedBy: req.user?.userId || null,
       });
 

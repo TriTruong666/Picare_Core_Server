@@ -51,6 +51,11 @@ const appConfig = {
       "s3_folders",
       "s3_assets",
       "app_configs",
+      "contract",
+      "contract_detail",
+      "contract_document",
+      "contract_signature",
+      // "product_qrs",
     ],
   },
 
