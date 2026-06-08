@@ -32,6 +32,16 @@ const ProductQR = sequelize.define(
       allowNull: true,
       field: "qr_image",
     },
+    linkUrl: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "link_url",
+    },
+    imageUrl: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "image_url",
+    },
     note: {
       type: DataTypes.TEXT,
       allowNull: true,

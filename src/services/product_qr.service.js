@@ -1,16 +1,18 @@
 const path = require("path");
 const { randomUUID } = require("crypto");
+const { Op } = require("sequelize");
 const QRCode = require("qrcode");
 const sharp = require("sharp");
-const appConfig = require("../config/app.config");
 const ProductQR = require("../models/product_qr/product_qr.model");
 const S3Service = require("./s3.service");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
+const { ProductQRDTO } = require("../schemas/product_qr.schema");
+const { NotFoundException } = require("../common/exceptions/BaseException");
 
 const LOGO_PATH = path.join(process.cwd(), "picare_logo_light.svg");
 const QR_FOLDER = "product_qr";
 const QR_SIZE = 1000;
-const LOGO_SIZE = 100;
+const LOGO_SIZE = 180;
 
 const FIELD_DEFINITIONS = [
   { key: "productName", labels: ["Tên sản phẩm"] },
@@ -143,6 +145,37 @@ class ProductQRService {
     return parseRichTextContent(rawContent);
   }
 
+  buildJsonContent(productId, linkUrl, rawContent) {
+    return {
+      productId,
+      linkUrl,
+      ...this.parseRichTextContent(rawContent),
+    };
+  }
+
+  extractS3KeyFromUrl(fileUrl) {
+    if (!fileUrl) return null;
+
+    try {
+      const parsedUrl = new URL(fileUrl);
+      return decodeURIComponent(parsedUrl.pathname.replace(/^\/+/, ""));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async getProductQRModelByProductId(productId) {
+    const productQR = await ProductQR.findOne({
+      where: { productId },
+    });
+
+    if (!productQR) {
+      throw new NotFoundException("Không tìm thấy QR sản phẩm");
+    }
+
+    return productQR;
+  }
+
   async generateQRCodeBuffer(url) {
     const qrBuffer = await QRCode.toBuffer(url, {
       type: "png",
@@ -171,26 +204,75 @@ class ProductQRService {
       .toBuffer();
   }
 
-  async create({ rawContent, note = null, uploadedBy = null }) {
-    const productId = randomUUID();
-    const clientBaseUrl = appConfig.client.baseUrl.replace(/\/+$/, "");
-    const qrUrl = `${clientBaseUrl}/qr-products/${productId}`;
-    const jsonContent = {
-      productId,
-      qrUrl,
-      ...this.parseRichTextContent(rawContent),
+  async uploadProductImage(imageFile, uploadedBy) {
+    if (!imageFile) return null;
+
+    const key = S3Service.buildKey(QR_FOLDER, imageFile.originalname);
+    return S3Service.upload({
+      key,
+      body: imageFile.buffer,
+      mimeType: imageFile.mimetype,
+      originalName: imageFile.originalname,
+      fileSize: imageFile.size,
+      folder: QR_FOLDER,
+      uploadedBy,
+      description: `Product QR source image ${imageFile.originalname}`,
+      visibility: AssetVisibility.PUBLIC,
+    });
+  }
+
+  async getProductQRsPaginate({ page = 1, limit = 20, search = "" } = {}) {
+    const where = {};
+
+    if (search) {
+      where[Op.or] = [
+        { productId: { [Op.iLike]: `%${search}%` } },
+        { linkUrl: { [Op.iLike]: `%${search}%` } },
+        { rawContent: { [Op.iLike]: `%${search}%` } },
+        { note: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    const pLimit = parseInt(limit, 10);
+    const pPage = parseInt(page, 10);
+    const offset = (pPage - 1) * pLimit;
+
+    const { count, rows } = await ProductQR.findAndCountAll({
+      where,
+      order: [["createdAt", "DESC"]],
+      limit: pLimit,
+      offset,
+    });
+
+    return {
+      count,
+      productQRs: ProductQRDTO.fromProductQRs(rows),
+      page: pPage,
+      limit: pLimit,
+      totalPages: Math.ceil(count / pLimit),
     };
-    const qrBuffer = await this.generateQRCodeBuffer(qrUrl);
-    const filename = `${productId}.png`;
-    const key = S3Service.buildKey(QR_FOLDER, filename);
-    let uploadedAsset = null;
+  }
+
+  async getProductQRByProductId(productId) {
+    const productQR = await this.getProductQRModelByProductId(productId);
+    return ProductQRDTO.fromProductQR(productQR);
+  }
+
+  async create({ linkUrl, rawContent, note = null, uploadedBy = null, imageFile = null }) {
+    const productId = randomUUID();
+    const jsonContent = this.buildJsonContent(productId, linkUrl, rawContent);
+    const qrBuffer = await this.generateQRCodeBuffer(linkUrl);
+    const qrFilename = `${productId}.png`;
+    const qrKey = S3Service.buildKey(QR_FOLDER, qrFilename);
+    let uploadedQrAsset = null;
+    let uploadedImageAsset = null;
 
     try {
-      uploadedAsset = await S3Service.upload({
-        key,
+      uploadedQrAsset = await S3Service.upload({
+        key: qrKey,
         body: qrBuffer,
         mimeType: "image/png",
-        originalName: filename,
+        originalName: qrFilename,
         fileSize: qrBuffer.length,
         folder: QR_FOLDER,
         uploadedBy,
@@ -198,26 +280,126 @@ class ProductQRService {
         visibility: AssetVisibility.PUBLIC,
       });
 
-      return await ProductQR.create({
+      uploadedImageAsset = await this.uploadProductImage(imageFile, uploadedBy);
+
+      const productQR = await ProductQR.create({
         productId,
         rawContent,
         jsonContent,
-        qrImage: uploadedAsset.url,
+        qrImage: uploadedQrAsset.url,
+        linkUrl,
+        imageUrl: uploadedImageAsset?.url || null,
         note,
       });
+
+      return ProductQRDTO.fromProductQR(productQR);
     } catch (error) {
-      if (uploadedAsset?.key) {
+      if (uploadedQrAsset?.key) {
         try {
-          await S3Service.deleteAndRecord(uploadedAsset.key);
+          await S3Service.deleteAndRecord(uploadedQrAsset.key);
         } catch (cleanupError) {
           console.error(
-            `[PRODUCT_QR]: Failed to clean up ${uploadedAsset.key}:`,
+            `[PRODUCT_QR]: Failed to clean up ${uploadedQrAsset.key}:`,
+            cleanupError.message,
+          );
+        }
+      }
+
+      if (uploadedImageAsset?.key) {
+        try {
+          await S3Service.deleteAndRecord(uploadedImageAsset.key);
+        } catch (cleanupError) {
+          console.error(
+            `[PRODUCT_QR]: Failed to clean up ${uploadedImageAsset.key}:`,
             cleanupError.message,
           );
         }
       }
       throw error;
     }
+  }
+
+  async update(
+    productId,
+    updateData,
+    { imageFile = null, uploadedBy = null } = {},
+  ) {
+    const productQR = await this.getProductQRModelByProductId(productId);
+    const nextLinkUrl =
+      Object.prototype.hasOwnProperty.call(updateData, "linkUrl")
+        ? updateData.linkUrl
+        : productQR.linkUrl;
+    const nextRawContent =
+      Object.prototype.hasOwnProperty.call(updateData, "rawContent")
+        ? updateData.rawContent
+        : productQR.rawContent;
+    const payload = {};
+    let uploadedImageAsset = null;
+    const oldImageKey = this.extractS3KeyFromUrl(productQR.imageUrl);
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "linkUrl")) {
+      payload.linkUrl = updateData.linkUrl;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "rawContent")) {
+      payload.rawContent = updateData.rawContent;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updateData, "linkUrl") ||
+      Object.prototype.hasOwnProperty.call(updateData, "rawContent")
+    ) {
+      payload.jsonContent = this.buildJsonContent(productId, nextLinkUrl, nextRawContent);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updateData, "note")) {
+      payload.note = updateData.note;
+    }
+
+    try {
+      if (imageFile) {
+        uploadedImageAsset = await this.uploadProductImage(imageFile, uploadedBy);
+        payload.imageUrl = uploadedImageAsset.url;
+      }
+
+      await productQR.update(payload);
+
+      if (imageFile && oldImageKey) {
+        await S3Service.deleteAndRecord(oldImageKey);
+      }
+    } catch (error) {
+      if (uploadedImageAsset?.key) {
+        try {
+          await S3Service.deleteAndRecord(uploadedImageAsset.key);
+        } catch (cleanupError) {
+          console.error(
+            `[PRODUCT_QR]: Failed to clean up ${uploadedImageAsset.key}:`,
+            cleanupError.message,
+          );
+        }
+      }
+
+      throw error;
+    }
+
+    return ProductQRDTO.fromProductQR(productQR);
+  }
+
+  async delete(productId) {
+    const productQR = await this.getProductQRModelByProductId(productId);
+    const qrKey = this.extractS3KeyFromUrl(productQR.qrImage);
+    const imageKey = this.extractS3KeyFromUrl(productQR.imageUrl);
+
+    if (qrKey) {
+      await S3Service.deleteAndRecord(qrKey);
+    }
+
+    if (imageKey) {
+      await S3Service.deleteAndRecord(imageKey);
+    }
+
+    await productQR.destroy();
+    return { message: "Xóa QR sản phẩm thành công" };
   }
 }
 
