@@ -87,11 +87,11 @@ router.get("/:productId", productIdSchema, ProductQRController.getProductQRById)
  *         multipart/form-data:
  *           schema:
  *             type: object
- *             required: [linkUrl, rawContent]
+ *             required: [rawContent]
  *             properties:
  *               linkUrl:
  *                 type: string
- *                 description: URL hub client sẽ được encode vào mã QR
+ *                 description: URL sẽ được encode vào mã QR. Nếu không truyền, backend tự sinh link mặc định của product QR.
  *               rawContent:
  *                 type: string
  *                 description: Nội dung plain text hoặc HTML từ rich text editor

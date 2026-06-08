@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const { Op } = require("sequelize");
 const QRCode = require("qrcode");
 const sharp = require("sharp");
+const appConfig = require("../config/app.config");
 const ProductQR = require("../models/product_qr/product_qr.model");
 const S3Service = require("./s3.service");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
@@ -145,9 +146,15 @@ class ProductQRService {
     return parseRichTextContent(rawContent);
   }
 
+  buildClientQrUrl(productId) {
+    const clientBaseUrl = appConfig.client.baseUrl.replace(/\/+$/, "");
+    return `${clientBaseUrl}/qr-products/${productId}`;
+  }
+
   buildJsonContent(productId, linkUrl, rawContent) {
     return {
       productId,
+      qrUrl: linkUrl,
       linkUrl,
       ...this.parseRichTextContent(rawContent),
     };
@@ -260,8 +267,9 @@ class ProductQRService {
 
   async create({ linkUrl, rawContent, note = null, uploadedBy = null, imageFile = null }) {
     const productId = randomUUID();
-    const jsonContent = this.buildJsonContent(productId, linkUrl, rawContent);
-    const qrBuffer = await this.generateQRCodeBuffer(linkUrl);
+    const resolvedLinkUrl = linkUrl || this.buildClientQrUrl(productId);
+    const jsonContent = this.buildJsonContent(productId, resolvedLinkUrl, rawContent);
+    const qrBuffer = await this.generateQRCodeBuffer(resolvedLinkUrl);
     const qrFilename = `${productId}.png`;
     const qrKey = S3Service.buildKey(QR_FOLDER, qrFilename);
     let uploadedQrAsset = null;
@@ -287,7 +295,7 @@ class ProductQRService {
         rawContent,
         jsonContent,
         qrImage: uploadedQrAsset.url,
-        linkUrl,
+        linkUrl: resolvedLinkUrl,
         imageUrl: uploadedImageAsset?.url || null,
         note,
       });
@@ -328,7 +336,7 @@ class ProductQRService {
     const nextLinkUrl =
       Object.prototype.hasOwnProperty.call(updateData, "linkUrl")
         ? updateData.linkUrl
-        : productQR.linkUrl;
+        : (productQR.linkUrl || productQR.jsonContent?.qrUrl || this.buildClientQrUrl(productId));
     const nextRawContent =
       Object.prototype.hasOwnProperty.call(updateData, "rawContent")
         ? updateData.rawContent

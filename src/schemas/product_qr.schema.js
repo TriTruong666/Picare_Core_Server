@@ -24,6 +24,7 @@ class ProductQRDTO {
 
 const createProductQRSchema = [
   body("linkUrl")
+    .optional()
     .isURL({ require_tld: false })
     .withMessage("linkUrl phải là URL hợp lệ"),
   body("rawContent")
