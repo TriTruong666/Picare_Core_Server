@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const UserController = require("../controllers/user.controller");
-const { protect } = require("../middlewares/auth.middleware");
+const { protect, restrictTo } = require("../middlewares/auth.middleware");
 const {
   createUserSchema,
   updateUserSchema,
@@ -12,24 +12,20 @@ const {
  * @swagger
  * tags:
  *   name: Users
- *   description: API Quản lý thông tin và tài khoản người dùng trong hệ thống
+ *   description: User management APIs
  */
 
 /**
  * @swagger
  * /api/v1/users/me:
  *   get:
- *     summary: Lấy thông tin cá nhân của người đang đăng nhập
+ *     summary: Get current user profile
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Trả về thông tin user hiện tại
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
+ *         description: Success
  */
 router.get("/me", protect, UserController.getMe);
 
@@ -37,7 +33,7 @@ router.get("/me", protect, UserController.getMe);
  * @swagger
  * /api/v1/users:
  *   get:
- *     summary: Lấy danh sách người dùng (Phân trang & Tìm kiếm)
+ *     summary: Get users with pagination
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -47,42 +43,22 @@ router.get("/me", protect, UserController.getMe);
  *         schema:
  *           type: integer
  *           default: 1
- *         description: Số trang hiện tại
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
  *           default: 20
- *         description: Số lượng bản ghi trên một trang 
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Tìm kiếm theo tên, email hoặc số điện thoại
  *       - in: query
  *         name: role
  *         schema:
  *           type: string
- *           enum: [admin, ecom, logistics, default]
- *         description: Lọc theo vai trò
  *     responses:
  *       200:
- *         description: Thành công
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 pagination:
- *                   $ref: '#/components/schemas/Pagination'
- *                 data:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/User'
+ *         description: Success
  */
 router.get("/", protect, UserController.getUserPaginate);
 
@@ -90,7 +66,7 @@ router.get("/", protect, UserController.getUserPaginate);
  * @swagger
  * /api/v1/users/{userId}:
  *   get:
- *     summary: Lấy chi tiết một người dùng theo ID
+ *     summary: Get user by id
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -102,11 +78,7 @@ router.get("/", protect, UserController.getUserPaginate);
  *           type: string
  *     responses:
  *       200:
- *         description: Thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
+ *         description: Success
  */
 router.get("/:userId", protect, userIdSchema, UserController.getUserById);
 
@@ -114,7 +86,7 @@ router.get("/:userId", protect, userIdSchema, UserController.getUserById);
  * @swagger
  * /api/v1/users:
  *   post:
- *     summary: Tạo mới một người dùng (Admin)
+ *     summary: Create a new user
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -123,22 +95,33 @@ router.get("/:userId", protect, userIdSchema, UserController.getUserById);
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/RegisterRequest'
+ *             type: object
+ *             required: [name, email, password]
+ *             properties:
+ *               name:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *               phone:
+ *                 type: string
+ *                 nullable: true
+ *               role:
+ *                 type: string
+ *                 description: Any role value is accepted. The API will create the role record if needed.
  *     responses:
  *       201:
- *         description: Tạo thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CommonResponse'
+ *         description: Created
  */
-router.post("/", protect, createUserSchema, UserController.createUser);
+router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.createUser);
 
 /**
  * @swagger
  * /api/v1/users/{userId}:
  *   put:
- *     summary: Cập nhật thông tin người dùng
+ *     summary: Update user
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -156,11 +139,7 @@ router.post("/", protect, createUserSchema, UserController.createUser);
  *             $ref: '#/components/schemas/UpdateUserRequest'
  *     responses:
  *       200:
- *         description: Cập nhật thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CommonResponse'
+ *         description: Success
  */
 router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
 
@@ -168,7 +147,7 @@ router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
  * @swagger
  * /api/v1/users/{userId}:
  *   delete:
- *     summary: Xóa một người dùng khỏi hệ thống
+ *     summary: Delete user
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -180,11 +159,7 @@ router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
  *           type: string
  *     responses:
  *       200:
- *         description: Xóa thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CommonResponse'
+ *         description: Success
  */
 router.delete("/:userId", protect, userIdSchema, UserController.deleteUser);
 

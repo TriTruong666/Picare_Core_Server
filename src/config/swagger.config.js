@@ -44,7 +44,7 @@ const swaggerDefinition = {
           username: { type: "string" },
           fullName: { type: "string" },
           email: { type: "string" },
-          role: { type: "string", enum: ["admin", "ecom", "warehouse", "viewer"] },
+          role: { type: "string" },
           companyId: { type: "string" },
         },
       },
@@ -118,7 +118,16 @@ const swaggerDefinition = {
           name: { type: "string" },
           email: { type: "string" },
           password: { type: "string" },
-          phone: { type: "string" },
+          phone: { type: "string", nullable: true },
+          role: { type: "string" },
+        },
+      },
+      ChangePasswordRequest: {
+        type: "object",
+        required: ["oldPassword", "newPassword"],
+        properties: {
+          oldPassword: { type: "string" },
+          newPassword: { type: "string" },
         },
       },
       CreateCompanyRequest: {
@@ -151,7 +160,7 @@ const swaggerDefinition = {
         type: "object",
         properties: {
           fullName: { type: "string" },
-          role: { type: "string", enum: ["admin", "ecom", "warehouse", "viewer"] },
+          role: { type: "string" },
         },
       },
       Pagination: {

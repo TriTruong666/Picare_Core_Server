@@ -1,9 +1,5 @@
 const { body, param } = require("express-validator");
-const { ROLES } = require("../common/enum/role.enum");
 
-/**
- * Data Transfer Objects (DTOs) for User
- */
 class UserDTO {
   constructor(user) {
     this.userId = user.userId;
@@ -26,44 +22,45 @@ class UserDTO {
   }
 }
 
-/**
- * Validation Schemas for User CRUD
- */
+const phoneValidator = body("phone")
+  .optional({ values: "null" })
+  .custom(
+    (value) => value === null || value === "" || /^[0-9+\-\s().]{8,20}$/.test(value)
+  )
+  .withMessage("So dien thoai khong hop le");
+
 const createUserSchema = [
-  body("name").trim().notEmpty().withMessage("Tên không được để trống"),
-  body("email")
-    .isEmail()
-    .withMessage("Email không hợp lệ")
-    .normalizeEmail(),
+  body("name").trim().notEmpty().withMessage("Ten khong duoc de trong"),
+  body("email").isEmail().withMessage("Email khong hop le").normalizeEmail(),
   body("password")
     .isLength({ min: 6 })
-    .withMessage("Mật khẩu phải có ít nhất 6 ký tự"),
-  body("phone").optional().isMobilePhone().withMessage("Số điện thoại không hợp lệ"),
+    .withMessage("Mat khau phai co it nhat 6 ky tu"),
+  phoneValidator,
   body("role")
     .optional()
-    .isIn(ROLES)
-    .withMessage("Role không hợp lệ"),
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Role khong hop le"),
 ];
 
 const updateUserSchema = [
-  param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
-  body("name").optional().trim().notEmpty().withMessage("Tên không được để trống"),
-  body("email")
-    .optional()
-    .isEmail()
-    .withMessage("Email không hợp lệ")
-    .normalizeEmail(),
-  body("phone").optional().isMobilePhone().withMessage("Số điện thoại không hợp lệ"),
+  param("userId").isUUID(4).withMessage("ID nguoi dung khong hop le"),
+  body("name").optional().trim().notEmpty().withMessage("Ten khong duoc de trong"),
+  body("email").optional().isEmail().withMessage("Email khong hop le").normalizeEmail(),
+  phoneValidator,
   body("role")
     .optional()
-    .isIn(ROLES)
-    .withMessage("Role không hợp lệ"),
-  body("isOnline").optional().isBoolean().withMessage("isOnline phải là boolean"),
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Role khong hop le"),
+  body("isOnline").optional().isBoolean().withMessage("isOnline phai la boolean"),
   body("note").optional().trim(),
 ];
 
 const userIdSchema = [
-  param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
+  param("userId").isUUID(4).withMessage("ID nguoi dung khong hop le"),
 ];
 
 module.exports = {

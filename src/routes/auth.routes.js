@@ -1,20 +1,26 @@
 const express = require("express");
 const router = express.Router();
 const AuthController = require("../controllers/auth.controller");
-const { loginSchema, registerSchema, logoutSchema } = require("../schemas/auth.schema");
+const { protect } = require("../middlewares/auth.middleware");
+const {
+  loginSchema,
+  registerSchema,
+  logoutSchema,
+  changePasswordSchema,
+} = require("../schemas/auth.schema");
 
 /**
  * @swagger
  * tags:
  *   name: Auth
- *   description: API Xác thực và Quản lý tài khoản người dùng
+ *   description: Authentication APIs
  */
 
 /**
  * @swagger
  * /api/v1/auth/login:
  *   post:
- *     summary: Đăng nhập vào hệ thống
+ *     summary: Login
  *     tags: [Auth]
  *     parameters:
  *       - in: query
@@ -23,9 +29,7 @@ const { loginSchema, registerSchema, logoutSchema } = require("../schemas/auth.s
  *         schema:
  *           type: string
  *           format: uuid
- *         description: |
- *           UUID của client cần đăng nhập vào (ví dụ OMS, CRM...).
- *           Nếu được cung cấp, hệ thống sẽ kiểm tra role của user có được phép truy cập client đó không.
+ *         description: Optional client id for client-specific access checks.
  *     requestBody:
  *       required: true
  *       content:
@@ -34,29 +38,13 @@ const { loginSchema, registerSchema, logoutSchema } = require("../schemas/auth.s
  *             $ref: '#/components/schemas/LoginRequest'
  *     responses:
  *       200:
- *         description: Đăng nhập thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/AuthResponse'
+ *         description: Login success
  *       401:
- *         description: Email hoặc mật khẩu không đúng
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Invalid email or password
  *       403:
- *         description: Role của tài khoản không được phép truy cập client này
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Role is not allowed for this client
  *       404:
- *         description: Không tìm thấy client với clientId đã cung cấp
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *         description: Client not found
  */
 router.post("/login", loginSchema, AuthController.login);
 
@@ -64,7 +52,7 @@ router.post("/login", loginSchema, AuthController.login);
  * @swagger
  * /api/v1/auth/register:
  *   post:
- *     summary: Ghi danh tài khoản người dùng mới
+ *     summary: Register
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -74,11 +62,7 @@ router.post("/login", loginSchema, AuthController.login);
  *             $ref: '#/components/schemas/RegisterRequest'
  *     responses:
  *       201:
- *         description: Đăng ký thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
+ *         description: Register success
  */
 router.post("/register", registerSchema, AuthController.register);
 
@@ -86,7 +70,7 @@ router.post("/register", registerSchema, AuthController.register);
  * @swagger
  * /api/v1/auth/logout:
  *   post:
- *     summary: Đăng xuất người dùng
+ *     summary: Logout
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -101,13 +85,28 @@ router.post("/register", registerSchema, AuthController.register);
  *                 format: email
  *     responses:
  *       200:
- *         description: Đăng xuất thành công
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/CommonResponse'
+ *         description: Logout success
  */
 router.post("/logout", logoutSchema, AuthController.logout);
 
-module.exports = router;
+/**
+ * @swagger
+ * /api/v1/auth/change-password:
+ *   post:
+ *     summary: Change password
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/ChangePasswordRequest'
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ */
+router.post("/change-password", protect, changePasswordSchema, AuthController.changePassword);
 
+module.exports = router;

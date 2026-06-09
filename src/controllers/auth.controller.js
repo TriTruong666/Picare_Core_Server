@@ -5,9 +5,6 @@ const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
 class AuthController {
-  /**
-   * Handle Login
-   */
   static async login(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -33,9 +30,6 @@ class AuthController {
     }
   }
 
-  /**
-   * Handle Register
-   */
   static async register(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -45,19 +39,12 @@ class AuthController {
 
       const result = await AuthService.register(req.body);
 
-      return ResponseHandler.created(
-        res,
-        result,
-        "Ghi danh tài khoản thành công"
-      );
+      return ResponseHandler.created(res, result, "Ghi danh tai khoan thanh cong");
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Handle Logout
-   */
   static async logout(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -66,7 +53,7 @@ class AuthController {
       }
 
       const { email } = req.body || {};
-      
+
       res.clearCookie("token", {
         httpOnly: true,
         secure: true,
@@ -76,6 +63,26 @@ class AuthController {
       });
 
       const result = await AuthService.logout({ email });
+
+      return ResponseHandler.success(res, null, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async changePassword(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { oldPassword, newPassword } = req.body;
+      const result = await AuthService.changePassword({
+        userId: req.user.userId,
+        oldPassword,
+        newPassword,
+      });
 
       return ResponseHandler.success(res, null, result.message);
     } catch (error) {

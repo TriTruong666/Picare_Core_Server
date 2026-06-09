@@ -5,19 +5,12 @@ const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
 class UserController {
-  /**
-   * Lấy thông tin người dùng hiện tại (Profile)
-   */
   static async getMe(req, res, next) {
     try {
       const token = req.cookies.token;
       const user = await UserService.getMe(token);
 
-      return ResponseHandler.success(
-        res,
-        user,
-        "Xác thực người dùng thành công"
-      );
+      return ResponseHandler.success(res, user, "Xac thuc nguoi dung thanh cong");
     } catch (error) {
       next(error);
     }
@@ -39,32 +32,22 @@ class UserController {
         result.count,
         result.page,
         result.limit,
-        "Lấy danh sách người dùng thành công"
+        "Lay danh sach nguoi dung thanh cong"
       );
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Lấy danh sách tất cả người dùng
-   */
   static async getAllUsers(req, res, next) {
     try {
       const users = await UserService.getAllUsers();
-      return ResponseHandler.success(
-        res,
-        users,
-        "Lấy danh sách người dùng thành công"
-      );
+      return ResponseHandler.success(res, users, "Lay danh sach nguoi dung thanh cong");
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Lấy chi tiết một người dùng theo userId
-   */
   static async getUserById(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -75,19 +58,12 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.getUserByUserId(userId);
 
-      return ResponseHandler.success(
-        res,
-        user,
-        "Lấy thông tin người dùng thành công"
-      );
+      return ResponseHandler.success(res, user, "Lay thong tin nguoi dung thanh cong");
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Tạo người dùng mới
-   */
   static async createUser(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -95,21 +71,14 @@ class UserController {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const user = await UserService.createUser(req.body);
+      const user = await UserService.createUser(req.body, req.user);
 
-      return ResponseHandler.created(
-        res,
-        user,
-        "Tạo người dùng mới thành công"
-      );
+      return ResponseHandler.created(res, user, "Tao nguoi dung moi thanh cong");
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Cập nhật thông tin người dùng
-   */
   static async updateUser(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -120,19 +89,12 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.updateUser(userId, req.body);
 
-      return ResponseHandler.success(
-        res,
-        user,
-        "Cập nhật người dùng thành công"
-      );
+      return ResponseHandler.success(res, user, "Cap nhat nguoi dung thanh cong");
     } catch (error) {
       next(error);
     }
   }
 
-  /**
-   * Xóa người dùng
-   */
   static async deleteUser(req, res, next) {
     try {
       const errors = validationResult(req);

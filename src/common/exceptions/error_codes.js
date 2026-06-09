@@ -1,87 +1,93 @@
 /**
- * Danh sách toàn bộ Error Codes của hệ thống.
- * Giúp quản lý thông điệp lỗi tập trung, dễ dàng thay đổi hoặc đa ngôn ngữ sau này.
+ * Centralized error codes for the application.
  */
 const ErrorCodes = {
-  // Lỗi chung (General)
   INTERNAL_SERVER_ERROR: {
     code: "ERR_INTERNAL_001",
-    message: "Đã có lỗi xảy ra phía máy chủ",
+    message: "Da co loi xay ra phia may chu",
     statusCode: 500,
   },
   BAD_REQUEST: {
     code: "ERR_BAD_REQUEST_001",
-    message: "Dữ liệu yêu cầu không hợp lệ",
+    message: "Du lieu yeu cau khong hop le",
     statusCode: 400,
   },
   UNAUTHORIZED: {
     code: "ERR_UNAUTHORIZED_001",
-    message: "Phiên đăng nhập đã hết hạn hoặc không hợp lệ",
+    message: "Phien dang nhap da het han hoac khong hop le",
     statusCode: 401,
   },
   FORBIDDEN: {
     code: "ERR_FORBIDDEN_001",
-    message: "Bạn không có quyền thực hiện hành động này",
+    message: "Ban khong co quyen thuc hien hanh dong nay",
     statusCode: 403,
   },
   NOT_FOUND: {
     code: "ERR_NOT_FOUND_001",
-    message: "Không tìm thấy tài nguyên yêu cầu",
+    message: "Khong tim thay tai nguyen yeu cau",
     statusCode: 404,
   },
 
-  // Lỗi liên quan đến Database/Sequelize
   DATABASE_ERROR: {
     code: "ERR_DB_001",
-    message: "Lỗi kết nối cơ sở dữ liệu",
+    message: "Loi ket noi co so du lieu",
     statusCode: 500,
   },
   DUPLICATE_ENTRY: {
     code: "ERR_DB_002",
-    message: "Dữ liệu đã tồn tại trong hệ thống",
+    message: "Du lieu da ton tai trong he thong",
     statusCode: 409,
   },
 
-  // Lỗi liên quan đến Auth
   AUTH_INVALID_CREDENTIALS: {
     code: "ERR_AUTH_001",
-    message: "Email hoặc mật khẩu không chính xác",
+    message: "Email hoac mat khau khong chinh xac",
     statusCode: 401,
   },
   AUTH_EMAIL_TAKEN: {
     code: "ERR_AUTH_002",
-    message: "Email đã được sử dụng",
+    message: "Email da duoc su dung",
     statusCode: 400,
   },
   AUTH_ROLE_NOT_ALLOWED: {
     code: "ERR_AUTH_003",
-    message: "Tài khoản của bạn không có quyền truy cập vào hệ thống này",
+    message: "Tai khoan cua ban khong co quyen truy cap vao he thong nay",
     statusCode: 403,
+  },
+  AUTH_OLD_PASSWORD_INCORRECT: {
+    code: "ERR_AUTH_004",
+    message: "Mat khau cu khong chinh xac",
+    statusCode: 400,
+  },
+  AUTH_NEW_PASSWORD_MUST_DIFFERENT: {
+    code: "ERR_AUTH_005",
+    message: "Mat khau moi phai khac mat khau cu",
+    statusCode: 400,
   },
   CLIENT_NOT_FOUND: {
     code: "ERR_CLIENT_001",
-    message: "Không tìm thấy client hệ thống",
+    message: "Khong tim thay client he thong",
     statusCode: 404,
   },
 
   USER_NOT_FOUND: {
     code: "ERR_USER_001",
-    message: "Không tìm thấy người dùng",
+    message: "Khong tim thay nguoi dung",
     statusCode: 400,
   },
   COMPANY_NOT_FOUND: {
     code: "ERR_COMPANY_001",
-    message: "Không tìm thấy công ty",
+    message: "Khong tim thay cong ty",
     statusCode: 404,
   },
   SHOP_NOT_FOUND: {
     code: "ERR_SHOP_001",
-    message: "Không tìm thấy shop",
+    message: "Khong tim thay shop",
     statusCode: 404,
   },
   ORDER_NOT_FOUND: {
     code: "ERR_ORDER_001",
-    message: "Không tìm thấy đơn hàng",
+    message: "Khong tim thay don hang",
     statusCode: 404,
   },
 };

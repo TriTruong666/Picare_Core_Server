@@ -1,31 +1,42 @@
 const { body } = require("express-validator");
 
-/**
- * Validation Schemas for Authentication
- */
-
 const loginSchema = [
-  body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+  body("email").isEmail().withMessage("Email khong hop le").normalizeEmail(),
+  body("password")
+    .isLength({ min: 6 })
+    .withMessage("Mat khau phai co it nhat 6 ky tu"),
 ];
 
 const registerSchema = [
-  body("name").trim().notEmpty().withMessage("Tên không được để trống"),
-  body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+  body("name").trim().notEmpty().withMessage("Ten khong duoc de trong"),
+  body("email").isEmail().withMessage("Email khong hop le").normalizeEmail(),
   body("password")
     .isLength({ min: 6 })
-    .withMessage("Mật khẩu phải có ít nhất 6 ký tự"),
+    .withMessage("Mat khau phai co it nhat 6 ky tu"),
   body("role")
     .optional()
-    .isIn(["admin", "ecom", "logistics", "default"])
-    .withMessage("Role không hợp lệ"),
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("Role khong hop le"),
 ];
 
 const logoutSchema = [
-  body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+  body("email").isEmail().withMessage("Email khong hop le").normalizeEmail(),
+];
+
+const changePasswordSchema = [
+  body("oldPassword")
+    .isLength({ min: 6 })
+    .withMessage("Mat khau cu phai co it nhat 6 ky tu"),
+  body("newPassword")
+    .isLength({ min: 6 })
+    .withMessage("Mat khau moi phai co it nhat 6 ky tu"),
 ];
 
 module.exports = {
   loginSchema,
   registerSchema,
   logoutSchema,
+  changePasswordSchema,
 };

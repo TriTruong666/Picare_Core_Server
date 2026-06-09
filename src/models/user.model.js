@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/postgres.config");
-const { ROLES, UserRoles } = require("../common/enum/role.enum");
+const { UserRoles } = require("../common/enum/role.enum");
 const bcrypt = require("bcrypt");
 
 const User = sequelize.define(
@@ -42,9 +42,6 @@ const User = sequelize.define(
     },
     role: {
       type: DataTypes.STRING,
-      validate: {
-        isIn: [ROLES],
-      },
       allowNull: false,
       defaultValue: UserRoles.DEFAULT,
     },
@@ -58,7 +55,7 @@ const User = sequelize.define(
         model: "roles",
         key: "id",
       },
-      allowNull: true, // Để là true cho backward compatibility, migrate dần
+      allowNull: true,
     },
   },
   {
@@ -85,4 +82,5 @@ const User = sequelize.define(
 User.prototype.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
+
 module.exports = User;
