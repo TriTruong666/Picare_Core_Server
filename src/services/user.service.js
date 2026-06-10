@@ -188,7 +188,7 @@ class UserService {
 
       if (!normalizedRole) {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, [
-          { path: "role", msg: "Role khong duoc de trong" },
+          { path: "role", msg: "Role không được để trống" },
         ]);
       }
 
@@ -212,7 +212,7 @@ class UserService {
     }
 
     await user.destroy();
-    return { message: "Xoa nguoi dung thanh cong" };
+    return { message: "Xóa người dùng thành công" };
   }
 }
 

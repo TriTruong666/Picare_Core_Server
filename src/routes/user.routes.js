@@ -12,20 +12,20 @@ const {
  * @swagger
  * tags:
  *   name: Users
- *   description: User management APIs
+ *   description: API quản lý người dùng
  */
 
 /**
  * @swagger
  * /api/v1/users/me:
  *   get:
- *     summary: Get current user profile
+ *     summary: Lấy thông tin hồ sơ người dùng hiện tại
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Success
+ *         description: Thành công
  */
 router.get("/me", protect, UserController.getMe);
 
@@ -33,7 +33,7 @@ router.get("/me", protect, UserController.getMe);
  * @swagger
  * /api/v1/users:
  *   get:
- *     summary: Get users with pagination
+ *     summary: Lấy danh sách người dùng phân trang
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -58,7 +58,7 @@ router.get("/me", protect, UserController.getMe);
  *           type: string
  *     responses:
  *       200:
- *         description: Success
+ *         description: Thành công
  */
 router.get("/", protect, UserController.getUserPaginate);
 
@@ -66,7 +66,7 @@ router.get("/", protect, UserController.getUserPaginate);
  * @swagger
  * /api/v1/users/{userId}:
  *   get:
- *     summary: Get user by id
+ *     summary: Lấy thông tin người dùng theo ID
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -78,7 +78,7 @@ router.get("/", protect, UserController.getUserPaginate);
  *           type: string
  *     responses:
  *       200:
- *         description: Success
+ *         description: Thành công
  */
 router.get("/:userId", protect, userIdSchema, UserController.getUserById);
 
@@ -86,7 +86,7 @@ router.get("/:userId", protect, userIdSchema, UserController.getUserById);
  * @swagger
  * /api/v1/users:
  *   post:
- *     summary: Create a new user
+ *     summary: Tạo người dùng mới
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -110,10 +110,10 @@ router.get("/:userId", protect, userIdSchema, UserController.getUserById);
  *                 nullable: true
  *               role:
  *                 type: string
- *                 description: Any role value is accepted. The API will create the role record if needed.
+ *                 description: Bất kỳ giá trị role nào cũng được chấp nhận. API sẽ tự động tạo bản ghi role nếu cần thiết.
  *     responses:
  *       201:
- *         description: Created
+ *         description: Đã tạo thành công
  */
 router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.createUser);
 
@@ -121,7 +121,7 @@ router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.
  * @swagger
  * /api/v1/users/{userId}:
  *   put:
- *     summary: Update user
+ *     summary: Cập nhật thông tin người dùng
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -139,7 +139,7 @@ router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.
  *             $ref: '#/components/schemas/UpdateUserRequest'
  *     responses:
  *       200:
- *         description: Success
+ *         description: Thành công
  */
 router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
 
@@ -147,7 +147,7 @@ router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
  * @swagger
  * /api/v1/users/{userId}:
  *   delete:
- *     summary: Delete user
+ *     summary: Xóa người dùng
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -159,7 +159,7 @@ router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
  *           type: string
  *     responses:
  *       200:
- *         description: Success
+ *         description: Thành công
  */
 router.delete("/:userId", protect, userIdSchema, UserController.deleteUser);
 

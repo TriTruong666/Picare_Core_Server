@@ -10,7 +10,7 @@ class UserController {
       const token = req.cookies.token;
       const user = await UserService.getMe(token);
 
-      return ResponseHandler.success(res, user, "Xac thuc nguoi dung thanh cong");
+      return ResponseHandler.success(res, user, "Xác thực người dùng thành công");
     } catch (error) {
       next(error);
     }
@@ -32,7 +32,7 @@ class UserController {
         result.count,
         result.page,
         result.limit,
-        "Lay danh sach nguoi dung thanh cong"
+        "Lấy danh sách người dùng thành công"
       );
     } catch (error) {
       next(error);
@@ -42,7 +42,7 @@ class UserController {
   static async getAllUsers(req, res, next) {
     try {
       const users = await UserService.getAllUsers();
-      return ResponseHandler.success(res, users, "Lay danh sach nguoi dung thanh cong");
+      return ResponseHandler.success(res, users, "Lấy danh sách người dùng thành công");
     } catch (error) {
       next(error);
     }
@@ -58,7 +58,7 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.getUserByUserId(userId);
 
-      return ResponseHandler.success(res, user, "Lay thong tin nguoi dung thanh cong");
+      return ResponseHandler.success(res, user, "Lấy thông tin người dùng thành công");
     } catch (error) {
       next(error);
     }
@@ -73,7 +73,7 @@ class UserController {
 
       const user = await UserService.createUser(req.body, req.user);
 
-      return ResponseHandler.created(res, user, "Tao nguoi dung moi thanh cong");
+      return ResponseHandler.created(res, user, "Tạo người dùng mới thành công");
     } catch (error) {
       next(error);
     }
@@ -89,7 +89,7 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.updateUser(userId, req.body);
 
-      return ResponseHandler.success(res, user, "Cap nhat nguoi dung thanh cong");
+      return ResponseHandler.success(res, user, "Cập nhật người dùng thành công");
     } catch (error) {
       next(error);
     }
