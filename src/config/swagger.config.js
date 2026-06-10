@@ -159,8 +159,12 @@ const swaggerDefinition = {
       UpdateUserRequest: {
         type: "object",
         properties: {
-          fullName: { type: "string" },
+          name: { type: "string" },
+          email: { type: "string", format: "email" },
+          phone: { type: "string", nullable: true },
           role: { type: "string" },
+          isOnline: { type: "boolean" },
+          note: { type: "string", nullable: true },
         },
       },
       Pagination: {
