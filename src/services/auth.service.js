@@ -46,7 +46,7 @@ class AuthService {
     const token = JWTService.signUser(user.name, user.role, user.userId);
 
     return {
-      message: "Dang nhap thanh cong",
+      message: "Đăng nhập thành công",
       token,
     };
   }
@@ -96,7 +96,7 @@ class AuthService {
       await user.update({ isOnline: false });
     }
 
-    return { message: "Dang xuat thanh cong" };
+    return { message: "Đăng xuất thành công" };
   }
 
   /**
@@ -122,7 +122,7 @@ class AuthService {
 
     await user.update({ password: newPassword });
 
-    return { message: "Doi mat khau thanh cong" };
+    return { message: "Đổi mật khẩu thành công" };
   }
 }
 
