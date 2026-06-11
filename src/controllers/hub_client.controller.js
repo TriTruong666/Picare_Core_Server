@@ -128,7 +128,7 @@ class HubClientController {
         throw new BadRequestException("Dữ liệu không hợp lệ", errors.array());
       }
 
-      const token = req.cookies?.token;
+      const token = HubClientService.extractTokenFromRequest(req);
       const { clientId } = req.params;
       await HubClientService.checkClientAccess(token, clientId);
 
@@ -136,6 +136,30 @@ class HubClientController {
         res,
         null,
         "Tài khoản có quyền truy cập vào client này",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async checkClientAccessByExternalUrl(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException("Du lieu khong hop le", errors.array());
+      }
+
+      const token = HubClientService.extractTokenFromRequest(req);
+      const externalUrl = Array.isArray(req.query?.externalUrl)
+        ? req.query.externalUrl[0]
+        : req.query?.externalUrl;
+
+      await HubClientService.checkClientAccessByExternalUrl(token, externalUrl);
+
+      return ResponseHandler.success(
+        res,
+        null,
+        "Tai khoan co quyen truy cap vao URL client nay",
       );
     } catch (error) {
       next(error);

@@ -1,5 +1,6 @@
 const { validationResult } = require("express-validator");
 const { randomUUID } = require("crypto");
+const mime = require("mime-types");
 const ResponseHandler = require("../common/response.handler");
 const S3Service = require("../services/s3.service");
 const { packageVideoQueue } = require("../jobs/queues");
@@ -70,15 +71,15 @@ class S3Controller {
           mimeType = matches[1];
           fileBuffer = Buffer.from(matches[2], "base64");
           fileSize = fileBuffer.length;
-          // Lấy tên file từ body hoặc tạo tên mặc định dựa trên mimetype
-          originalName = req.body.filename || `upload_${Date.now()}.${mimeType.split("/")[1]}`;
         } else {
           // Nếu không phải data URI, giả định là base64 raw (cần mimeType trong body)
           fileBuffer = Buffer.from(fileData, "base64");
           fileSize = fileBuffer.length;
           mimeType = req.body.mimeType || "application/octet-stream";
-          originalName = req.body.filename || `upload_${Date.now()}`;
         }
+        
+        const ext = mime.extension(mimeType) || mimeType.split("/")[1] || "bin";
+        originalName = req.body.filename || `upload_${Date.now()}.${ext}`;
       }
 
       if (!fileBuffer) {

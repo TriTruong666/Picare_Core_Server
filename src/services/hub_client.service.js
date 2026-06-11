@@ -9,8 +9,99 @@ const {
   UnauthorizedException,
   ForbiddenException,
 } = require("../common/exceptions/BaseException");
+const { ClientStatus } = require("../common/enum/hub_client.enum");
 
 class HubClientService {
+  static normalizeRole(role) {
+    return String(role || "").trim().toLowerCase();
+  }
+
+  static normalizeUrl(url) {
+    const rawUrl = String(url || "").trim();
+    if (!rawUrl) {
+      return null;
+    }
+
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(rawUrl);
+    } catch (error) {
+      throw new BadRequestException("External URL khong hop le");
+    }
+
+    const pathname = parsedUrl.pathname.replace(/\/+$/, "") || "/";
+    return `${parsedUrl.protocol.toLowerCase()}//${parsedUrl.host.toLowerCase()}${pathname}${parsedUrl.search}`;
+  }
+
+  static extractOrigin(url) {
+    const normalizedUrl = this.normalizeUrl(url);
+    return new URL(normalizedUrl).origin.toLowerCase();
+  }
+
+  static extractTokenFromRequest(req) {
+    const authorization = req.headers?.authorization;
+    const bearerToken = authorization?.startsWith("Bearer ")
+      ? authorization.slice("Bearer ".length).trim()
+      : null;
+
+    return req.cookies?.token || bearerToken || null;
+  }
+
+  static ensureRoleAllowed(role, allowedRoles = []) {
+    const normalizedRole = this.normalizeRole(role);
+    const normalizedAllowedRoles = allowedRoles.map((item) => this.normalizeRole(item));
+
+    if (!normalizedAllowedRoles.includes(normalizedRole)) {
+      throw new ForbiddenException(ErrorCodes.AUTH_ROLE_NOT_ALLOWED);
+    }
+  }
+
+  static ensureClientActive(client) {
+    if (client.clientStatus !== ClientStatus.ACTIVE) {
+      throw new ForbiddenException(ErrorCodes.FORBIDDEN);
+    }
+  }
+
+  static async findClientByExternalUrl(externalUrl) {
+    const normalizedTargetOrigin = this.extractOrigin(externalUrl);
+    const clients = await HubClient.findAll();
+
+    const client = clients.find((item) => {
+      try {
+        return this.extractOrigin(item.clientExternalUrl) === normalizedTargetOrigin;
+      } catch (error) {
+        return false;
+      }
+    });
+
+    if (!client) {
+      throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+    }
+
+    return client;
+  }
+
+  static async validateAccessToClient({ role, clientId, externalUrl }) {
+    let client = null;
+
+    if (clientId) {
+      client = await HubClient.findOne({ where: { clientId } });
+    } else if (externalUrl) {
+      client = await this.findClientByExternalUrl(externalUrl);
+    } else {
+      throw new BadRequestException("Thieu clientId hoac externalUrl de kiem tra quyen");
+    }
+
+    if (!client) {
+      throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+    }
+
+    this.ensureClientActive(client);
+    this.ensureRoleAllowed(role, client.allowedRoles || []);
+
+    return client;
+  }
+
   /**
    * Get all hub clients with pagination and search
    */
@@ -40,7 +131,7 @@ class HubClientService {
       where,
       order: [["createdAt", "DESC"]],
       limit: pLimit,
-      offset: offset,
+      offset,
     });
 
     return {
@@ -61,7 +152,7 @@ class HubClientService {
     });
 
     if (!client) {
-      throw new NotFoundException("Không tìm thấy Hub Client");
+      throw new NotFoundException("Khong tim thay Hub Client");
     }
 
     return HubClientDTO.fromClient(client);
@@ -71,12 +162,11 @@ class HubClientService {
    * Create a new hub client
    */
   static async createClient(clientData) {
-    // Check if client name already exists
     const existingClient = await HubClient.findOne({
       where: { clientName: clientData.clientName },
     });
     if (existingClient) {
-      throw new BadRequestException("Tên Hub Client đã tồn tại");
+      throw new BadRequestException("Ten Hub Client da ton tai");
     }
 
     const newClient = await HubClient.create(clientData);
@@ -90,16 +180,15 @@ class HubClientService {
     const client = await HubClient.findOne({ where: { clientId } });
 
     if (!client) {
-      throw new NotFoundException("Không tìm thấy Hub Client");
+      throw new NotFoundException("Khong tim thay Hub Client");
     }
 
-    // If updating name, check uniqueness
     if (updateData.clientName && updateData.clientName !== client.clientName) {
       const existingName = await HubClient.findOne({
         where: { clientName: updateData.clientName },
       });
       if (existingName) {
-        throw new BadRequestException("Tên Hub Client đã tồn tại");
+        throw new BadRequestException("Ten Hub Client da ton tai");
       }
     }
 
@@ -114,21 +203,17 @@ class HubClientService {
     const client = await HubClient.findOne({ where: { clientId } });
 
     if (!client) {
-      throw new NotFoundException("Không tìm thấy Hub Client");
+      throw new NotFoundException("Khong tim thay Hub Client");
     }
 
     await client.destroy();
-    return { message: "Xóa Hub Client thành công" };
+    return { message: "Xoa Hub Client thanh cong" };
   }
+
   /**
-   * Check if the current token holder has access to a specific client.
-   * Mirrors getMe pattern: reads token from cookie, decodes role, validates against client's allowedRoles.
-   * @param {string} token - JWT token from cookie
-   * @param {string} clientId - UUID of the target client
-   * @returns {Object} { client: HubClientDTO, user: { name, role, userId } }
+   * Check access by clientId for the current token.
    */
   static async checkClientAccess(token, clientId) {
-    // 1. Kiểm tra token trước
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
@@ -138,21 +223,24 @@ class HubClientService {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    // 2. Tìm client trong DB
-    const client = await HubClient.findOne({
-      where: { clientId },
-      attributes: ["allowedRoles"], // Chỉ lấy field cần thiết, không kéo toàn bộ record
-    });
-    if (!client) {
-      throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+    await this.validateAccessToClient({ role: decoded.role, clientId });
+    return null;
+  }
+
+  /**
+   * Check access by external URL for the current token.
+   */
+  static async checkClientAccessByExternalUrl(token, externalUrl) {
+    if (!token) {
+      throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    // 3. Check role sau khi có client
-    const allowedRoles = client.allowedRoles || [];
-    if (!allowedRoles.includes(decoded.role)) {
-      throw new ForbiddenException(ErrorCodes.AUTH_ROLE_NOT_ALLOWED);
+    const decoded = JWTService.verify(token);
+    if (!decoded) {
+      throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
+    await this.validateAccessToClient({ role: decoded.role, externalUrl });
     return null;
   }
 }
