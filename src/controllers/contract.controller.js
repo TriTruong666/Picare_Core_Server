@@ -5,12 +5,7 @@ const S3Service = require("../services/s3.service");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
-const base64ToMulterFile = ({
-  value,
-  fieldName,
-  filename,
-  mimeType,
-}) => {
+const base64ToMulterFile = ({ value, fieldName, filename, mimeType }) => {
   if (!value || typeof value !== "string") {
     return null;
   }
@@ -27,7 +22,8 @@ const base64ToMulterFile = ({
   return {
     fieldname: fieldName,
     originalname:
-      filename || `${fieldName}_${Date.now()}.${resolvedMimeType.split("/")[1] || "jpg"}`,
+      filename ||
+      `${fieldName}_${Date.now()}.${resolvedMimeType.split("/")[1] || "jpg"}`,
     encoding: "7bit",
     mimetype: resolvedMimeType,
     buffer,
@@ -49,7 +45,9 @@ const getFileFromRequest = (req, fieldName) => {
     value: req.body?.[fieldName],
     fieldName,
     filename: req.body?.[`${fieldName}_filename`],
-    mimeType: req.body?.[`${fieldName}_mimeType`] || req.body?.[`${fieldName}_mimetype`],
+    mimeType:
+      req.body?.[`${fieldName}_mimeType`] ||
+      req.body?.[`${fieldName}_mimetype`],
   });
 };
 
@@ -63,11 +61,7 @@ class ContractController {
 
       const result = await ContractService.createContractTemplate(req.body);
 
-      return ResponseHandler.created(
-        res,
-        result,
-        "Tạo hợp đồng mẫu thành công"
-      );
+      return ResponseHandler.created(res, result, "Tạo hợp đồng thành công");
     } catch (error) {
       next(error);
     }
@@ -80,12 +74,19 @@ class ContractController {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const { page = 1, limit = 20, search = "", status = "" } = req.query;
+      const {
+        page = 1,
+        limit = 20,
+        search = "",
+        status = "",
+        contractType = "",
+      } = req.query;
       const result = await ContractService.getContractsPaginate({
         page,
         limit,
         search,
         status,
+        contractType,
       });
 
       return ResponseHandler.paginate(
@@ -94,7 +95,7 @@ class ContractController {
         result.count,
         result.page,
         result.limit,
-        "Lấy danh sách hợp đồng thành công"
+        "Lấy danh sách hợp đồng thành công",
       );
     } catch (error) {
       next(error);
@@ -114,7 +115,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         contract,
-        "Lấy chi tiết hợp đồng thành công"
+        "Lấy chi tiết hợp đồng thành công",
       );
     } catch (error) {
       next(error);
@@ -131,11 +132,7 @@ class ContractController {
       const { contractId } = req.params;
       const result = await ContractService.deleteContract(contractId);
 
-      return ResponseHandler.success(
-        res,
-        result,
-        "Xoá hợp đồng thành công"
-      );
+      return ResponseHandler.success(res, result, "Xoá hợp đồng thành công");
     } catch (error) {
       next(error);
     }
@@ -151,13 +148,13 @@ class ContractController {
       const { contractId } = req.params;
       const result = await ContractService.updateDraftContract(
         contractId,
-        req.body
+        req.body,
       );
 
       return ResponseHandler.success(
         res,
         result,
-        "Cập nhật hợp đồng draft thành công"
+        "Cập nhật hợp đồng nháp thành công",
       );
     } catch (error) {
       next(error);
@@ -177,7 +174,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Publish hợp đồng unsigned lên S3 thành công"
+        "Phát hành hợp đồng chưa ký lên S3 thành công",
       );
     } catch (error) {
       next(error);
@@ -197,7 +194,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Publish hợp đồng owner_signed lên S3 thành công"
+        "Phát hành hợp đồng đã được bên sở hữu ký lên S3 thành công",
       );
     } catch (error) {
       next(error);
@@ -217,7 +214,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Publish hợp đồng completed lên S3 thành công"
+        "Phát hành hợp đồng đã hoàn tất lên S3 thành công",
       );
     } catch (error) {
       next(error);
@@ -237,11 +234,7 @@ class ContractController {
         ...req.body,
       });
 
-      return ResponseHandler.created(
-        res,
-        result,
-        "Tạo phiên ký số thành công"
-      );
+      return ResponseHandler.created(res, result, "Tạo phiên ký số thành công");
     } catch (error) {
       next(error);
     }
@@ -264,7 +257,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Hoàn tất ký số hợp đồng thành công"
+        "Hoàn tất ký số hợp đồng thành công",
       );
     } catch (error) {
       next(error);
@@ -287,7 +280,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "C\u1eadp nh\u1eadt lo\u1ea1i \u0111\u1ed1i t\u00e1c k\u00fd h\u1ee3p \u0111\u1ed3ng th\u00e0nh c\u00f4ng"
+        "Cập nhật loại đối tác ký hợp đồng thành công",
       );
     } catch (error) {
       next(error);
@@ -306,11 +299,11 @@ class ContractController {
         contractId,
         firstIdentificationImage: getFileFromRequest(
           req,
-          "first_identification_image"
+          "first_identification_image",
         ),
         secondIdentificationImage: getFileFromRequest(
           req,
-          "second_identification_image"
+          "second_identification_image",
         ),
         uploadedBy: req.user?.userId || null,
       });
@@ -318,7 +311,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Upload v\u00e0 tr\u00edch xu\u1ea5t th\u00f4ng tin CMND/CCCD th\u00e0nh c\u00f4ng"
+        "Upload và trích xuất thông tin CMND/CCCD thành công",
       );
     } catch (error) {
       next(error);
@@ -343,7 +336,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Upload h\u1ed3 s\u01a1 t\u1ed5 ch\u1ee9c th\u00e0nh c\u00f4ng"
+        "Upload hồ sơ tổ chức thành công",
       );
     } catch (error) {
       next(error);
@@ -366,7 +359,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Xo\u00e1 h\u1ed3 s\u01a1 k\u00fd c\u1ee7a \u0111\u1ed1i t\u00e1c th\u00e0nh c\u00f4ng"
+        "Xoá hồ sơ ký của đối tác thành công",
       );
     } catch (error) {
       next(error);
@@ -393,7 +386,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Hoàn tất ký tay hợp đồng thành công"
+        "Hoàn tất ký tay hợp đồng thành công",
       );
     } catch (error) {
       next(error);
@@ -408,9 +401,8 @@ class ContractController {
       }
 
       const { contractId } = req.params;
-      const { fileKey, fileName } = await ContractService.getContractPdf(
-        contractId
-      );
+      const { fileKey, fileName } =
+        await ContractService.getContractPdf(contractId);
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
@@ -434,7 +426,7 @@ class ContractController {
       return ResponseHandler.success(
         res,
         result,
-        "Sinh đường dẫn ký hợp đồng cho đối tác thành công"
+        "Sinh đường dẫn ký hợp đồng cho đối tác thành công",
       );
     } catch (error) {
       next(error);

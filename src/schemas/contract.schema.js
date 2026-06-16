@@ -1,9 +1,16 @@
 const { body, param, query } = require("express-validator");
 
+const CONTRACT_STATUS_VALUES = ["draft", "unsigned", "owner_signed", "completed"];
+const PRINCIPLE_CONTRACT_TYPE = "principle";
+const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
+
 class ContractDetailItemDTO {
   constructor(detail) {
     this.id = detail.id;
     this.contractDetailId = detail.contractDetailId;
+    this.detailKey = detail.detailKey;
+    this.detailType = detail.detailType;
+    this.detailData = detail.detailData;
     this.productName = detail.productName;
     this.price = detail.price;
     this.createdAt = detail.createdAt;
@@ -27,6 +34,7 @@ class ContractListDTO {
     this.ownerCompanyInfo = contract.ownerCompanyInfo;
     this.partnerCompanyInfo = contract.partnerCompanyInfo;
     this.contractDueDate = contract.contractDueDate;
+    this.contractData = contract.contractData;
     this.contractChecksum = contract.contractChecksum;
     this.contractType = contract.contractType;
     this.signerType = contract.signerType;
@@ -92,6 +100,67 @@ class ContractDetailDTO extends ContractListDTO {
   }
 }
 
+function normalizeContractType(contractType) {
+  const normalizedType = String(contractType || PRINCIPLE_CONTRACT_TYPE)
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedType || LEGACY_PRINCIPLE_CONTRACT_TYPES.has(normalizedType)) {
+    return PRINCIPLE_CONTRACT_TYPE;
+  }
+
+  return normalizedType;
+}
+
+function getBodyValue(req, field) {
+  return req.body?.[field] ?? req.body?.contractData?.[field];
+}
+
+function validatePrincipleContractPayload(_, { req }) {
+  const contractType = normalizeContractType(req.body?.contractType);
+
+  if (contractType !== PRINCIPLE_CONTRACT_TYPE) {
+    return true;
+  }
+
+  const ownerCompanyInfo = getBodyValue(req, "ownerCompanyInfo");
+  const partnerCompanyInfo = getBodyValue(req, "partnerCompanyInfo");
+  const contractDueDate = getBodyValue(req, "contractDueDate");
+  const details = getBodyValue(req, "details");
+
+  if (!ownerCompanyInfo || typeof ownerCompanyInfo !== "object") {
+    throw new Error("ownerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
+  }
+
+  if (!ownerCompanyInfo.companyCode) {
+    throw new Error("ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng");
+  }
+
+  if (!partnerCompanyInfo || typeof partnerCompanyInfo !== "object") {
+    throw new Error("partnerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
+  }
+
+  if (!contractDueDate) {
+    throw new Error("contractDueDate là bắt buộc với hợp đồng nguyên tắc");
+  }
+
+  if (!Array.isArray(details) || details.length < 1) {
+    throw new Error("details phải có ít nhất 1 sản phẩm với hợp đồng nguyên tắc");
+  }
+
+  details.forEach((detail) => {
+    if (!detail?.productName) {
+      throw new Error("details.productName là bắt buộc với hợp đồng nguyên tắc");
+    }
+
+    if (detail.price === undefined || detail.price === null || detail.price === "") {
+      throw new Error("details.price là bắt buộc với hợp đồng nguyên tắc");
+    }
+  });
+
+  return true;
+}
+
 const getContractsPaginateSchema = [
   query("page")
     .optional()
@@ -101,20 +170,21 @@ const getContractsPaginateSchema = [
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage("limit phải là số nguyên từ 1 đến 100"),
-  query("search")
-    .optional()
-    .isString()
-    .withMessage("search phải là chuỗi"),
+  query("search").optional().isString().withMessage("search phải là chuỗi"),
   query("status")
     .optional()
-    .isIn(["draft", "unsigned", "owner_signed", "completed"])
-    .withMessage("status phải là draft, unsigned, owner_signed hoặc completed"),
+    .isIn(CONTRACT_STATUS_VALUES)
+    .withMessage("status không hợp lệ"),
+  query("contractType")
+    .optional()
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("contractType phải là chuỗi không rỗng"),
 ];
 
 const contractIdSchema = [
-  param("contractId")
-    .isUUID()
-    .withMessage("contractId phải là UUID hợp lệ"),
+  param("contractId").isUUID().withMessage("contractId phải là UUID hợp lệ"),
 ];
 
 const contractSignatureIdSchema = [
@@ -124,93 +194,54 @@ const contractSignatureIdSchema = [
     .withMessage("contractSignatureId phải là UUID hợp lệ"),
 ];
 
-const companyInfoSchema = (field, options = {}) => [
-  body(`${field}.companyName`)
-    .optional({
-      nullable: Boolean(options.allowNullCompanyName),
-      checkFalsy: Boolean(options.allowNullCompanyName),
-    })
-    .isString()
-    .withMessage(`${field}.companyName phải là chuỗi`),
-  body(`${field}.address`)
-    .notEmpty()
-    .withMessage(`${field}.address là bắt buộc`)
-    .isString()
-    .withMessage(`${field}.address phải là chuỗi`),
-  body(`${field}.phone`)
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(`${field}.phone phải là chuỗi`),
-  body(`${field}.email`)
-    .optional({ nullable: true, checkFalsy: true })
-    .isEmail()
-    .withMessage(`${field}.email không hợp lệ`),
-  body(`${field}.bankInfo`)
-    .notEmpty()
-    .withMessage(`${field}.bankInfo là bắt buộc`)
-    .isString()
-    .withMessage(`${field}.bankInfo phải là chuỗi`),
-  body(`${field}.mst`)
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(`${field}.mst phải là chuỗi`),
-  body(`${field}.ownerName`)
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(`${field}.ownerName phải là chuỗi`),
-  body(`${field}.owner`)
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage(`${field}.owner phải là chuỗi`),
-  body(`${field}.role`)
-    .notEmpty()
-    .withMessage(`${field}.role là bắt buộc`)
-    .isString()
-    .withMessage(`${field}.role phải là chuỗi`),
-];
-
 const createContractTemplateSchema = [
-  body("ownerCompanyInfo")
+  body().custom(validatePrincipleContractPayload),
+  body("contractData")
+    .optional({ nullable: true })
     .isObject()
-    .withMessage("ownerCompanyInfo phải là object")
-    .custom((ownerCompanyInfo) => {
-      if (!ownerCompanyInfo?.companyCode) {
-        throw new Error(
-          "ownerCompanyInfo.companyCode là bắt buộc để tự tạo contractNumber"
-        );
-      }
-
-      return true;
-    }),
-  ...companyInfoSchema("ownerCompanyInfo"),
+    .withMessage("contractData phải là object"),
+  body("ownerCompanyInfo")
+    .optional({ nullable: true })
+    .isObject()
+    .withMessage("ownerCompanyInfo phải là object"),
   body("partnerCompanyInfo")
+    .optional({ nullable: true })
     .isObject()
     .withMessage("partnerCompanyInfo phải là object"),
-  ...companyInfoSchema("partnerCompanyInfo", {
-    allowNullCompanyName: true,
-  }),
   body("contractDueDate")
-    .notEmpty()
-    .withMessage("contractDueDate là bắt buộc")
+    .optional({ nullable: true, checkFalsy: true })
     .isISO8601()
     .withMessage("contractDueDate phải là ngày ISO8601 hợp lệ"),
   body("contractType")
     .optional()
-    .isIn(["digital", "default"])
-    .withMessage("contractType chỉ nhận digital hoặc default"),
-  body("details")
-    .isArray({ min: 1 })
-    .withMessage("details phải là array và có ít nhất 1 sản phẩm"),
-  body("details.*.productName")
+    .isString()
+    .trim()
     .notEmpty()
-    .withMessage("productName là bắt buộc")
+    .withMessage("contractType phải là chuỗi không rỗng"),
+  body("details")
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("details phải là array"),
+  body("details.*.productName")
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage("productName phải là chuỗi"),
   body("details.*.price")
-    .notEmpty()
-    .withMessage("price là bắt buộc")
+    .optional({ nullable: true, checkFalsy: true })
     .isNumeric()
     .withMessage("price phải là số"),
+  body("details.*.detailKey")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("detailKey phải là chuỗi"),
+  body("details.*.detailType")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("detailType phải là chuỗi"),
+  body("details.*.detailData")
+    .optional({ nullable: true })
+    .isObject()
+    .withMessage("detailData phải là object"),
 ];
 
 const updateDraftContractSchema = [

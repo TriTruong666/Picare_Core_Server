@@ -25,6 +25,23 @@ const ContractDetail = sequelize.define(
       unique: true,
       field: "contract_detail_id",
     },
+    detailKey: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "detail_key",
+    },
+    detailType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "item",
+      field: "detail_type",
+    },
+    detailData: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+      field: "detail_data",
+    },
     productName: {
       type: DataTypes.STRING,
       allowNull: true,

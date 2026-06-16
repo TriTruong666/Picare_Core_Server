@@ -36,8 +36,8 @@ const credentialUpload = multer({
  * @swagger
  * /api/v1/contracts:
  *   post:
- *     summary: Tạo hợp đồng mẫu từ contract_template.pdf
- *     description: API tạo contract ở trạng thái draft, sinh file PDF local và trả previewUrl để client xem hoặc chỉnh sửa trước khi publish bản unsigned lên S3.
+ *     summary: Tạo hợp đồng theo loại hợp đồng
+ *     description: Tạo hợp đồng ở trạng thái nháp. contractType=principle dùng template hợp đồng nguyên tắc hiện tại; các loại khác lưu input động trong contractData/details và render PDF generic.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -48,49 +48,86 @@ const credentialUpload = multer({
  *           schema:
  *             type: object
  *             required:
- *               - ownerCompanyInfo
- *               - partnerCompanyInfo
- *               - contractDueDate
- *               - details
+ *               - contractType
  *             properties:
+ *               contractType:
+ *                 type: string
+ *                 example: principle
+ *               contractData:
+ *                 type: object
+ *                 description: Payload động theo từng loại hợp đồng
  *               ownerCompanyInfo:
  *                 type: object
- *                 properties:
- *                   phone:
- *                     type: string
- *                     nullable: true
- *                   mst:
- *                     type: string
- *                     nullable: true
+ *                 description: Thông tin bên sở hữu hợp đồng. Bắt buộc với contractType=principle.
  *               partnerCompanyInfo:
  *                 type: object
- *                 properties:
- *                   phone:
- *                     type: string
- *                     nullable: true
- *                   mst:
- *                     type: string
- *                     nullable: true
+ *                 description: Thông tin đối tác. Bắt buộc với contractType=principle.
  *               contractDueDate:
  *                 type: string
  *                 format: date
  *                 example: 2027-12-31
- *               contractType:
- *                 type: string
- *                 enum: [digital, default]
- *                 example: digital
  *               details:
  *                 type: array
  *                 items:
  *                   type: object
  *                   properties:
+ *                     detailKey:
+ *                       type: string
+ *                     detailType:
+ *                       type: string
+ *                     detailData:
+ *                       type: object
  *                     productName:
  *                       type: string
+ *                       description: Tên sản phẩm, dùng cho hợp đồng nguyên tắc.
  *                     price:
  *                       type: number
+ *                       description: Giá sản phẩm, dùng cho hợp đồng nguyên tắc.
+ *           examples:
+ *             principle:
+ *               summary: Hợp đồng nguyên tắc
+ *               value:
+ *                 contractType: principle
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: Công ty Picare
+ *                   address: 123 Nguyễn Trãi, TP.HCM
+ *                   phone: "0900000000"
+ *                   bankInfo: "0123456789 - Vietcombank"
+ *                   mst: "0312345678"
+ *                   ownerName: Nguyễn Văn A
+ *                   role: Giám đốc
+ *                 partnerCompanyInfo:
+ *                   companyName: Công ty Đối tác
+ *                   address: 456 Lê Lợi, TP.HCM
+ *                   phone: "0911111111"
+ *                   bankInfo: "9876543210 - ACB"
+ *                   mst: "0398765432"
+ *                   ownerName: Trần Văn B
+ *                   role: Giám đốc
+ *                 contractDueDate: 2027-12-31
+ *                 details:
+ *                   - productName: Sản phẩm A
+ *                     price: 1000000
+ *             custom:
+ *               summary: Loại hợp đồng động
+ *               value:
+ *                 contractType: service
+ *                 contractData:
+ *                   title: Hợp đồng dịch vụ
+ *                   scope: Triển khai hệ thống
+ *                   paymentTerm: Thanh toán trong 30 ngày
+ *                 details:
+ *                   - detailKey: implementation
+ *                     detailType: service_fee
+ *                     detailData:
+ *                       name: Phí triển khai
+ *                       fee: 5000000
  *     responses:
  *       201:
- *         description: Tạo hợp đồng mẫu thành công
+ *         description: Tạo hợp đồng thành công
+ *       400:
+ *         description: Dữ liệu yêu cầu không hợp lệ
  */
 router.post(
   "/",
@@ -119,18 +156,23 @@ router.post(
  *         schema:
  *           type: integer
  *           default: 20
- *         description: Số lượng bản ghi trên một trang
+ *         description: Số lượng bản ghi trên mỗi trang
  *       - in: query
  *         name: search
  *         schema:
  *           type: string
- *         description: Tìm theo contract number hoặc company code/name
+ *         description: Tìm theo số hợp đồng, thông tin công ty hoặc contractData
  *       - in: query
  *         name: status
  *         schema:
  *           type: string
  *           enum: [draft, unsigned, owner_signed, completed]
  *         description: Lọc theo trạng thái hiện tại của hợp đồng
+ *       - in: query
+ *         name: contractType
+ *         schema:
+ *           type: string
+ *         description: Lọc theo loại hợp đồng
  *     responses:
  *       200:
  *         description: Lấy danh sách hợp đồng thành công
@@ -144,31 +186,9 @@ router.get(
 
 /**
  * @swagger
- * /api/v1/contracts/{contractId}:
- *   get:
- *     summary: Lấy chi tiết hợp đồng theo contractId
- *     tags: [Contracts]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: contractId
- *         required: true
- *         schema:
- *           type: string
- *           format: uuid
- *         description: UUID public của contract
- *     responses:
- *       200:
- *         description: Thành công
- *       404:
- *         description: Không tìm thấy hợp đồng
- */
-/**
- * @swagger
  * /api/v1/contracts/{contractId}/signing-link:
  *   get:
- *     summary: Sinh link ký hợp đồng bảo mật chứa JWT Token cho đối tác
+ *     summary: Sinh đường dẫn ký hợp đồng cho đối tác
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -179,10 +199,10 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
+ *         description: UUID public của hợp đồng
  *     responses:
  *       200:
- *         description: Sinh link thành công
+ *         description: Sinh đường dẫn ký hợp đồng thành công
  *       404:
  *         description: Không tìm thấy hợp đồng
  */
@@ -209,7 +229,7 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
+ *         description: UUID public của hợp đồng
  *     responses:
  *       200:
  *         description: Xoá hợp đồng thành công
@@ -227,8 +247,8 @@ router.delete(
  * @swagger
  * /api/v1/contracts/{contractId}:
  *   put:
- *     summary: Cập nhật thông tin hợp đồng draft
- *     description: Chỉ cho phép cập nhật hợp đồng đang ở trạng thái draft. Sau khi cập nhật sẽ generate lại file PDF local và cập nhật preview.
+ *     summary: Cập nhật hợp đồng nháp
+ *     description: Chỉ cho phép cập nhật hợp đồng đang ở trạng thái nháp. Sau khi cập nhật sẽ tạo lại PDF preview.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -239,19 +259,20 @@ router.delete(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
+ *         description: UUID public của hợp đồng
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - ownerCompanyInfo
- *               - partnerCompanyInfo
- *               - contractDueDate
- *               - details
  *             properties:
+ *               contractType:
+ *                 type: string
+ *                 example: principle
+ *               contractData:
+ *                 type: object
+ *                 description: Payload động theo từng loại hợp đồng
  *               ownerCompanyInfo:
  *                 type: object
  *               partnerCompanyInfo:
@@ -259,23 +280,26 @@ router.delete(
  *               contractDueDate:
  *                 type: string
  *                 format: date
- *                 example: 2027-12-31
- *               contractType:
- *                 type: string
- *                 enum: [digital, default]
- *                 example: digital
  *               details:
  *                 type: array
  *                 items:
  *                   type: object
  *                   properties:
+ *                     detailKey:
+ *                       type: string
+ *                     detailType:
+ *                       type: string
+ *                     detailData:
+ *                       type: object
  *                     productName:
  *                       type: string
  *                     price:
  *                       type: number
  *     responses:
  *       200:
- *         description: Cập nhật hợp đồng draft thành công
+ *         description: Cập nhật hợp đồng nháp thành công
+ *       400:
+ *         description: Hợp đồng không ở trạng thái nháp hoặc dữ liệu không hợp lệ
  */
 router.put(
   "/:contractId",
@@ -288,8 +312,8 @@ router.put(
  * @swagger
  * /api/v1/contracts/{contractId}/publish-unsigned:
  *   post:
- *     summary: Upload bản unsigned hiện tại của hợp đồng lên S3
- *     description: Chỉ áp dụng cho contract đang ở trạng thái draft. Sau khi upload thành công, contract và document hiện tại sẽ chuyển sang unsigned.
+ *     summary: Phát hành bản hợp đồng chưa ký lên S3
+ *     description: Chỉ áp dụng cho hợp đồng đang ở trạng thái nháp. Sau khi upload thành công, contract và document hiện tại chuyển sang unsigned.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -300,10 +324,9 @@ router.put(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
  *     responses:
  *       200:
- *         description: Publish unsigned lên S3 thành công
+ *         description: Phát hành hợp đồng chưa ký thành công
  */
 router.post(
   "/:contractId/publish-unsigned",
@@ -316,8 +339,7 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/publish-owner-signed:
  *   post:
- *     summary: Upload bản owner_signed hiện tại của hợp đồng lên S3
- *     description: Chỉ áp dụng cho contract đang ở trạng thái owner_signed. Sau khi upload thành công, contractUrl sẽ được cập nhật sang bản S3 mới nhất.
+ *     summary: Phát hành bản hợp đồng đã được bên sở hữu ký lên S3
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -328,10 +350,9 @@ router.post(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
  *     responses:
  *       200:
- *         description: Publish owner_signed lên S3 thành công
+ *         description: Phát hành hợp đồng đã được bên sở hữu ký thành công
  */
 router.post(
   "/:contractId/publish-owner-signed",
@@ -344,8 +365,7 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/publish-completed:
  *   post:
- *     summary: Upload bản completed hiện tại của hợp đồng lên S3
- *     description: Chỉ áp dụng cho contract đang ở trạng thái completed. Sau khi upload thành công, contractUrl sẽ được cập nhật sang bản S3 mới nhất.
+ *     summary: Phát hành bản hợp đồng đã hoàn tất lên S3
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -356,10 +376,9 @@ router.post(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID public của contract
  *     responses:
  *       200:
- *         description: Publish completed lên S3 thành công
+ *         description: Phát hành hợp đồng đã hoàn tất thành công
  */
 router.post(
   "/:contractId/publish-completed",
@@ -372,8 +391,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/signing-sessions:
  *   post:
- *     summary: Tạo phiên ký số PDF chuẩn ByteRange cho version mới nhất của hợp đồng
- *     description: API tạo PDF tạm có signature placeholder, tính hash theo ByteRange và trả hashToSign để client gửi sang app ký số local qua http://127.0.0.1:9999/sign-pdf-cms. Chữ ký trả về ở bước complete phải là CMS/PKCS#7 DER dạng hex.
+ *     summary: Tạo phiên ký số PDF
+ *     description: Tạo PDF tạm có signature placeholder, tính hash theo ByteRange và trả hashToSign để client ký số.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -384,7 +403,6 @@ router.post(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID của hợp đồng cần tạo phiên ký
  *     requestBody:
  *       required: true
  *       content:
@@ -403,7 +421,7 @@ router.post(
  *                 type: string
  *     responses:
  *       201:
- *         description: Trả về hashToSign, byteRange và signingSessionId
+ *         description: Tạo phiên ký số thành công
  */
 router.post(
   "/:contractId/signing-sessions",
@@ -416,8 +434,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/signing-sessions/{contractSignatureId}/complete:
  *   post:
- *     summary: Hoàn tất ký số PDF ByteRange và tạo PDF version mới
- *     description: signatureHex phải là CMS/PKCS#7 detached signature dạng DER hex, không phải raw RSA signature. API sẽ nhúng signature vào /Contents của PDF placeholder.
+ *     summary: Hoàn tất ký số PDF
+ *     description: Nhúng signatureHex vào PDF placeholder và tạo version PDF mới.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -428,14 +446,12 @@ router.post(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID của hợp đồng cần hoàn tất ký số
  *       - in: path
  *         name: contractSignatureId
  *         required: true
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID của signing session cần hoàn tất
  *     requestBody:
  *       required: true
  *       content:
@@ -447,7 +463,7 @@ router.post(
  *             properties:
  *               signatureHex:
  *                 type: string
- *                 description: CMS/PKCS#7 detached signature DER hex
+ *                 description: CMS/PKCS#7 detached signature dạng DER hex
  *               certificatePem:
  *                 type: string
  *               certificateSerial:
@@ -460,7 +476,7 @@ router.post(
  *                 type: string
  *     responses:
  *       200:
- *         description: PDF đã được nhúng chữ ký số ByteRange
+ *         description: Hoàn tất ký số hợp đồng thành công
  */
 router.post(
   "/:contractId/signing-sessions/:contractSignatureId/complete",
@@ -473,8 +489,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/partner-signer-type:
  *   patch:
- *     summary: Cap nhat loai doi tac ky hop dong
- *     description: Doi tac phai chon individual hoac organization truoc khi di tiep flow ho so va ky.
+ *     summary: Cập nhật loại đối tác ký hợp đồng
+ *     description: Đối tác phải chọn individual hoặc organization trước khi đi tiếp flow hồ sơ và ký.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -499,7 +515,7 @@ router.post(
  *                 enum: [individual, organization]
  *     responses:
  *       200:
- *         description: Cap nhat thanh cong
+ *         description: Cập nhật loại đối tác ký hợp đồng thành công
  */
 router.patch(
   "/:contractId/partner-signer-type",
@@ -512,8 +528,8 @@ router.patch(
  * @swagger
  * /api/v1/contracts/{contractId}/individual-credential:
  *   post:
- *     summary: Upload 2 mat CMND/CCCD va trich xuat thong tin ca nhan bang FPT AI
- *     description: Chi dung khi signerType = individual. API upload anh vao S3 folder individual_credential, goi FPT.AI ID Recognition cho tung anh va merge thong tin OCR vao individualCredential.
+ *     summary: Upload 2 mặt CMND/CCCD và trích xuất thông tin cá nhân
+ *     description: Chỉ dùng khi signerType = individual. API upload ảnh lên S3, gọi FPT.AI ID Recognition và lưu kết quả OCR vào individualCredential.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -537,14 +553,14 @@ router.patch(
  *               first_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Anh mat truoc CMND/CCCD, toi da 5MB
+ *                 description: Ảnh mặt trước CMND/CCCD, tối đa 5MB
  *               second_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Anh mat sau CMND/CCCD, toi da 5MB
+ *                 description: Ảnh mặt sau CMND/CCCD, tối đa 5MB
  *     responses:
  *       200:
- *         description: Upload va trich xuat thong tin thanh cong
+ *         description: Upload và trích xuất thông tin CMND/CCCD thành công
  */
 router.post(
   "/:contractId/individual-credential",
@@ -561,8 +577,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/organization-credential:
  *   post:
- *     summary: Upload ho so to chuc cua doi tac
- *     description: Chi dung khi signerType = organization. business_license la bat buoc, power_of_attorney_image la khong bat buoc. Moi file co the la anh hoac PDF.
+ *     summary: Upload hồ sơ tổ chức của đối tác
+ *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc. Mỗi file có thể là ảnh hoặc PDF.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -585,32 +601,14 @@ router.post(
  *               business_license:
  *                 type: string
  *                 format: binary
- *                 description: Anh hoac PDF
+ *                 description: Ảnh hoặc PDF giấy phép kinh doanh
  *               power_of_attorney_image:
  *                 type: string
  *                 format: binary
- *                 description: Anh hoac PDF
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               signerType:
- *                 type: string
- *                 enum: [owner, partner, individual]
- *               signerName:
- *                 type: string
- *               signerEmail:
- *                 type: string
- *               signature_image:
- *                 type: string
- *                 description: Base64 raw hoac data URI dang data:image/png;base64,...
- *               signature_image_filename:
- *                 type: string
- *               signature_image_mimeType:
- *                 type: string
+ *                 description: Ảnh hoặc PDF giấy uỷ quyền
  *     responses:
  *       200:
- *         description: Upload ho so to chuc thanh cong
+ *         description: Upload hồ sơ tổ chức thành công
  */
 router.post(
   "/:contractId/organization-credential",
@@ -627,8 +625,8 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/credential:
  *   delete:
- *     summary: Xoa ho so ky cua doi tac theo loai
- *     description: Dung khi doi tac doi luong ky tu ca nhan sang to chuc hoac nguoc lai. API xoa credential JSON va cac file S3 lien quan cua loai duoc chon.
+ *     summary: Xoá hồ sơ ký của đối tác theo loại
+ *     description: Dùng khi đối tác đổi luồng ký từ cá nhân sang tổ chức hoặc ngược lại. API xoá credential JSON và các file S3 liên quan của loại được chọn.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -653,7 +651,7 @@ router.post(
  *                 enum: [individual, organization]
  *     responses:
  *       200:
- *         description: Xoa ho so ky thanh cong
+ *         description: Xoá hồ sơ ký của đối tác thành công
  */
 router.delete(
   "/:contractId/credential",
@@ -667,7 +665,7 @@ router.delete(
  * /api/v1/contracts/{contractId}/handwritten-signatures:
  *   post:
  *     summary: Hoàn tất ký tay và tạo PDF version mới
- *     description: Nhận ảnh chữ ký tay từ client editor, lưu ảnh lên S3, embed vào ô chữ ký trong PDF và cập nhật trạng thái hợp đồng.
+ *     description: Nhận ảnh chữ ký tay từ client, lưu ảnh lên S3, embed vào ô chữ ký trong PDF và cập nhật trạng thái hợp đồng.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -699,7 +697,7 @@ router.delete(
  *                 format: binary
  *     responses:
  *       200:
- *         description: Ký tay thành công
+ *         description: Hoàn tất ký tay hợp đồng thành công
  */
 router.post(
   "/:contractId/handwritten-signatures",
@@ -713,7 +711,7 @@ router.post(
  * @swagger
  * /api/v1/contracts/{contractId}/template-pdf:
  *   get:
- *     summary: Preview file PDF hợp đồng mẫu đã tạo
+ *     summary: Preview file PDF hợp đồng đã tạo
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -740,6 +738,28 @@ router.get(
   ContractController.previewContractPdf,
 );
 
+/**
+ * @swagger
+ * /api/v1/contracts/{contractId}:
+ *   get:
+ *     summary: Lấy chi tiết hợp đồng theo contractId
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID public của hợp đồng
+ *     responses:
+ *       200:
+ *         description: Lấy chi tiết hợp đồng thành công
+ *       404:
+ *         description: Không tìm thấy hợp đồng
+ */
 router.get(
   "/:contractId",
   protectContractAccess,

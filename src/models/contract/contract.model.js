@@ -15,13 +15,13 @@ function formatContractNumber(sequence, date = new Date()) {
   const paddedSequence = String(sequence).padStart(3, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
-  const companyCode = String(this.ownerCompanyInfo?.companyCode || "").trim();
-
-  if (!companyCode) {
-    throw new Error(
-      "ownerCompanyInfo.companyCode is required to build contractNumber"
-    );
-  }
+  const rawCompanyCode = String(
+    this.ownerCompanyInfo?.companyCode || this.contractType || "HD"
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "");
+  const companyCode = rawCompanyCode || "HD";
 
   return `${paddedSequence}/${month}/${year}/${companyCode}`;
 }
@@ -84,22 +84,29 @@ const Contract = sequelize.define(
     },
     ownerCompanyInfo: {
       type: DataTypes.JSONB,
-      allowNull: false,
+      allowNull: true,
       field: "owner_company_info",
       comment:
         "companyCode, companyName, address, phone, email, bankInfo, mst, owner, role, signature",
     },
     partnerCompanyInfo: {
       type: DataTypes.JSONB,
-      allowNull: false,
+      allowNull: true,
       field: "partner_company_info",
       comment:
         "companyName, address, phone, email, bankInfo, mst, owner, role, signature",
     },
     contractDueDate: {
       type: DataTypes.DATE,
-      allowNull: false,
+      allowNull: true,
       field: "contract_due_date",
+    },
+    contractData: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+      field: "contract_data",
+      comment: "Dynamic payload by contractType. Keeps each contract type input without changing columns.",
     },
     contractChecksum: {
       type: DataTypes.STRING,
@@ -108,10 +115,8 @@ const Contract = sequelize.define(
     },
     contractType: {
       type: DataTypes.STRING,
-      validate: {
-        isIn: [["digital", "default"]],
-      },
-      defaultValue: "default",
+      allowNull: false,
+      defaultValue: "principle",
       field: "contract_type",
     },
     signerType: {

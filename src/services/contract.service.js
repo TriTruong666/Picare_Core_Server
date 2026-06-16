@@ -33,6 +33,77 @@ const CONTRACT_STATUS = {
   COMPLETED: "completed",
 };
 
+const PRINCIPLE_CONTRACT_TYPE = "principle";
+const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
+
+function normalizeContractType(contractType) {
+  const normalizedType = String(contractType || PRINCIPLE_CONTRACT_TYPE)
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedType || LEGACY_PRINCIPLE_CONTRACT_TYPES.has(normalizedType)) {
+    return PRINCIPLE_CONTRACT_TYPE;
+  }
+
+  return normalizedType;
+}
+
+function normalizeContractData(input = {}) {
+  const contractType = normalizeContractType(input.contractType);
+  const sourceData =
+    input.contractData && typeof input.contractData === "object"
+      ? input.contractData
+      : {};
+  const details = Array.isArray(input.details)
+    ? input.details
+    : Array.isArray(sourceData.details)
+      ? sourceData.details
+      : [];
+  const ownerCompanyInfo =
+    input.ownerCompanyInfo || sourceData.ownerCompanyInfo || null;
+  const partnerCompanyInfo =
+    input.partnerCompanyInfo || sourceData.partnerCompanyInfo || null;
+  const contractDueDate =
+    input.contractDueDate || sourceData.contractDueDate || null;
+
+  return {
+    contractType,
+    ownerCompanyInfo,
+    partnerCompanyInfo,
+    contractDueDate,
+    details,
+    contractData: {
+      ...sourceData,
+      ownerCompanyInfo,
+      partnerCompanyInfo,
+      contractDueDate,
+      details,
+    },
+  };
+}
+
+function buildContractDetailRows(contractId, details = []) {
+  return details.map((detail, index) => {
+    const detailData =
+      detail.detailData && typeof detail.detailData === "object"
+        ? detail.detailData
+        : detail;
+
+    return {
+      contractId,
+      detailKey:
+        detail.detailKey ||
+        detail.key ||
+        detail.productName ||
+        `detail_${index + 1}`,
+      detailType: detail.detailType || detail.type || "item",
+      detailData,
+      productName: detail.productName ?? detailData.productName ?? null,
+      price: detail.price ?? detailData.price ?? null,
+    };
+  });
+}
+
 function formatContractCreatedDescription(date = new Date()) {
   const parts = new Intl.DateTimeFormat("vi-VN", {
     timeZone: "Asia/Ho_Chi_Minh",
@@ -415,27 +486,34 @@ class ContractService {
     ownerCompanyInfo,
     partnerCompanyInfo,
     contractDueDate,
-    contractType = "default",
+    contractType = PRINCIPLE_CONTRACT_TYPE,
+    contractData = {},
     details = [],
-  }) {
+  } = {}) {
+    const normalizedContract = normalizeContractData({
+      ownerCompanyInfo,
+      partnerCompanyInfo,
+      contractDueDate,
+      contractType,
+      contractData,
+      details,
+    });
+
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.create(
         {
-          ownerCompanyInfo,
-          partnerCompanyInfo,
-          contractDueDate,
-          contractType,
+          ownerCompanyInfo: normalizedContract.ownerCompanyInfo,
+          partnerCompanyInfo: normalizedContract.partnerCompanyInfo,
+          contractDueDate: normalizedContract.contractDueDate,
+          contractType: normalizedContract.contractType,
+          contractData: normalizedContract.contractData,
           status: CONTRACT_STATUS.DRAFT,
         },
         { transaction }
       );
 
       const createdDetails = await ContractDetail.bulkCreate(
-        details.map((detail) => ({
-          contractId: contract.contractId,
-          productName: detail.productName,
-          price: detail.price,
-        })),
+        buildContractDetailRows(contract.contractId, normalizedContract.details),
         { transaction, returning: true }
       );
 
@@ -706,10 +784,20 @@ class ContractService {
       ownerCompanyInfo,
       partnerCompanyInfo,
       contractDueDate,
-      contractType = "default",
+      contractType = PRINCIPLE_CONTRACT_TYPE,
+      contractData = {},
       details = [],
-    }
+    } = {}
   ) {
+    const normalizedContract = normalizeContractData({
+      ownerCompanyInfo,
+      partnerCompanyInfo,
+      contractDueDate,
+      contractType,
+      contractData,
+      details,
+    });
+
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.findOne({
         where: { contractId },
@@ -727,10 +815,11 @@ class ContractService {
       }
 
       const contractUpdateData = {
-        ownerCompanyInfo,
-        partnerCompanyInfo,
-        contractDueDate,
-        contractType,
+        ownerCompanyInfo: normalizedContract.ownerCompanyInfo,
+        partnerCompanyInfo: normalizedContract.partnerCompanyInfo,
+        contractDueDate: normalizedContract.contractDueDate,
+        contractType: normalizedContract.contractType,
+        contractData: normalizedContract.contractData,
         contractUrl: null,
       };
 
@@ -742,11 +831,7 @@ class ContractService {
       });
 
       const updatedDetails = await ContractDetail.bulkCreate(
-        details.map((detail) => ({
-          contractId,
-          productName: detail.productName,
-          price: detail.price,
-        })),
+        buildContractDetailRows(contractId, normalizedContract.details),
         { transaction, returning: true }
       );
 
@@ -1470,6 +1555,7 @@ class ContractService {
     limit = 20,
     search = "",
     status = "",
+    contractType = "",
   } = {}) {
     const pPage = parseInt(page, 10);
     const pLimit = parseInt(limit, 10);
@@ -1495,11 +1581,22 @@ class ContractService {
           ),
           { [Op.iLike]: `%${normalizedSearch}%` }
         ),
+        Contract.sequelize.where(
+          Contract.sequelize.cast(
+            Contract.sequelize.col("Contract.contract_data"),
+            "text"
+          ),
+          { [Op.iLike]: `%${normalizedSearch}%` }
+        ),
       ];
     }
 
     if (status) {
       where.status = status.trim();
+    }
+
+    if (contractType) {
+      where.contractType = normalizeContractType(contractType);
     }
 
     const { count, rows } = await Contract.findAndCountAll({

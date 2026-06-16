@@ -904,8 +904,8 @@ class ContractPdfBuilder {
       ["STT", "TÊN SẢN PHẨM", "GIÁ"],
       ...details.map((detail, index) => [
         String(index + 1),
-        detail.productName,
-        formatMoney(detail.price),
+        detail.productName || detail.detailData?.productName,
+        formatMoney(detail.price ?? detail.detailData?.price),
       ]),
     ];
 
@@ -1008,7 +1008,7 @@ class ContractPdfBuilder {
     doc.y = y + 150;
   }
 
-  render(contract, details) {
+  renderPrincipleContract(contract, details) {
     const owner = contract.ownerCompanyInfo || {};
     const partner = contract.partnerCompanyInfo || {};
     const createdAt = contract.createdAt || new Date();
@@ -1145,6 +1145,91 @@ class ContractPdfBuilder {
     );
 
     this.signatureArea(owner, partner);
+  }
+
+  renderGenericValue(label, value, depth = 0) {
+    const indent = "  ".repeat(depth);
+
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      this.text(`${indent}${label}:`, { bold: true });
+      value.forEach((item, index) => {
+        this.renderGenericValue(`${index + 1}`, item, depth + 1);
+      });
+      return;
+    }
+
+    if (typeof value === "object") {
+      this.text(`${indent}${label}:`, { bold: true });
+      Object.entries(value).forEach(([childKey, childValue]) => {
+        this.renderGenericValue(childKey, childValue, depth + 1);
+      });
+      return;
+    }
+
+    this.text(`${indent}${label}: ${asText(value)}`);
+  }
+
+  renderGenericContract(contract, details = []) {
+    const owner = contract.ownerCompanyInfo || {};
+    const partner = contract.partnerCompanyInfo || {};
+    const contractData = contract.contractData || {};
+    const title =
+      contractData.title ||
+      contractData.contractTitle ||
+      `HOP DONG ${asText(contract.contractType).toUpperCase()}`;
+
+    this.text(owner.companyName || "", { width: 245, bold: true });
+    this.text(`So: ${contract.contractNumber}`, { width: 245, bold: true });
+    this.doc.y = 56;
+    this.doc.x = 300;
+    this.rightBlock("CONG HOA XA HOI CHU NGHIA VIET NAM", {
+      size: 11,
+      bold: true,
+      gap: 0.1,
+    });
+    this.doc.x = 300;
+    this.rightBlock("Doc lap - Tu do - Hanh phuc", {
+      size: 10,
+      bold: true,
+      gap: 1.2,
+    });
+    this.doc.x = this.doc.page.margins.left;
+    this.centered(title, 14, 0.8, true);
+
+    Object.entries(contractData).forEach(([key, value]) => {
+      if (["details", "ownerCompanyInfo", "partnerCompanyInfo"].includes(key)) {
+        return;
+      }
+
+      this.renderGenericValue(key, value);
+    });
+
+    if (details.length) {
+      this.heading("CHI TIET HOP DONG");
+      details.forEach((detail, index) => {
+        this.renderGenericValue(
+          detail.detailKey || `detail_${index + 1}`,
+          detail.detailData || detail,
+        );
+      });
+    }
+
+    this.signatureArea(owner, partner);
+  }
+
+  render(contract, details) {
+    const contractType = String(contract.contractType || "").toLowerCase();
+
+    if (["principle", "default", "digital"].includes(contractType)) {
+      this.renderPrincipleContract(contract, details);
+      return;
+    }
+
+    this.renderGenericContract(contract, details);
   }
 }
 
