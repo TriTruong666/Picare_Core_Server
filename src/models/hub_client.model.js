@@ -40,12 +40,12 @@ const HubClient = sequelize.define(
     },
     clientInternalUrl: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: "client_internal_url",
     },
     clientExternalUrl: {
       type: DataTypes.STRING,
-      allowNull: false,
+      allowNull: true,
       field: "client_external_url",
     },
     clientStatus: {
@@ -71,15 +71,6 @@ const HubClient = sequelize.define(
   {
     tableName: "hub_clients",
     timestamps: true,
-    hooks: {
-      beforeValidate: (client) => {
-        if (!client.clientInternalUrl && client.clientId) {
-          const isDev = process.env.NODE_ENV === "development";
-          const baseUrl = isDev ? "http://localhost:5173" : "https://hub.picare.vn";
-          client.clientInternalUrl = `${baseUrl}/clients/${client.clientId}`;
-        }
-      },
-    },
   },
 );
 

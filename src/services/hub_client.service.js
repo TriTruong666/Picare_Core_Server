@@ -169,7 +169,10 @@ class HubClientService {
       throw new BadRequestException("Ten Hub Client da ton tai");
     }
 
-    const newClient = await HubClient.create(clientData);
+    const newClient = await HubClient.create({
+      ...clientData,
+      clientInternalUrl: null,
+    });
     return HubClientDTO.fromClient(newClient);
   }
 

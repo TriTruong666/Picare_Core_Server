@@ -139,7 +139,7 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
  *         application/json:
  *           schema:
  *             type: object
- *             required: [clientName, clientInternalUrl, clientExternalUrl, clientStatus]
+ *             required: [clientName, clientExternalUrl, clientStatus]
  *             properties:
  *               clientName:
  *                 type: string
@@ -147,6 +147,7 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
  *                 type: string
  *               clientInternalUrl:
  *                 type: string
+ *                 nullable: true
  *               clientExternalUrl:
  *                 type: string
  *               clientLogoImage:
