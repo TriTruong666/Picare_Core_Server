@@ -71,7 +71,6 @@ const mockContract = {
   },
   contractData: {
     principleContractNumber: "08/2026/HĐNT/MOCELUX-PICARE",
-    principleContractSignedDate: "15/06/2026",
     products: productRichTexts,
   },
 };

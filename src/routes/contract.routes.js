@@ -127,7 +127,6 @@ const credentialUpload = multer({
  *               value:
  *                 contractType: appendix
  *                 principleContractNumber: 08/2026/HĐNT/MOCELUX-PICARE
- *                 principleContractSignedDate: 15/06/2026
  *                 ownerCompanyInfo:
  *                   companyCode: PIC
  *                   companyName: CÔNG TY CỔ PHẦN PICARE VIỆT NAM

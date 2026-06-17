@@ -1,6 +1,11 @@
 const { body, param, query } = require("express-validator");
 
-const CONTRACT_STATUS_VALUES = ["draft", "unsigned", "owner_signed", "completed"];
+const CONTRACT_STATUS_VALUES = [
+  "draft",
+  "unsigned",
+  "owner_signed",
+  "completed",
+];
 const PRINCIPLE_CONTRACT_TYPE = "principle";
 const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
 
@@ -131,7 +136,9 @@ function validatePrincipleContractPayload(_, { req }) {
   }
 
   if (!ownerCompanyInfo.companyCode) {
-    throw new Error("ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng");
+    throw new Error(
+      "ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng",
+    );
   }
 
   if (!partnerCompanyInfo || typeof partnerCompanyInfo !== "object") {
@@ -196,10 +203,6 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage("principleContractNumber phải là chuỗi"),
-  body("principleContractSignedDate")
-    .optional({ nullable: true, checkFalsy: true })
-    .isString()
-    .withMessage("principleContractSignedDate phải là chuỗi"),
   body("products")
     .optional({ nullable: true })
     .isArray()

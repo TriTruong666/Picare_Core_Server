@@ -230,8 +230,13 @@ const decodeHtmlEntities = (value) => {
     (match, entity) => {
       if (entity[0] === "#") {
         const isHex = entity[1].toLowerCase() === "x";
-        const codePoint = parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
-        return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+        const codePoint = parseInt(
+          entity.slice(isHex ? 2 : 1),
+          isHex ? 16 : 10,
+        );
+        return Number.isNaN(codePoint)
+          ? match
+          : String.fromCodePoint(codePoint);
       }
 
       return entities[entity.toLowerCase()] || match;
@@ -296,7 +301,9 @@ function parseAppendixProductRichText(rawContent) {
     }
 
     if (currentKey) {
-      result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
+      result[currentKey] = [result[currentKey], line]
+        .filter(Boolean)
+        .join("\n");
     }
   }
 
@@ -335,9 +342,13 @@ function normalizeAppendixProduct(product) {
     productName: data.productName ?? parsed.productName,
     ingredients: data.ingredients ?? parsed.ingredients,
     packageSpecification:
-      data.packageSpecification ?? data.packageSpec ?? parsed.packageSpecification,
+      data.packageSpecification ??
+      data.packageSpec ??
+      parsed.packageSpecification,
     registrationNumber:
-      data.registrationNumber ?? data.registrationNo ?? parsed.registrationNumber,
+      data.registrationNumber ??
+      data.registrationNo ??
+      parsed.registrationNumber,
     origin: data.origin ?? data.countryOfOrigin ?? parsed.origin,
     unitPriceVat:
       data.unitPriceVat ??
@@ -345,7 +356,8 @@ function normalizeAppendixProduct(product) {
       data.priceVat ??
       data.price ??
       parsed.unitPriceVat,
-    classification: data.classification ?? data.category ?? parsed.classification,
+    classification:
+      data.classification ?? data.category ?? parsed.classification,
   };
 }
 
@@ -1254,7 +1266,9 @@ class ContractPdfBuilder {
     let y = doc.y + 4;
     const headerHeight = Math.max(
       minRowHeight,
-      ...headers.map((header, index) => cellHeight(header, widths[index], true)),
+      ...headers.map((header, index) =>
+        cellHeight(header, widths[index], true),
+      ),
     );
 
     if (y + headerHeight > doc.page.height - doc.page.margins.bottom) {
@@ -1914,8 +1928,6 @@ class ContractPdfBuilder {
     const renderedAt = new Date();
     const principleContractNumber =
       contractData.principleContractNumber || "08/2026/HĐNT/MOCELUX-PICARE";
-    const principleContractSignedDate =
-      contractData.principleContractSignedDate || "15/06/2026";
     const products = this.collectAppendixProducts(contract, details);
 
     this.text(owner.companyName, { width: 245, bold: true });
@@ -1942,7 +1954,7 @@ class ContractPdfBuilder {
     this.doc.x = this.doc.page.margins.left;
     this.centered("PHỤ LỤC HỢP ĐỒNG", 14, 0.25, true);
     this.centered(
-      `Đính kèm Hợp đồng nguyên tắc số: ${principleContractNumber} ký ngày ${principleContractSignedDate}`,
+      `Đính kèm Hợp đồng nguyên tắc số: ${principleContractNumber}`,
       10,
       0.8,
       true,

@@ -21,7 +21,6 @@ const FptAiService = require("./fpt_ai.service");
 const appConfig = require("../config/app.config");
 const JWTService = require("./jwt.service");
 
-
 const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
 const HANDWRITTEN_SIGNATURE_FOLDER = "handwritten_signature";
@@ -76,9 +75,6 @@ function normalizeContractData(input = {}) {
       ...sourceData,
       principleContractNumber:
         input.principleContractNumber ?? sourceData.principleContractNumber,
-      principleContractSignedDate:
-        input.principleContractSignedDate ??
-        sourceData.principleContractSignedDate,
       products:
         input.products ??
         input.productRichTexts ??
@@ -168,7 +164,7 @@ function getPublishContractErrorMessage(status) {
 function ensureContractSigningState(contract, signerType) {
   if (contract.status === CONTRACT_STATUS.DRAFT) {
     throw new BadRequestException(
-      "Hợp đồng đang ở trạng thái nháp, cần phát hành bản unsigned trước khi ký"
+      "Hợp đồng đang ở trạng thái nháp, cần phát hành bản unsigned trước khi ký",
     );
   }
 
@@ -201,7 +197,7 @@ function getNextContractStatus(contract, signerType) {
 function ensurePartnerSignerTypeSelected(contract) {
   if (!contract.signerType) {
     throw new BadRequestException(
-      "Đối tác phải cập nhật signerType trước khi thực hiện flow ký"
+      "Đối tác phải cập nhật signerType trước khi thực hiện flow ký",
     );
   }
 }
@@ -217,7 +213,7 @@ function ensurePartnerCredentialReady(contract) {
       !credential.second_identification_image
     ) {
       throw new BadRequestException(
-        "Đối tác cá nhân phải upload đủ 2 mặt CMND/CCCD trước khi ký tay"
+        "Đối tác cá nhân phải upload đủ 2 mặt CMND/CCCD trước khi ký tay",
       );
     }
   }
@@ -227,7 +223,7 @@ function ensurePartnerCredentialReady(contract) {
 
     if (!credential.business_license) {
       throw new BadRequestException(
-        "Đối tác tổ chức phải upload giấy phép kinh doanh trước khi ký số"
+        "Đối tác tổ chức phải upload giấy phép kinh doanh trước khi ký số",
       );
     }
   }
@@ -393,9 +389,7 @@ function extractFptIdData(response) {
 function isBackSideIdData(data = {}) {
   const type = String(data.type_new || data.type || "").toLowerCase();
   return (
-    type.includes("back") ||
-    Boolean(data.issue_date) ||
-    Boolean(data.features)
+    type.includes("back") || Boolean(data.issue_date) || Boolean(data.features)
   );
 }
 
@@ -479,14 +473,14 @@ class ContractService {
         fileUrl: generatedPdf.url,
         fileHash: pdfHashHex,
       },
-      { transaction: options.transaction }
+      { transaction: options.transaction },
     );
 
     await contract.update(
       {
         contractChecksum: pdfHashHex,
       },
-      { transaction: options.transaction }
+      { transaction: options.transaction },
     );
 
     return document;
@@ -499,6 +493,9 @@ class ContractService {
     contractType = PRINCIPLE_CONTRACT_TYPE,
     contractData = {},
     details = [],
+    principleContractNumber,
+    products,
+    productRichTexts,
   } = {}) {
     const normalizedContract = normalizeContractData({
       ownerCompanyInfo,
@@ -507,6 +504,9 @@ class ContractService {
       contractType,
       contractData,
       details,
+      principleContractNumber,
+      products,
+      productRichTexts,
     });
 
     return Contract.sequelize.transaction(async (transaction) => {
@@ -519,18 +519,21 @@ class ContractService {
           contractData: normalizedContract.contractData,
           status: CONTRACT_STATUS.DRAFT,
         },
-        { transaction }
+        { transaction },
       );
 
       const createdDetails = await ContractDetail.bulkCreate(
-        buildContractDetailRows(contract.contractId, normalizedContract.details),
-        { transaction, returning: true }
+        buildContractDetailRows(
+          contract.contractId,
+          normalizedContract.details,
+        ),
+        { transaction, returning: true },
       );
 
       const { pdfHashHex, fileName } =
         await ContractPdfService.generateContractPdfBuffer(
           contract,
-          createdDetails
+          createdDetails,
         );
       const previewUrl = buildContractPreviewUrl(contract.contractId);
 
@@ -540,7 +543,7 @@ class ContractService {
           contractUrl: null,
           status: CONTRACT_STATUS.DRAFT,
         },
-        { transaction }
+        { transaction },
       );
 
       await ContractDocument.create(
@@ -553,7 +556,7 @@ class ContractService {
           fileUrl: null,
           fileHash: pdfHashHex,
         },
-        { transaction }
+        { transaction },
       );
 
       contract.details = createdDetails;
@@ -579,7 +582,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
         throw new BadRequestException(
-          "Chỉ có thể phát hành hợp đồng đang ở trạng thái nháp"
+          "Chỉ có thể phát hành hợp đồng đang ở trạng thái nháp",
         );
       }
 
@@ -595,7 +598,9 @@ class ContractService {
         details,
       });
 
-      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const sourceBuffer = await readPdfBufferFromSource(
+        latestDocument.fileUrl,
+      );
       const s3Result = await uploadPdfBufferToS3({
         pdfBuffer: sourceBuffer,
         fileName: latestDocument.fileName,
@@ -608,7 +613,7 @@ class ContractService {
           status: CONTRACT_STATUS.UNSIGNED,
           fileUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       await contract.update(
@@ -616,7 +621,7 @@ class ContractService {
           status: CONTRACT_STATUS.UNSIGNED,
           contractUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       return {
@@ -643,7 +648,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
         throw new BadRequestException(
-          "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed"
+          "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed",
         );
       }
 
@@ -653,11 +658,13 @@ class ContractService {
 
       if (latestDocument.status !== CONTRACT_STATUS.OWNER_SIGNED) {
         throw new BadRequestException(
-          "Phiên bản hợp đồng mới nhất không ở trạng thái owner_signed"
+          "Phiên bản hợp đồng mới nhất không ở trạng thái owner_signed",
         );
       }
 
-      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const sourceBuffer = await readPdfBufferFromSource(
+        latestDocument.fileUrl,
+      );
       const s3Result = await uploadPdfBufferToS3({
         pdfBuffer: sourceBuffer,
         fileName: latestDocument.fileName,
@@ -669,14 +676,14 @@ class ContractService {
         {
           fileUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       await contract.update(
         {
           contractUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       const ownerSignature = await ContractSignature.findOne({
@@ -694,7 +701,7 @@ class ContractService {
           {
             signedPdfUrl: s3Result.url,
           },
-          { transaction }
+          { transaction },
         );
       }
 
@@ -722,7 +729,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.COMPLETED) {
         throw new BadRequestException(
-          "Chỉ có thể publish hợp đồng đang ở trạng thái completed"
+          "Chỉ có thể publish hợp đồng đang ở trạng thái completed",
         );
       }
 
@@ -732,11 +739,13 @@ class ContractService {
 
       if (latestDocument.status !== CONTRACT_STATUS.COMPLETED) {
         throw new BadRequestException(
-          "Phiên bản hợp đồng mới nhất không ở trạng thái completed"
+          "Phiên bản hợp đồng mới nhất không ở trạng thái completed",
         );
       }
 
-      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const sourceBuffer = await readPdfBufferFromSource(
+        latestDocument.fileUrl,
+      );
       const s3Result = await uploadPdfBufferToS3({
         pdfBuffer: sourceBuffer,
         fileName: latestDocument.fileName,
@@ -748,14 +757,14 @@ class ContractService {
         {
           fileUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       await contract.update(
         {
           contractUrl: s3Result.url,
         },
-        { transaction }
+        { transaction },
       );
 
       const partnerSignature = await ContractSignature.findOne({
@@ -773,7 +782,7 @@ class ContractService {
           {
             signedPdfUrl: s3Result.url,
           },
-          { transaction }
+          { transaction },
         );
       }
 
@@ -797,7 +806,11 @@ class ContractService {
       contractType = PRINCIPLE_CONTRACT_TYPE,
       contractData = {},
       details = [],
-    } = {}
+      principleContractNumber,
+
+      products,
+      productRichTexts,
+    } = {},
   ) {
     const normalizedContract = normalizeContractData({
       ownerCompanyInfo,
@@ -806,6 +819,10 @@ class ContractService {
       contractType,
       contractData,
       details,
+      principleContractNumber,
+
+      products,
+      productRichTexts,
     });
 
     return Contract.sequelize.transaction(async (transaction) => {
@@ -820,7 +837,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
         throw new BadRequestException(
-          "Chỉ được cập nhật hợp đồng ở trạng thái draft"
+          "Chỉ được cập nhật hợp đồng ở trạng thái draft",
         );
       }
 
@@ -842,7 +859,7 @@ class ContractService {
 
       const updatedDetails = await ContractDetail.bulkCreate(
         buildContractDetailRows(contractId, normalizedContract.details),
-        { transaction, returning: true }
+        { transaction, returning: true },
       );
 
       const latestDocument = await this.getLatestContractDocument(contractId, {
@@ -864,7 +881,7 @@ class ContractService {
           contractChecksum: pdfHashHex,
           status: CONTRACT_STATUS.DRAFT,
         },
-        { transaction }
+        { transaction },
       );
 
       await latestDocument.update(
@@ -875,7 +892,7 @@ class ContractService {
           fileUrl: uploadedDraftPdf.url,
           fileHash: pdfHashHex,
         },
-        { transaction }
+        { transaction },
       );
 
       if (previousFileUrl && previousFileUrl !== uploadedDraftPdf.url) {
@@ -937,7 +954,7 @@ class ContractService {
 
         if (contract.signerType === "individual") {
           throw new BadRequestException(
-            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay"
+            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay",
           );
         }
       }
@@ -954,7 +971,9 @@ class ContractService {
         details,
       });
 
-      const sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+      const sourceBuffer = await readPdfBufferFromSource(
+        latestDocument.fileUrl,
+      );
       const preparedSignaturePdf =
         await ContractPdfService.prepareByteRangeSignaturePdf({
           sourceBytes: sourceBuffer,
@@ -985,7 +1004,7 @@ class ContractService {
           byteRange: preparedSignaturePdf.byteRange,
           signatureLength: preparedSignaturePdf.signatureLength,
         },
-        { transaction }
+        { transaction },
       );
 
       return {
@@ -1037,14 +1056,14 @@ class ContractService {
 
         if (contract.signerType === "individual") {
           throw new BadRequestException(
-            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay"
+            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay",
           );
         }
       }
 
       if (signature.status !== "pending") {
         throw new BadRequestException(
-          "Phiên ký không còn ở trạng thái pending"
+          "Phiên ký không còn ở trạng thái pending",
         );
       }
 
@@ -1069,11 +1088,11 @@ class ContractService {
           certificateIssuer,
           vendor,
         },
-        { transaction }
+        { transaction },
       );
 
       const preparedPdfBuffer = await readPdfBufferFromSource(
-        signature.preparedPdfPath
+        signature.preparedPdfPath,
       );
       const signedPdf = await ContractPdfService.embedByteRangeSignature({
         preparedBytes: preparedPdfBuffer,
@@ -1101,7 +1120,7 @@ class ContractService {
           fileUrl: signedPdfUrl,
           fileHash: signedPdf.signedPdfHash,
         },
-        { transaction }
+        { transaction },
       );
 
       await signature.update(
@@ -1111,7 +1130,7 @@ class ContractService {
           signedPdfUrl,
           signedAt: new Date(),
         },
-        { transaction }
+        { transaction },
       );
 
       await contract.update(
@@ -1120,7 +1139,7 @@ class ContractService {
           contractUrl: signedPdfUrl,
           status: nextStatus,
         },
-        { transaction }
+        { transaction },
       );
 
       return {
@@ -1144,7 +1163,7 @@ class ContractService {
 
     if (contract.status === CONTRACT_STATUS.COMPLETED) {
       throw new BadRequestException(
-        "Hợp đồng đã hoàn tất, không thể cập nhật signerType"
+        "Hợp đồng đã hoàn tất, không thể cập nhật signerType",
       );
     }
 
@@ -1168,7 +1187,7 @@ class ContractService {
   }) {
     if (!firstIdentificationImage || !secondIdentificationImage) {
       throw new BadRequestException(
-        "Cần upload đủ 2 ảnh CMND/CCCD mặt trước và mặt sau"
+        "Cần upload đủ 2 ảnh CMND/CCCD mặt trước và mặt sau",
       );
     }
 
@@ -1180,34 +1199,34 @@ class ContractService {
 
     if (!contract.signerType) {
       throw new BadRequestException(
-        "Vui lòng cập nhật signerType trước khi upload hồ sơ cá nhân"
+        "Vui lòng cập nhật signerType trước khi upload hồ sơ cá nhân",
       );
     }
 
     if (contract.signerType !== "individual") {
       throw new BadRequestException(
-        "Chỉ signerType individual mới được upload CMND/CCCD"
+        "Chỉ signerType individual mới được upload CMND/CCCD",
       );
     }
 
     const oldCredentialS3Keys = new Set(
-      collectCredentialS3Keys(contract.individualCredential)
+      collectCredentialS3Keys(contract.individualCredential),
     );
 
     assertImageFile(
       firstIdentificationImage,
-      "Ảnh mặt trước CMND/CCCD không hợp lệ"
+      "Ảnh mặt trước CMND/CCCD không hợp lệ",
     );
     assertImageFile(
       secondIdentificationImage,
-      "Ảnh mặt sau CMND/CCCD không hợp lệ"
+      "Ảnh mặt sau CMND/CCCD không hợp lệ",
     );
 
     const [firstUpload, secondUpload] = await Promise.all([
       S3Service.upload({
         key: S3Service.buildKey(
           INDIVIDUAL_CREDENTIAL_FOLDER,
-          firstIdentificationImage.originalname
+          firstIdentificationImage.originalname,
         ),
         body: firstIdentificationImage.buffer,
         mimeType: firstIdentificationImage.mimetype,
@@ -1221,7 +1240,7 @@ class ContractService {
       S3Service.upload({
         key: S3Service.buildKey(
           INDIVIDUAL_CREDENTIAL_FOLDER,
-          secondIdentificationImage.originalname
+          secondIdentificationImage.originalname,
         ),
         body: secondIdentificationImage.buffer,
         mimeType: secondIdentificationImage.mimetype,
@@ -1285,25 +1304,25 @@ class ContractService {
 
     if (!contract.signerType) {
       throw new BadRequestException(
-        "Vui lòng cập nhật signerType trước khi upload hồ sơ tổ chức"
+        "Vui lòng cập nhật signerType trước khi upload hồ sơ tổ chức",
       );
     }
 
     if (contract.signerType !== "organization") {
       throw new BadRequestException(
-        "Chỉ signerType organization mới được upload hồ sơ tổ chức"
+        "Chỉ signerType organization mới được upload hồ sơ tổ chức",
       );
     }
 
     assertImageOrPdfFile(
       businessLicense,
-      "Giấy phép kinh doanh phải là file ảnh hoặc PDF"
+      "Giấy phép kinh doanh phải là file ảnh hoặc PDF",
     );
 
     if (powerOfAttorney) {
       assertImageOrPdfFile(
         powerOfAttorney,
-        "Giấy uỷ quyền phải là file ảnh hoặc PDF"
+        "Giấy uỷ quyền phải là file ảnh hoặc PDF",
       );
     }
 
@@ -1311,7 +1330,7 @@ class ContractService {
       S3Service.upload({
         key: S3Service.buildKey(
           ORGANIZATION_CREDENTIAL_FOLDER,
-          file.originalname
+          file.originalname,
         ),
         body: file.buffer,
         mimeType: file.mimetype,
@@ -1349,7 +1368,7 @@ class ContractService {
   static async deletePartnerCredential({ contractId, credentialType }) {
     if (!["individual", "organization"].includes(credentialType)) {
       throw new BadRequestException(
-        "credentialType ch\u1ec9 nh\u1eadn individual ho\u1eb7c organization"
+        "credentialType ch\u1ec9 nh\u1eadn individual ho\u1eb7c organization",
       );
     }
 
@@ -1361,7 +1380,7 @@ class ContractService {
 
     if (contract.status === CONTRACT_STATUS.COMPLETED) {
       throw new BadRequestException(
-        "H\u1ee3p \u0111\u1ed3ng \u0111\u00e3 ho\u00e0n t\u1ea5t, kh\u00f4ng th\u1ec3 xo\u00e1 h\u1ed3 s\u01a1 k\u00fd"
+        "H\u1ee3p \u0111\u1ed3ng \u0111\u00e3 ho\u00e0n t\u1ea5t, kh\u00f4ng th\u1ec3 xo\u00e1 h\u1ed3 s\u01a1 k\u00fd",
       );
     }
 
@@ -1422,27 +1441,25 @@ class ContractService {
 
       if (!resolvedPartnerSignerType) {
         throw new BadRequestException(
-          "Đối tác phải cập nhật signerType trước khi thực hiện flow ký tay"
+          "Đối tác phải cập nhật signerType trước khi thực hiện flow ký tay",
         );
       }
 
-      if (
-        !["individual", "organization"].includes(resolvedPartnerSignerType)
-      ) {
+      if (!["individual", "organization"].includes(resolvedPartnerSignerType)) {
         throw new BadRequestException(
-          "signerType chỉ nhận individual hoặc organization"
+          "signerType chỉ nhận individual hoặc organization",
         );
       }
 
       if (contract.signerType !== resolvedPartnerSignerType) {
         throw new BadRequestException(
-          "signerType không khớp với loại đối tác đã cập nhật trên hợp đồng"
+          "signerType không khớp với loại đối tác đã cập nhật trên hợp đồng",
         );
       }
 
       if (resolvedPartnerSignerType !== "individual") {
         throw new BadRequestException(
-          "Đối tác tổ chức phải sử dụng flow ký số"
+          "Đối tác tổ chức phải sử dụng flow ký số",
         );
       }
 
@@ -1458,11 +1475,12 @@ class ContractService {
         details,
       });
 
-      const sourcePdfHash = latestDocument.fileHash || contract.contractChecksum;
+      const sourcePdfHash =
+        latestDocument.fileHash || contract.contractChecksum;
       const signatureImageUpload = await S3Service.upload({
         key: S3Service.buildKey(
           HANDWRITTEN_SIGNATURE_FOLDER,
-          signatureImage.originalname
+          signatureImage.originalname,
         ),
         body: signatureImage.buffer,
         mimeType: signatureImage.mimetype,
@@ -1487,7 +1505,7 @@ class ContractService {
           handwrittenSignatureImageUrl: signatureImageUpload.url,
           handwrittenSignatureImageKey: signatureImageUpload.key,
         },
-        { transaction }
+        { transaction },
       );
 
       const signedPdf = await ContractPdfService.embedHandwrittenSignature({
@@ -1520,7 +1538,7 @@ class ContractService {
           fileUrl: signedPdfUrl,
           fileHash: signedPdf.signedPdfHash,
         },
-        { transaction }
+        { transaction },
       );
 
       await signature.update(
@@ -1533,7 +1551,7 @@ class ContractService {
             widgetRect: signedPdf.widgetRect,
           },
         },
-        { transaction }
+        { transaction },
       );
 
       await contract.update(
@@ -1542,7 +1560,7 @@ class ContractService {
           contractUrl: signedPdfUrl,
           status: nextStatus,
         },
-        { transaction }
+        { transaction },
       );
 
       return {
@@ -1578,23 +1596,23 @@ class ContractService {
         Contract.sequelize.where(
           Contract.sequelize.cast(
             Contract.sequelize.col("Contract.owner_company_info"),
-            "text"
+            "text",
           ),
-          { [Op.iLike]: `%${normalizedSearch}%` }
+          { [Op.iLike]: `%${normalizedSearch}%` },
         ),
         Contract.sequelize.where(
           Contract.sequelize.cast(
             Contract.sequelize.col("Contract.partner_company_info"),
-            "text"
+            "text",
           ),
-          { [Op.iLike]: `%${normalizedSearch}%` }
+          { [Op.iLike]: `%${normalizedSearch}%` },
         ),
         Contract.sequelize.where(
           Contract.sequelize.cast(
             Contract.sequelize.col("Contract.contract_data"),
-            "text"
+            "text",
           ),
-          { [Op.iLike]: `%${normalizedSearch}%` }
+          { [Op.iLike]: `%${normalizedSearch}%` },
         ),
       ];
     }
@@ -1685,10 +1703,10 @@ class ContractService {
     }
 
     collectCredentialS3Keys(contract.individualCredential).forEach((key) =>
-      s3Keys.add(key)
+      s3Keys.add(key),
     );
     collectCredentialS3Keys(contract.organizationCredential).forEach((key) =>
-      s3Keys.add(key)
+      s3Keys.add(key),
     );
 
     for (const document of contract.documents || []) {
@@ -1715,7 +1733,7 @@ class ContractService {
       }
 
       const handwrittenKey = extractS3KeyFromUrl(
-        signature.handwrittenSignatureImageUrl
+        signature.handwrittenSignatureImageUrl,
       );
       if (handwrittenKey) s3Keys.add(handwrittenKey);
     }
@@ -1788,11 +1806,12 @@ class ContractService {
 
     if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
       throw new BadRequestException(
-        "Chỉ có thể sinh link ký cho đối tác khi hợp đồng ở trạng thái đối tác ký (owner_signed)"
+        "Chỉ có thể sinh link ký cho đối tác khi hợp đồng ở trạng thái đối tác ký (owner_signed)",
       );
     }
 
-    const partnerEmail = contract.partnerCompanyInfo?.email || "partner@example.com";
+    const partnerEmail =
+      contract.partnerCompanyInfo?.email || "partner@example.com";
 
     // Sinh secure JWT token có thời gian hết hạn là 7 ngày cho đối tác
     const token = JWTService.signJson(
@@ -1801,7 +1820,7 @@ class ContractService {
         role: "partner",
         email: partnerEmail,
       },
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     const signingUrl = `${appConfig.client.baseUrl}/contracts/${contractId}/sign-partner?token=${token}`;
