@@ -34,6 +34,154 @@ const CONTRACT_STATUS = {
 
 const PRINCIPLE_CONTRACT_TYPE = "principle";
 const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
+const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
+  { key: "productName", labels: ["Tên sản phẩm"] },
+  { key: "ingredients", labels: ["Thành phần", "Thành phần chính"] },
+  {
+    key: "packageSpecification",
+    labels: ["Quy cách đóng gói", "Quy cách"],
+  },
+  { key: "registrationNumber", labels: ["Số đăng ký", "Số công bố"] },
+  { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
+  {
+    key: "unitPriceVat",
+    labels: ["Đơn giá(+VAT)", "Đơn giá (+VAT)", "Đơn giá"],
+  },
+  { key: "classification", labels: ["Phân loại"] },
+];
+
+const decodeHtmlEntities = (value) => {
+  const entities = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+
+  return String(value || "").replace(
+    /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+    (match, entity) => {
+      if (entity[0] === "#") {
+        const isHex = entity[1].toLowerCase() === "x";
+        const codePoint = parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+        return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+      }
+
+      return entities[entity.toLowerCase()] || match;
+    },
+  );
+};
+
+function richTextToPlainText(rawContent) {
+  return decodeHtmlEntities(
+    String(rawContent || "")
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
+      .replace(/<\s*li(?:\s[^>]*)?>/gi, "")
+      .replace(/<[^>]+>/g, ""),
+  )
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeRichTextLabel(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const appendixProductLabelLookup = new Map(
+  APPENDIX_PRODUCT_FIELD_DEFINITIONS.flatMap(({ key, labels }) =>
+    labels.map((label) => [normalizeRichTextLabel(label), key]),
+  ),
+);
+
+function parseAppendixProductRichText(rawContent) {
+  const plainText = richTextToPlainText(rawContent);
+  const result = Object.fromEntries(
+    APPENDIX_PRODUCT_FIELD_DEFINITIONS.map(({ key }) => [key, null]),
+  );
+  let currentKey = null;
+
+  for (const rawLine of plainText.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const separatorIndex = line.indexOf(":");
+    const label =
+      separatorIndex >= 0
+        ? normalizeRichTextLabel(line.slice(0, separatorIndex))
+        : "";
+    const key = appendixProductLabelLookup.get(label);
+
+    if (key) {
+      currentKey = key;
+      result[currentKey] = line.slice(separatorIndex + 1).trim() || null;
+      continue;
+    }
+
+    if (currentKey) {
+      result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
+    }
+  }
+
+  return result;
+}
+
+function getAppendixProductRawContent(product) {
+  if (typeof product === "string") return product;
+
+  return (
+    product?.rawContent ||
+    product?.richText ||
+    product?.content ||
+    product?.html ||
+    product?.productRichText ||
+    null
+  );
+}
+
+function normalizeAppendixProduct(product) {
+  const rawContent = getAppendixProductRawContent(product);
+  const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
+  const data = typeof product === "object" && product ? product : {};
+
+  return {
+    rawContent,
+    productName: data.productName ?? parsed.productName,
+    ingredients: data.ingredients ?? parsed.ingredients,
+    packageSpecification:
+      data.packageSpecification ?? data.packageSpec ?? parsed.packageSpecification,
+    registrationNumber:
+      data.registrationNumber ?? data.registrationNo ?? parsed.registrationNumber,
+    origin: data.origin ?? data.countryOfOrigin ?? parsed.origin,
+    unitPriceVat:
+      data.unitPriceVat ??
+      data.unitPriceWithVat ??
+      data.priceVat ??
+      data.price ??
+      parsed.unitPriceVat,
+    classification: data.classification ?? data.category ?? parsed.classification,
+  };
+}
+
+function normalizeAppendixProducts(products) {
+  if (!Array.isArray(products)) {
+    return undefined;
+  }
+
+  return products.map((product) => normalizeAppendixProduct(product));
+}
 
 function normalizeContractType(contractType) {
   const normalizedType = String(contractType || PRINCIPLE_CONTRACT_TYPE)
@@ -64,6 +212,12 @@ function normalizeContractData(input = {}) {
     input.partnerCompanyInfo || sourceData.partnerCompanyInfo || null;
   const contractDueDate =
     input.contractDueDate || sourceData.contractDueDate || null;
+  const rawProducts =
+    input.products ??
+    input.productRichTexts ??
+    sourceData.products ??
+    sourceData.productRichTexts;
+  const products = normalizeAppendixProducts(rawProducts);
 
   return {
     contractType,
@@ -75,11 +229,10 @@ function normalizeContractData(input = {}) {
       ...sourceData,
       principleContractNumber:
         input.principleContractNumber ?? sourceData.principleContractNumber,
-      products:
-        input.products ??
-        input.productRichTexts ??
-        sourceData.products ??
-        sourceData.productRichTexts,
+      principleContractSignedDate:
+        input.principleContractSignedDate ??
+        sourceData.principleContractSignedDate,
+      products,
       ownerCompanyInfo,
       partnerCompanyInfo,
       contractDueDate,
@@ -494,6 +647,7 @@ class ContractService {
     contractData = {},
     details = [],
     principleContractNumber,
+    principleContractSignedDate,
     products,
     productRichTexts,
   } = {}) {
@@ -505,6 +659,7 @@ class ContractService {
       contractData,
       details,
       principleContractNumber,
+      principleContractSignedDate,
       products,
       productRichTexts,
     });
@@ -797,34 +952,7 @@ class ContractService {
     });
   }
 
-  static async updateDraftContract(
-    contractId,
-    {
-      ownerCompanyInfo,
-      partnerCompanyInfo,
-      contractDueDate,
-      contractType = PRINCIPLE_CONTRACT_TYPE,
-      contractData = {},
-      details = [],
-      principleContractNumber,
-
-      products,
-      productRichTexts,
-    } = {},
-  ) {
-    const normalizedContract = normalizeContractData({
-      ownerCompanyInfo,
-      partnerCompanyInfo,
-      contractDueDate,
-      contractType,
-      contractData,
-      details,
-      principleContractNumber,
-
-      products,
-      productRichTexts,
-    });
-
+  static async updateDraftContract(contractId, updateData = {}) {
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.findOne({
         where: { contractId },
@@ -840,6 +968,44 @@ class ContractService {
           "Chỉ được cập nhật hợp đồng ở trạng thái draft",
         );
       }
+
+      const currentDetails = await this.getContractDetails(contractId, {
+        transaction,
+      });
+      const sourceData =
+        updateData.contractData && typeof updateData.contractData === "object"
+          ? updateData.contractData
+          : {};
+      const hasDetailsUpdate =
+        Object.prototype.hasOwnProperty.call(updateData, "details") ||
+        Object.prototype.hasOwnProperty.call(sourceData, "details");
+      const normalizedContract = normalizeContractData({
+        ownerCompanyInfo:
+          updateData.ownerCompanyInfo ?? contract.ownerCompanyInfo,
+        partnerCompanyInfo:
+          updateData.partnerCompanyInfo ?? contract.partnerCompanyInfo,
+        contractDueDate:
+          updateData.contractDueDate ?? contract.contractDueDate,
+        contractType: updateData.contractType ?? contract.contractType,
+        contractData: {
+          ...(contract.contractData || {}),
+          ...sourceData,
+        },
+        details: hasDetailsUpdate
+          ? (updateData.details ?? sourceData.details ?? [])
+          : currentDetails,
+        principleContractNumber:
+          updateData.principleContractNumber ??
+          sourceData.principleContractNumber,
+        principleContractSignedDate:
+          updateData.principleContractSignedDate ??
+          sourceData.principleContractSignedDate,
+        products:
+          updateData.products ??
+          updateData.productRichTexts ??
+          sourceData.products ??
+          sourceData.productRichTexts,
+      });
 
       const contractUpdateData = {
         ownerCompanyInfo: normalizedContract.ownerCompanyInfo,

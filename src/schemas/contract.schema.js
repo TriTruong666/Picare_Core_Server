@@ -203,14 +203,26 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isString()
     .withMessage("principleContractNumber phải là chuỗi"),
+  body("principleContractSignedDate")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("principleContractSignedDate phải là chuỗi"),
   body("products")
     .optional({ nullable: true })
     .isArray()
     .withMessage("products phải là array"),
+  body("products.*")
+    .optional({ nullable: true })
+    .custom((value) => typeof value === "string" || typeof value === "object")
+    .withMessage("products item phải là richtext string hoặc object"),
   body("productRichTexts")
     .optional({ nullable: true })
     .isArray()
     .withMessage("productRichTexts phải là array"),
+  body("productRichTexts.*")
+    .optional({ nullable: true })
+    .isString()
+    .withMessage("productRichTexts item phải là chuỗi richtext"),
   body("contractType")
     .optional()
     .isString()
