@@ -125,8 +125,6 @@ function validatePrincipleContractPayload(_, { req }) {
 
   const ownerCompanyInfo = getBodyValue(req, "ownerCompanyInfo");
   const partnerCompanyInfo = getBodyValue(req, "partnerCompanyInfo");
-  const contractDueDate = getBodyValue(req, "contractDueDate");
-  const details = getBodyValue(req, "details");
 
   if (!ownerCompanyInfo || typeof ownerCompanyInfo !== "object") {
     throw new Error("ownerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
@@ -139,24 +137,6 @@ function validatePrincipleContractPayload(_, { req }) {
   if (!partnerCompanyInfo || typeof partnerCompanyInfo !== "object") {
     throw new Error("partnerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
   }
-
-  if (!contractDueDate) {
-    throw new Error("contractDueDate là bắt buộc với hợp đồng nguyên tắc");
-  }
-
-  if (!Array.isArray(details) || details.length < 1) {
-    throw new Error("details phải có ít nhất 1 sản phẩm với hợp đồng nguyên tắc");
-  }
-
-  details.forEach((detail) => {
-    if (!detail?.productName) {
-      throw new Error("details.productName là bắt buộc với hợp đồng nguyên tắc");
-    }
-
-    if (detail.price === undefined || detail.price === null || detail.price === "") {
-      throw new Error("details.price là bắt buộc với hợp đồng nguyên tắc");
-    }
-  });
 
   return true;
 }

@@ -79,10 +79,10 @@ const credentialUpload = multer({
  *                       type: object
  *                     productName:
  *                       type: string
- *                       description: Tên sản phẩm, dùng cho hợp đồng nguyên tắc.
+ *                       description: Trường legacy, không còn bắt buộc với hợp đồng nguyên tắc.
  *                     price:
  *                       type: number
- *                       description: Giá sản phẩm, dùng cho hợp đồng nguyên tắc.
+ *                       description: Trường legacy, không còn bắt buộc với hợp đồng nguyên tắc.
  *           examples:
  *             principle:
  *               summary: Hợp đồng nguyên tắc
@@ -105,10 +105,10 @@ const credentialUpload = multer({
  *                   mst: "0398765432"
  *                   ownerName: Trần Văn B
  *                   role: Giám đốc
- *                 contractDueDate: 2027-12-31
- *                 details:
- *                   - productName: Sản phẩm A
- *                     price: 1000000
+ *                 contractData:
+ *                   appendixDate: 2026-06-15
+ *                   paymentTermDays: 30
+ *                   creditLimit: null
  *             custom:
  *               summary: Loại hợp đồng động
  *               value:
@@ -280,6 +280,9 @@ router.delete(
  *               contractDueDate:
  *                 type: string
  *                 format: date
+ *               contractData:
+ *                 type: object
+ *                 description: Payload động theo từng loại hợp đồng
  *               details:
  *                 type: array
  *                 items:
@@ -392,7 +395,7 @@ router.post(
  * /api/v1/contracts/{contractId}/signing-sessions:
  *   post:
  *     summary: Tạo phiên ký số PDF
- *     description: Tạo PDF tạm có signature placeholder, tính hash theo ByteRange và trả hashToSign để client ký số.
+ *     description: Tạo PDF tạm có signature placeholder, tính hash theo ByteRange và trả hashToSign để client ký số. Luồng này áp dụng cho mọi contractType; nội dung PDF được render theo template của hợp đồng hiện tại.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -435,7 +438,7 @@ router.post(
  * /api/v1/contracts/{contractId}/signing-sessions/{contractSignatureId}/complete:
  *   post:
  *     summary: Hoàn tất ký số PDF
- *     description: Nhúng signatureHex vào PDF placeholder và tạo version PDF mới.
+ *     description: Nhúng signatureHex vào PDF placeholder và tạo version PDF mới. Luồng này áp dụng cho mọi contractType.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -665,7 +668,7 @@ router.delete(
  * /api/v1/contracts/{contractId}/handwritten-signatures:
  *   post:
  *     summary: Hoàn tất ký tay và tạo PDF version mới
- *     description: Nhận ảnh chữ ký tay từ client, lưu ảnh lên S3, embed vào ô chữ ký trong PDF và cập nhật trạng thái hợp đồng.
+ *     description: Nhận ảnh chữ ký tay từ client, lưu ảnh lên S3, embed vào ô chữ ký trong PDF và cập nhật trạng thái hợp đồng. Luồng này áp dụng cho mọi contractType.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -712,6 +715,7 @@ router.post(
  * /api/v1/contracts/{contractId}/template-pdf:
  *   get:
  *     summary: Preview file PDF hợp đồng đã tạo
+ *     description: Trả PDF preview hiện tại của hợp đồng theo contractType đã lưu.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []

@@ -191,6 +191,37 @@ function formatMoney(value) {
   }).format(numberValue)} VND`;
 }
 
+function normalizeContractTypeForFileName(contractType) {
+  const normalizedType = String(contractType || "principle")
+    .trim()
+    .toLowerCase();
+
+  if (!normalizedType || ["default", "digital", "principle"].includes(normalizedType)) {
+    return "nguyen_tac";
+  }
+
+  return normalizeVietnameseText(normalizedType)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "hop_dong";
+}
+
+function buildContractFilePrefix(contract) {
+  return `hop_dong_${normalizeContractTypeForFileName(contract?.contractType)}_picare`;
+}
+
+function buildContractArtifactFileName(contract, variant, token) {
+  const parts = [
+    buildContractFilePrefix(contract),
+    contract?.contractId,
+    variant,
+    token,
+  ].filter(Boolean);
+
+  return `${parts.join("-")}.pdf`;
+}
+
 function getSignatureWidgetRect(signerType) {
   return SIGNATURE_WIDGET_RECTS[signerType] || SIGNATURE_WIDGET_RECTS.default;
 }
@@ -361,24 +392,27 @@ async function getWatermarkLogoDataUri(logoPath) {
   if (!watermarkLogoDataUriPromises.has(logoPath)) {
     watermarkLogoDataUriPromises.set(
       logoPath,
-      fs.readFile(logoPath, "utf8").then(async (svg) => {
-        const cleanedSvg = svg.replace(
-          /<path[^>]*fill="#FDFDFD"[^>]*\/>\s*/i,
-          "",
-        );
-        const trimmedLogoBuffer = await sharp(Buffer.from(cleanedSvg, "utf8"))
-          .trim({ background: "#ffffff" })
-          .png()
-          .toBuffer();
+      fs
+        .readFile(logoPath, "utf8")
+        .then(async (svg) => {
+          const cleanedSvg = svg.replace(
+            /<path[^>]*fill="#FDFDFD"[^>]*\/>\s*/i,
+            "",
+          );
+          const trimmedLogoBuffer = await sharp(Buffer.from(cleanedSvg, "utf8"))
+            .trim({ background: "#ffffff" })
+            .png()
+            .toBuffer();
 
-        return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
-      }).catch((error) => {
-        if (error?.code === "ENOENT") {
-          throw new Error(`Watermark logo asset not found at ${logoPath}`);
-        }
+          return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
+        })
+        .catch((error) => {
+          if (error?.code === "ENOENT") {
+            throw new Error(`Watermark logo asset not found at ${logoPath}`);
+          }
 
-        throw error;
-      }),
+          throw error;
+        }),
     );
   }
 
@@ -826,6 +860,37 @@ class ContractPdfBuilder {
     }
   }
 
+  richText(parts = [], options = {}) {
+    const filteredParts = parts.filter(
+      (part) => part && part.text !== undefined && part.text !== null,
+    );
+
+    filteredParts.forEach((part, index) => {
+      this.doc
+        .font(part.bold ? this.boldFontPath : this.fontPath)
+        .fontSize(options.size || 10)
+        .text(asText(part.text), {
+          align: options.align || "left",
+          width: options.width,
+          continued: index < filteredParts.length - 1,
+        });
+    });
+
+    if (options.gap) {
+      this.doc.moveDown(options.gap);
+    }
+  }
+
+  labelValue(label, value, options = {}) {
+    this.richText(
+      [
+        { text: label },
+        { text: formatOptionalText(value), bold: true },
+      ],
+      options,
+    );
+  }
+
   centered(value, size = 10, gap = 0.2, bold = false) {
     this.text(value, { align: "center", size, gap, bold });
   }
@@ -847,6 +912,10 @@ class ContractPdfBuilder {
 
   bullet(value) {
     this.text(`-    ${value}`, { gap: 0.1 });
+  }
+
+  bulletParts(parts = []) {
+    this.richText([{ text: "-    " }, ...parts], { gap: 0.1 });
   }
 
   currentPageIndex() {
@@ -875,20 +944,33 @@ class ContractPdfBuilder {
   }
 
   companyBlock(title, companyInfo, shortName) {
-    this.text(`${title}: ${asText(companyInfo.companyName).toUpperCase()}`);
-    this.text(`Địa chỉ : ${formatOptionalText(companyInfo.address)}`);
-    this.text(`Điện thoại : ${formatOptionalText(companyInfo.phone)}`);
+    this.text(`${title}: ${asText(companyInfo.companyName).toUpperCase()}`, {
+      bold: true,
+    });
+    this.text(`Địa chỉ : ${formatOptionalText(companyInfo.address)}`, {
+      bold: true,
+    });
+    this.text(`Điện thoại : ${formatOptionalText(companyInfo.phone)}`, {
+      bold: true,
+    });
 
     if (companyInfo.email) {
-      this.text(`Email : ${companyInfo.email}`);
+      this.text(`Email : ${formatOptionalText(companyInfo.email)}`, {
+        bold: true,
+      });
     }
 
-    this.text(`Tài khoản số : ${formatOptionalText(companyInfo.bankInfo)}`);
-    this.text(`Mã số thuế : ${formatOptionalText(companyInfo.mst)}`);
+    this.text(`Tài khoản số : ${formatOptionalText(companyInfo.bankInfo)}`, {
+      bold: true,
+    });
+    this.text(`Mã số thuế : ${formatOptionalText(companyInfo.mst)}`, {
+      bold: true,
+    });
     this.text(
-      `Đại diện là Ông/Bà : ${getOwnerName(companyInfo)}    Chức vụ: ${
-        companyInfo.role
-      }`,
+      `Đại diện là Ông/Bà : ${formatOptionalText(
+        getOwnerName(companyInfo),
+      )}    Chức vụ: ${formatOptionalText(companyInfo.role)}`,
+      { bold: true },
     );
     this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35, bold: true });
   }
@@ -1011,7 +1093,7 @@ class ContractPdfBuilder {
   renderPrincipleContract(contract, details) {
     const owner = contract.ownerCompanyInfo || {};
     const partner = contract.partnerCompanyInfo || {};
-    const createdAt = contract.createdAt || new Date();
+    const renderedAt = new Date();
 
     this.text(owner.companyName, { width: 245, bold: true });
     this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
@@ -1029,7 +1111,7 @@ class ContractPdfBuilder {
       gap: 1.2,
     });
     this.doc.x = 300;
-    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(createdAt)}`, {
+    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
       size: 10,
       bold: true,
       gap: 0.8,
@@ -1040,7 +1122,7 @@ class ContractPdfBuilder {
     this.centered("(Về việc: Bán hàng)", 10, 0.8);
 
     this.bullet(
-      "Căn cứ Bộ Luật Dân sự số 33/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;",
+      "Căn cứ Bộ Luật Dân sự số 91/2015/QH13 ngày 24/11/2015 của Quốc hội nước CHXHCN Việt Nam;",
     );
     this.bullet(
       "Căn cứ Luật Thương Mại số 36/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;",
@@ -1048,7 +1130,7 @@ class ContractPdfBuilder {
     this.bullet("Căn cứ vào khả năng và nhu cầu của hai bên.");
     this.text(
       `Hôm nay, ngày ${formatShortDate(
-        createdAt,
+        renderedAt,
       )} tại văn phòng công ty chúng tôi gồm có:`,
       { gap: 0.35, bold: true },
     );
@@ -1057,94 +1139,480 @@ class ContractPdfBuilder {
     this.companyBlock("CÔNG TY MUA ( Bên B)", partner, "Bên B");
 
     this.text(
-      "Hai bên cùng tiến hành thương lượng và nhất trí ký hợp đồng nguyên tắc bán hàng về việc bán các sản phẩm mà Bên A phân phối theo các điều khoản như sau:",
+      "Bên Mua, Bên Bán sau đây gọi riêng là “Bên” và gọi chung là “Hai Bên”.",
+      { gap: 0.35 },
+    );
+    this.text(
+      "Hai bên cùng thỏa thuận và ký kết Hợp đồng mua bán hàng hóa thường xuyên (sau đây gọi tắt là “Hợp đồng”) như sau:",
       { gap: 0.35 },
     );
 
-    this.heading("ĐIỀU 1: NGUYÊN TẮC MUA BÁN");
-    this.bullet(
-      "Bên A đồng ý bán cho Bên B các loại sản phẩm do Bên A đăng ký, sản xuất để bên B phân phối sản phẩm ra thị trường, cụ thể như sau:",
-    );
-    this.table(details);
-    this.bullet(
-      "Số lượng sản phẩm: Được quy định chi tiết tại từng đơn đặt hàng của bên B. Số lượng hàng giao cho phép dao động ± 5% so với số lượng đặt hàng.",
-    );
+    this.renderPrincipleClauses(contract, owner, partner);
+    this.signatureArea(owner, partner);
+    return;
 
-    this.heading("ĐIỀU 2: QUY CÁCH, CHẤT LƯỢNG HÀNG HÓA");
-    this.bullet(
-      "Quy cách, chất lượng hàng hóa dựa trên tiêu chuẩn đã được đăng ký tại Sở Y Tế trực thuộc Bộ Y Tế.",
-    );
-    this.bullet(
-      "Bên B chịu trách nhiệm bảo quản, tiêu thụ đúng quy định của Sở Y Tế trực thuộc Bộ Y Tế.",
-    );
-    this.bullet(
-      "Bên A chịu trách nhiệm về chất lượng của sản phẩm theo quy chế hiện hành của Sở Y Tế trực thuộc Bộ Y Tế.",
-    );
-
-    this.heading("ĐIỀU 3: TRÁCH NHIỆM VÀ QUYỀN LỢI CỦA CÁC BÊN");
-    this.text("1. Trách nhiệm của Bên A:");
-    this.bullet(
-      "Cung cấp hàng theo đúng số lượng sản phẩm mà Bên B đã đặt hàng, theo đúng tiêu chuẩn đã đăng ký.",
-    );
-    this.bullet(
-      "Thời gian giao hàng chậm nhất không quá 03 ngày làm việc tính từ thời điểm nhận được đơn hàng.",
-    );
-    this.bullet(
-      "Giao hàng tại kho Bên B trong 1 địa điểm tại nội thành Thành Phố Hồ Chí Minh, chi phí bốc xếp đầu bên nào bên đó chịu.",
-    );
-    this.bullet(
-      "Sản phẩm giao cho bên B bị hỏng do lỗi sản xuất thì bên A phải giao bù cho bên B số hàng lỗi.",
-    );
-    this.text("2. Trách nhiệm của Bên B:");
-    this.bullet(
-      "Có đơn đặt hàng trước ít nhất 08 ngày làm việc khi có nhu cầu về sản phẩm.",
-    );
-    this.bullet("Kinh doanh sản phẩm theo quy định của Pháp luật hiện hành.");
-    this.bullet("Cam kết không được phép bán ra các khu vực khác.");
-    this.bullet("Thanh toán theo đúng điều 5 của hợp đồng này.");
-    this.bullet(
-      "Mọi khiếu nại của Bên B về hàng hóa phải có chứng kiến và xác nhận của Bên A thì mới có giá trị khiếu nại.",
-    );
-
-    this.heading("ĐIỀU 4: KHIẾU NẠI VÀ GIẢI QUYẾT KHIẾU NẠI HÀNG HÓA");
-    this.bullet(
-      "Bên B có trách nhiệm kiểm tra kỹ số lượng, quy cách, chất lượng hàng hóa khi giao nhận. Nếu có bất cứ khiếu nại nào phải có văn bản thông báo cho Bên A.",
-    );
-    this.bullet(
-      "Thời gian khiếu nại hàng sai lệch về số lượng không quá 5 ngày, về chất lượng không quá 30 ngày kể từ ngày nhập hàng về kho bên B.",
-    );
-    this.bullet(
-      "Trong vòng 30 ngày kể từ khi nhận được công văn khiếu nại, bên A có trách nhiệm trả lời cho bên B.",
-    );
-
-    this.heading("ĐIỀU 5: GIÁ CẢ VÀ PHƯƠNG THỨC THANH TOÁN");
-    this.text("1. Giá cả:");
+    this.heading("ĐIỀU 1: CÁC ĐIỀU KHOẢN CHUNG");
     this.text(
-      "Giá bán được thể hiện trực tiếp trong hợp đồng và được hai bên cùng xác nhận. Bảng giá, đơn đặt hàng là một phần không tách rời của hợp đồng này.",
+      "1.1 Hợp đồng Nguyên tắc này là cơ sở để hai Bên thực hiện việc mua bán hàng hóa thường xuyên.",
     );
-    this.text("2. Phương thức thanh toán:");
-    this.bullet("Thanh toán bằng chuyển khoản trong vòng 30 ngày.");
-    this.bullet(
-      "Các trường hợp đặc biệt khác phải có sự thỏa thuận của hai bên.",
+    this.text(
+      "1.2 Căn cứ vào Hợp đồng này, hai Bên sẽ ký Đơn đặt hàng bằng văn bản và/hoặc thư điện tử đối với từng lô hàng cụ thể. Chi tiết hàng hóa, chất lượng, số lượng, giá cả, giao hàng và các điều khoản khác (nếu có) sẽ được chỉ rõ trong các Đơn đặt hàng tương ứng.",
+    );
+    this.text(
+      "1.3 Trong trường hợp hai Bên có giao dịch mua bán mà nội dung thỏa thuận giữa hai Bên có các điều kiện bổ sung và chi tiết hơn so với Hợp đồng này, hoặc do hai Bên thống nhất, hai Bên sẽ ký Phụ lục Hợp đồng để thực hiện giao dịch. Trong trường hợp đó, Hợp đồng mua bán sẽ được ưu tiên áp dụng nếu có điều khoản trái với Hợp đồng này.",
     );
 
-    this.heading("ĐIỀU 6: ĐIỀU KHOẢN CHUNG");
-    this.bullet(
-      "Hai bên cùng cam kết thực hiện hợp đồng nguyên tắc này, nếu có khó khăn hai bên phải gặp nhau trao đổi tìm cách giải quyết.",
+    this.heading("ĐIỀU 2: HÀNG HÓA");
+    this.text(
+      "2.1 Hàng hóa do Bên Bán cung cấp phải là các sản phẩm đủ điều kiện lưu thông trên thị trường và đạt các yêu cầu cụ thể như sau:",
     );
     this.bullet(
-      "Trường hợp hai bên không giải quyết được bằng thương lượng sẽ đưa ra Tòa án kinh tế Hà Nội. Mọi phí tổn sẽ do bên sai phạm chịu.",
+      "Đúng chủng loại, chất lượng theo tiêu chuẩn của nhà sản xuất, phù hợp với tiêu chuẩn đã đăng ký hoặc công bố với cơ quan quản lý nhà nước theo quy định pháp luật hiện hành.",
     );
     this.bullet(
-      "Sau khi Hợp đồng hết hiệu lực 30 ngày; nếu hai bên không có tranh chấp hoặc khiếu nại thì Hợp đồng này mặc nhiên được thanh lý.",
+      "Quy cách đóng gói, bảo quản theo đúng tiêu chuẩn nhà sản xuất.",
     );
     this.bullet(
-      `Hợp đồng nguyên tắc này được lập thành 04 bản có giá trị pháp lý ngang nhau, mỗi bên giữ 02 bản. Hợp đồng có hiệu lực kể từ ngày kí đến ngày ${formatShortDate(
-        contract.contractDueDate,
-      )}. Sau đó hợp đồng được kí lại hoặc gia hạn nếu được cả hai bên cùng thống nhất.`,
+      "Không móp méo, biến dạng vỏ hộp; màu sắc trên vỏ hộp sắc nét, không có dấu hiệu bạc hoặc phai màu.",
+    );
+    this.bullet(
+      "Sản phẩm có dán nhãn hoặc nhãn phụ theo quy định pháp luật hiện hành.",
+    );
+    this.bullet("Được nhập khẩu hợp pháp nếu là hàng nhập khẩu.");
+    this.bullet(
+      "Hạn sử dụng còn lại của sản phẩm tại thời điểm Bên Mua nhập hàng phải phù hợp với thỏa thuận trong Đơn đặt hàng và quy định pháp luật hiện hành.",
+    );
+    this.bullet("Các tiêu chuẩn khác theo quy định pháp luật hiện hành.");
+    this.text(
+      "2.2 Chi tiết về hàng hóa sẽ được các Bên chỉ rõ trong các Đơn đặt hàng.",
+    );
+
+    this.heading("ĐIỀU 3: PHƯƠNG THỨC ĐẶT HÀNG VÀ GIAO NHẬN HÀNG HÓA");
+    this.text(
+      "3.1 Khi có nhu cầu đặt hàng, Bên Mua gửi Đơn đặt hàng cho Bên Bán bằng email từ địa chỉ được chỉ định hoặc bằng bản gốc Đơn đặt hàng có chữ ký, đóng dấu của người đại diện có thẩm quyền.",
+    );
+    this.text(
+      "3.2 Trong thời gian 01 ngày làm việc kể từ khi nhận được Đơn đặt hàng, Bên Bán có trách nhiệm xác nhận đồng ý hoặc không đồng ý giao hàng và xác nhận thời gian giao hàng cụ thể.",
+    );
+    this.text(
+      "3.3 Địa điểm nhận hàng được chỉ định cụ thể trong từng Đơn đặt hàng.",
+    );
+    this.text(
+      "3.4 Hàng hóa được coi là đã giao khi có chữ ký của người nhận hàng được Bên Mua chỉ định trên Biên bản bàn giao.",
+    );
+    this.text(
+      "3.5 Thời điểm giao hàng, số lần giao hàng và phương thức giao hàng được hai Bên thống nhất cụ thể trong từng Đơn đặt hàng. Bên Mua có quyền từ chối nhận hàng nếu sản phẩm không đạt chất lượng theo Hợp đồng này.",
+    );
+    this.text(
+      `3.6 Chứng từ giao hàng gồm hóa đơn bán hàng hợp lệ, biên bản giao nhận hàng hóa hoặc chứng từ vận chuyển, Đơn đặt hàng đã được xác nhận và các giấy tờ chứng minh nguồn gốc xuất xứ hàng hóa theo quy định pháp luật. Thông tin xuất hóa đơn theo thông tin của ${formatOptionalText(partner.companyName)}.`,
+    );
+
+    this.heading("ĐIỀU 4: GIÁ CẢ VÀ PHƯƠNG THỨC THANH TOÁN");
+    this.text(
+      `4.1 Bảng giá chi tiết và chương trình hợp tác được các Bên thống nhất tại phụ lục hoặc thỏa thuận riêng kèm theo Hợp đồng này.`,
+    );
+    this.text(
+      "4.2 Giá bán hàng hóa là giá Bên Bán niêm yết hoặc thông báo tùy từng thời điểm và có hiệu lực áp dụng vào thời điểm Bên Mua đặt hàng.",
+    );
+    this.text(
+      "4.3 Trường hợp có điều chỉnh giá bán, Bên Bán cung cấp cho Bên Mua văn bản thông báo điều chỉnh giá bán trước thời điểm thay đổi giá ít nhất 03 ngày làm việc.",
+    );
+    this.text(
+      "4.4 Thời hạn thanh toán là 30 ngày kể từ ngày Bên Bán hoàn thành việc giao hàng và cung cấp đầy đủ chứng từ giao hàng, trừ khi hai Bên có thỏa thuận khác trong Đơn đặt hàng hoặc phụ lục.",
+    );
+    this.text(
+      "4.5 Hình thức thanh toán bằng tiền Việt Nam thông qua chuyển khoản hoặc tiền mặt. Trường hợp nhận tiền mặt, người nhận phải có giấy ủy quyền của Bên Bán.",
+    );
+
+    this.heading("ĐIỀU 5: TRÁCH NHIỆM CỦA CÁC BÊN");
+    this.text("5.1 Bên Bán có các nghĩa vụ sau:");
+    this.bullet(
+      "Cung cấp đầy đủ thông tin về sản phẩm cho Bên Mua: danh mục, thông tin sản phẩm, hàm lượng, catalogue, giá cả, chương trình bán hàng, chương trình hỗ trợ, tổ chức đào tạo và giới thiệu sản phẩm mới.",
+    );
+    this.bullet(
+      "Bằng chi phí của mình thực hiện thu hồi đối với các sản phẩm có lỗi nhà sản xuất hoặc theo yêu cầu của cơ quan quản lý nhà nước hoặc sản phẩm có các biến cố bất lợi tới sức khỏe người tiêu dùng và bồi thường thiệt hại nếu có.",
+    );
+    this.bullet(
+      "Hỗ trợ tìm hiểu thị trường, xúc tiến thương mại, quảng bá sản phẩm.",
+    );
+    this.bullet(
+      "Không chuyển nhượng Hợp đồng cho bên thứ ba khi chưa có sự đồng ý bằng văn bản của Bên Mua.",
+    );
+    this.bullet(
+      "Cung cấp thông tin, tài liệu do Bên Mua yêu cầu trong vòng 24 giờ kể từ thời điểm nhận được yêu cầu trong các trường hợp cần thiết liên quan đến khiếu nại, phản ánh khách hàng hoặc thanh kiểm tra của cơ quan nhà nước.",
+    );
+    this.bullet("Các quyền, nghĩa vụ khác theo quy định pháp luật.");
+    this.text("5.2 Bên Mua có các nghĩa vụ sau:");
+    this.bullet("Đảm bảo thanh toán đúng thời hạn đã thỏa thuận.");
+    this.bullet(
+      "Bố trí nhận hàng và cử người có thẩm quyền kiểm tra, ký biên bản nhận hàng hóa đúng thời gian thỏa thuận.",
+    );
+    this.bullet(
+      "Thực hiện nghiêm chỉnh các quy định của pháp luật Việt Nam về quản lý và lưu thông hàng hóa.",
+    );
+    this.bullet(
+      "Đảm bảo tuân thủ việc bảo quản hàng hóa theo hướng dẫn và các tiêu chuẩn phù hợp để tránh tình trạng hàng hóa bị biến đổi về chất lượng do bảo quản không phù hợp.",
+    );
+    this.bullet("Các quyền, nghĩa vụ khác theo quy định pháp luật.");
+
+    this.heading("ĐIỀU 6: CUNG CẤP VÀ TRAO ĐỔI THÔNG TIN GIỮA HAI BÊN");
+    this.text(
+      "6.1 Hai Bên thống nhất trao đổi thông tin thông qua các đại diện liên lạc. Trường hợp người được ủy quyền giao dịch không còn được quyền đại diện, Bên liên quan phải thông báo kịp thời bằng văn bản, email hoặc fax cho Bên kia.",
+    );
+    this.text(
+      "6.2 Khi có thay đổi về trụ sở, mã số thuế, tài khoản hoặc thông tin liên quan đến quá trình giao dịch, Hai Bên phải thông báo bằng văn bản cho nhau trước khi phát sinh giao dịch mới.",
+    );
+    this.text(
+      "6.3 Nếu Bên nào muốn thay đổi nội dung Hợp đồng, Bên đó phải thông báo cho Bên còn lại bằng văn bản và Hai Bên tiến hành thương thảo để ký kết Phụ lục Hợp đồng.",
+    );
+    this.text(
+      "6.4 Hai Bên có trách nhiệm liên lạc kịp thời khi xảy ra các tình huống phát sinh trong quá trình giao hàng, vận hành để kịp thời giải quyết và hạn chế thiệt hại.",
+    );
+
+    this.heading("ĐIỀU 7: BỒI THƯỜNG THIỆT HẠI VÀ PHẠT VI PHẠM HỢP ĐỒNG");
+    this.text(
+      "7.1 Bên vi phạm nghĩa vụ thanh toán hoặc nghĩa vụ giao hàng, chất lượng hàng hóa theo Hợp đồng này phải chịu phạt vi phạm theo thỏa thuận của Hai Bên và quy định pháp luật hiện hành.",
+    );
+    this.text(
+      "7.2 Bên vi phạm phải bồi thường toàn bộ các thiệt hại thực tế, trực tiếp phát sinh do hành vi vi phạm gây ra cho Bên còn lại.",
+    );
+    this.text(
+      "7.3 Bên vi phạm được miễn trách nhiệm trong các trường hợp miễn trách nhiệm đã thỏa thuận, sự kiện bất khả kháng, lỗi hoàn toàn của Bên kia hoặc do thực hiện quyết định của cơ quan nhà nước có thẩm quyền mà các Bên không thể biết tại thời điểm giao kết Hợp đồng.",
+    );
+
+    this.heading("ĐIỀU 8: BẢO MẬT THÔNG TIN");
+    this.text(
+      "8.1 Mỗi Bên giữ bí mật nghiêm ngặt mọi thông tin có được trong quá trình ký kết và thực hiện Hợp đồng này, các Phụ lục Hợp đồng và Hợp đồng mua bán nếu có.",
+    );
+    this.text(
+      "8.2 Nghĩa vụ bảo mật tiếp tục được áp dụng trong thời hạn 01 năm kể từ khi Hợp đồng chấm dứt hoặc kết thúc.",
+    );
+
+    this.heading("ĐIỀU 9: CHỐNG THAM NHŨNG");
+    this.text(
+      "9.1 Bên Bán không được dưới bất kỳ hình thức nào trao cho nhân viên của Bên Mua các lợi ích bằng tiền hoặc hiện vật như tặng quà, thưởng tiền, trích phần trăm hoa hồng hoặc các hành vi tương tự khi chưa có sự đồng ý bằng văn bản của Bên Mua.",
+    );
+    this.text(
+      "9.2 Trường hợp Bên Bán biết nhân viên của Bên Mua có hành vi đề nghị nhận tiền hoặc lợi ích vật chất, Bên Bán phải thông báo ngay cho Bên Mua theo thông tin liên hệ đã được Hai Bên thống nhất.",
+    );
+
+    this.heading("ĐIỀU 10: CHẤM DỨT HỢP ĐỒNG");
+    this.text(
+      "10.1 Hợp đồng chấm dứt khi hết hạn mà Hai Bên không có nhu cầu gia hạn, hoặc theo thỏa thuận bằng văn bản của Hai Bên.",
+    );
+    this.text(
+      "10.2 Một Bên được đơn phương chấm dứt Hợp đồng nếu Bên kia vi phạm Hợp đồng hoặc vi phạm pháp luật và không khắc phục trong vòng 10 ngày kể từ ngày nhận thông báo yêu cầu khắc phục.",
+    );
+    this.text(
+      "10.3 Trừ trường hợp vi phạm nêu trên, nếu một Bên muốn chấm dứt Hợp đồng trước thời hạn thì phải thông báo bằng văn bản cho Bên còn lại trước 30 ngày.",
+    );
+    this.text(
+      "10.4 Trong mọi trường hợp chấm dứt Hợp đồng trước thời hạn, Hai Bên phải hoàn thành đầy đủ nghĩa vụ đối với các giao dịch đã thực hiện trước đó.",
+    );
+    this.text(
+      "10.5 Bên nào đơn phương chấm dứt Hợp đồng trái quy định tại Hợp đồng này hoặc trái pháp luật thì phải bồi thường cho Bên còn lại toàn bộ thiệt hại theo quy định pháp luật.",
+    );
+
+    this.heading("ĐIỀU 11: CAM KẾT CHUNG");
+    this.text(
+      "11.1 Hai Bên cam kết thực hiện đúng các điều khoản ghi trong Hợp đồng này. Nếu một trong hai Bên cố ý vi phạm, Bên vi phạm phải chịu trách nhiệm tài sản về hành vi vi phạm đó.",
+    );
+    this.text(
+      "11.2 Trường hợp xảy ra tranh chấp, Hai Bên cùng nhau bàn bạc giải quyết trên tinh thần hòa giải, thiện chí và hợp tác. Nếu không thống nhất được cách giải quyết, Hai Bên sẽ đưa vụ việc ra Tòa án có thẩm quyền giải quyết.",
+    );
+    this.text(
+      "11.3 Hợp đồng nguyên tắc này có giá trị 12 tháng kể từ ngày ký kết. Hết thời hạn trên, nếu Hai Bên không có ý kiến gì thì Hợp đồng được tự động gia hạn thêm 12 tháng tiếp theo và tối đa không quá 2 năm tính từ ngày ký Hợp đồng này.",
+    );
+    this.text(
+      "11.4 Các Đơn đặt hàng cũng như các sửa đổi, bổ sung được coi như các phụ lục và là một phần không thể tách rời của Hợp đồng này.",
+    );
+    this.text(
+      "Hợp đồng Nguyên tắc bán hàng này được lập thành 04 bản, mỗi bên giữ 02 bản có giá trị pháp lý như nhau. Hợp đồng có hiệu lực kể từ ngày ký.",
+      {
+        gap: 0.35,
+      },
     );
 
     this.signatureArea(owner, partner);
+  }
+
+  renderPrincipleClauses(contract, owner = {}, partner = {}) {
+    const contractData = contract.contractData || {};
+    const appendixDate =
+      contractData.appendixDate || contract.createdAt || new Date();
+    const paymentTermDays = contractData.paymentTermDays || 30;
+    const creditLimit = contractData.creditLimit || "Theo giá trị nhập hàng";
+    const antiCorruptionContact =
+      contractData.antiCorruptionContact || partner.antiCorruptionContact || {};
+    const contactName =
+      antiCorruptionContact.name || getOwnerName(partner) || "";
+    const contactRole = antiCorruptionContact.role || partner.role || "";
+    const contactPhone = antiCorruptionContact.phone || partner.phone || "";
+    const contactEmail = antiCorruptionContact.email || partner.email || "";
+
+    this.heading("ĐIỀU 1: CÁC ĐIỀU KHOẢN CHUNG");
+    this.text(
+      "1.1 Hợp đồng Nguyên tắc này là cơ sở để hai Bên thực hiện việc mua bán hàng hóa thường xuyên.",
+    );
+    this.text(
+      "1.2 Căn cứ vào Hợp đồng này, hai Bên sẽ ký Đơn đặt hàng (Bằng văn bản và/hoặc thư điện tử) đối với từng lô hàng cụ thể. Chi tiết hàng hóa, chất lượng, số lượng, giá cả, giao hàng và các điều khoản khác (nếu có) sẽ được chỉ rõ trong các Đơn đặt hàng tương ứng.",
+    );
+    this.text(
+      "1.3 Trong trường hợp hai Bên có giao dịch mua bán mà nội dung thoả thuận giữa hai Bên có các điều kiện thỏa thuận bổ sung và chi tiết hơn so với nội dung Hợp đồng này, hoặc do hai Bên thống nhất, thoả thuận thì hai Bên sẽ ký Phụ Lục Hợp Đồng để thực hiện giao dịch. Trong trường hợp đó, Hợp đồng mua bán sẽ được ưu tiên áp dụng nếu có điều khoản trái với Hợp đồng này.",
+    );
+
+    this.heading("ĐIỀU 2: HÀNG HÓA");
+    this.text(
+      "2.1 Hàng hóa do Bên Bán cung cấp phải là các sản phẩm đủ điều kiện lưu thông trên thị trường và đạt các yêu cầu cụ thể như sau:",
+    );
+    this.text(
+      "2.2.1. Đúng chủng loại, chất lượng theo tiêu chuẩn của nhà sản xuất, phù hợp với tiêu chuẩn đã đăng ký hoặc công bố với cơ quan quản lý nhà nước theo quy định pháp luật hiện hành. Bên Bán tự chịu trách nhiệm đối với nội dung này, bất cứ khi nào Bên Mua/ khách hàng của Bên Mua phát hiện sản phẩm không đạt tiêu chuẩn chất lượng theo quy định tại điểm này thì Bên Mua có quyền trả hàng, Bên Bán có nghĩa vụ hoàn tiền và chịu phạt vi phạm, bồi thường thiệt hại theo thỏa thuận tại Hợp đồng này hoặc quy định pháp luật hiện hành nếu Hợp đồng này chưa có thỏa thuận.",
+    );
+    this.text(
+      "2.2.2. Quy cách đóng gói, bảo quản theo đúng tiêu chuẩn nhà sản xuất.",
+    );
+    this.text(
+      "2.2.3. Không móp méo, biến dạng vỏ hộp; màu sắc trên vỏ hộp sắc nét không có dấu hiệu bạc/ phai màu.",
+    );
+    this.text(
+      "2.2.4. Sản phẩm có dán nhãn/ nhãn phụ theo quy định pháp luật hiện hành.",
+    );
+    this.text("2.2.5. Được nhập khẩu hợp pháp.");
+    this.text(
+      "2.2.6. Date sản phẩm từ ngày sản xuất cho đến ngày Bên Mua nhập hàng HSD còn lại:",
+    );
+    this.bullet("Đối với thuốc: không ít hơn 12 tháng");
+    this.text("2.2.7. Các tiêu chuẩn khác theo quy định pháp luật hiện hành.");
+    this.text(
+      "2.2.8 Chi tiết về hàng hóa sẽ được các Bên chỉ rõ trong các Đơn đặt hàng.",
+    );
+
+    this.heading("ĐIỀU 3: PHƯƠNG THỨC ĐẶT HÀNG VÀ GIAO NHẬN HÀNG HÓA");
+    this.text("3.1 Quy trình đặt hàng:");
+    this.text(
+      "- Khi có nhu cầu đặt hàng, Bên Mua gửi Đơn đặt hàng cho Bên Bán bằng một trong các hình thức: (1) Gửi email từ địa chỉ mail được chỉ định sẵn trong Hợp đồng này đại diện cho Bên Mua để thực hiện việc đặt hàng, nội dung trên body mail phải đầy đủ các thông tin theo Mẫu Đơn Đặt hàng, hoặc; (2) gửi bản gốc Đơn Đặt hàng có chữ ký, đóng dấu của người đại diện (Đại diện theo pháp luật, đại diện theo ủy quyền, người được Bên Mua chỉ định bằng văn bản có thẩm quyền thực hiện việc đặt hàng theo Hợp đồng này).",
+    );
+    this.text(
+      "- Trong khoảng thời gian 01 ngày làm việc kể từ khi nhận được Đơn đặt hàng của Bên Mua, Bên Bán có trách nhiệm xác nhận đồng ý/ không đồng ý giao hàng theo Đơn đặt hàng; xác nhận thời gian giao hàng cụ thể.",
+    );
+    this.text(
+      "3.2 Người được chỉ định đại diện giao dịch của các Bên: Thông tin được báo trước khi Bên Bán giao hàng cho Bên mua.",
+    );
+    this.text(
+      "3.3 Địa điểm nhận hàng: Được chỉ định cụ thể trong Đơn Đặt hàng.",
+    );
+    this.text(
+      "3.4 Đại diện giao, nhận hàng hóa: Người đại diện nhận hàng của Bên Mua sẽ được chỉ định cụ thể trong từng Đơn Đặt hàng. Hàng hóa được coi là đã giao khi có chữ ký của người nhận hàng được Bên B chỉ định trên Biên bản bàn giao.",
+    );
+    this.text("3.5 Phương thức giao hàng:");
+    this.bullet(
+      "Thời điểm giao hàng: được hai bên thống nhất cụ thể tại từng Đơn Đặt hàng.",
+    );
+    this.bullet(
+      "Hàng hóa có thể giao một lần hay nhiều lần tùy theo hai Bên thỏa thuận cụ thể trong từng Đơn Đặt hàng.",
+    );
+    this.bullet(
+      "Tại thời điểm giao hàng, Bên Mua kiểm tra hàng hóa và có quyền từ chối nhận hàng nếu sản phẩm không đạt chất lượng theo quy định tại Khoản 2.1 Điều 2 Hợp đồng này. Nếu Bên Mua chấp nhận một phần trong tổng số hàng hóa được giao thì Hai Bên sẽ lập Biên bản bàn giao số hàng thực nhận.",
+    );
+    this.text("3.6 Chứng từ giao hàng gồm có:");
+    this.text("Hóa đơn bán hàng hợp lệ. Thông tin viết hóa đơn:");
+    this.labelValue("Tên Công ty : ", partner.companyName);
+    this.labelValue("MST: ", partner.mst);
+    this.labelValue("Địa chỉ: ", partner.address);
+    this.text(
+      "Biên bản giao nhận hàng hóa đối với trường hợp giao hàng trực tiếp. Trường hợp giao hàng qua nhà vận chuyển thì bill vận chuyển ghi rõ số kiện, trọng lượng và còn dấu niêm phong của Bên Bán, có danh mục hàng hóa, số lượng từng loại hàng được đóng trong từng kiện hàng.",
+    );
+    this.bullet(
+      "Đơn đặt hàng đã được xác nhận theo Quy trình đặt hàng thỏa thuận tại Điều này.",
+    );
+    this.bullet(
+      "Phiếu kiểm nghiệm, giấy phép lưu hành, giấy phép nhập khẩu (đối với hàng nhập khẩu), các giấy tờ chứng minh nguồn gốc xuất xứ hàng hóa theo quy định pháp luật.",
+    );
+
+    this.heading("ĐIỀU 4: GIÁ CẢ VÀ PHƯƠNG THỨC THANH TOÁN");
+    this.text("4.1 Giá bán:");
+    this.bulletParts([
+      {
+        text: "Bảng giá chi tiết và chương trình hợp tác đính kèm tại Phụ lục số 01 ký ngày ",
+      },
+      { text: formatShortDate(appendixDate), bold: true },
+    ]);
+    this.bullet(
+      "Giá bán hàng hóa là giá Bên Bán niêm yết tùy từng thời điểm và có hiệu lực áp dụng vào thời điểm Bên Mua đặt hàng.",
+    );
+    this.bullet(
+      "Trường hợp có điều chỉnh giá bán, Bên Bán cung cấp cho Bên Mua văn bản thông báo điều chỉnh giá bán trước thời điểm thay đổi giá ít nhất 03 ngày làm việc.",
+    );
+    this.richText([
+      { text: "4.2 Thời hạn thanh toán: " },
+      { text: paymentTermDays, bold: true },
+      {
+        text: " ngày kể từ ngày Bên Bán hoàn thành việc giao hàng và cung cấp đầy đủ chứng từ giao hàng theo quy định tại Khoản 3.6 Điều 3 Hợp đồng này. Trường hợp ngày thanh toán rơi vào ngày thứ 7, Chủ nhật hoặc ngày Lễ, Tết theo quy định của nhà nước thì ngày thanh toán được dời vào ngày làm việc kế tiếp.",
+      },
+    ]);
+    this.labelValue("4.3 Hạn mức công nợ: ", creditLimit);
+    this.text(
+      "4.4 Hình thức thanh toán: thanh toán bằng tiền VND bằng hình thức chuyển khoản/ tiền mặt. Trường hợp nhận bằng tiền mặt, người nhận phải có giấy uỷ quyền của bên Bán.",
+    );
+
+    this.heading("ĐIỀU 5: TRÁCH NHIỆM CỦA CÁC BÊN");
+    this.text("5.1 Bên Bán:");
+    this.text(
+      "Ngoài các quyền, nghĩa vụ đã thỏa thuận tại Hợp đồng này, Bên Bán có các nghĩa vụ như sau:",
+    );
+    this.text(
+      "5.1.1 Cung cấp đầy đủ thông tin về sản phẩm cho bên mua: Danh mục, Thông tin sản phẩm, hàm lượng, Catalogue, giá cả, chương trình bán hàng, chương trình hỗ trợ, tổ chức đào tạo, giới thiệu sản phẩm mới…",
+    );
+    this.text(
+      "5.1.2 Bằng chi phí của mình thực hiện thu hồi đối với các sản phẩm có lỗi nhà sản xuất hoặc theo yêu cầu của cơ quan quản lý nhà nước hoặc sản phẩm có các biến cố bất lợi tới sức khỏe người tiêu dùng và bồi thường thiệt hại (nếu có) gây ra cho Bên Mua, khách hàng của Bên Mua.",
+    );
+    this.text(
+      "5.1.3 Hỗ trợ tìm hiểu thị trường, xúc tiến thương mại, quảng bá sản phẩm;",
+    );
+    this.text(
+      "5.1.4 Không chuyển nhượng Hợp đồng cho bên thứ ba khi chưa có sự đồng ý bằng văn bản của Bên Mua.",
+    );
+    this.text(
+      "5.1.5 Trường hợp (i) có khiếu nại khách hàng hoặc (ii) có phản ánh của khách hàng về các biến cố bất lợi tới sức khỏe người tiêu dùng khi sử dụng sản phẩm hoặc (iii) để bổ sung thông tin tài liệu cho hoạt động thanh kiểm tra của cơ quan nhà nước, Bên Bán phải cung cấp các thông tin, tài liệu do Bên Mua yêu cầu trong vòng 24h kể từ thời điểm nhận được yêu cầu từ Bên Mua.",
+    );
+    this.text("5.1.6 Các quyền, nghĩa vụ khác theo quy định pháp luật.");
+    this.text("5.2 Bên Mua:");
+    this.text(
+      "Ngoài các quyền, nghĩa vụ đã thỏa thuận tại Hợp đồng này, Bên Mua có các nghĩa vụ như sau:",
+    );
+    this.text(
+      "5.2.1 Đảm bảo thanh toán đúng thời hạn đã thỏa thuận theo điều 4.2 trong Hợp đồng này.",
+    );
+    this.text(
+      "5.2.2 Bố trí nhận hàng và cử người kiểm tra hàng hóa có thẩm quyền theo sự công của bên Mua ký biên bản nhận hàng hóa đúng thời gian thỏa thuận giao hàng với Bên Bán.",
+    );
+    this.text(
+      "5.2.3 Thực hiện nghiêm chỉnh các qui định của Pháp luật Việt Nam về quản lý và lưu thông hàng hóa.",
+    );
+    this.text(
+      "5.2.4 Đảm bảo tuân thủ việc bảo quản hàng hóa theo hướng dẫn và các tiêu chuẩn phù hợp để tránh tình trạng hàng hóa bị biến đổi về chất lượng do bảo quản không phù hợp;",
+    );
+    this.text("5.2.5 Các quyền, nghĩa vụ khác theo quy định pháp luật.");
+
+    this.heading("ĐIỀU 6: CUNG CẤP VÀ TRAO ĐỔI THÔNG TIN GIỮA HAI BÊN");
+    this.text(
+      "6.1 Hai bên thống nhất trao đổi thông tin thông qua các Đại diện liên lạc. Trong trường hợp nhân viên được ủy quyền giao dịch được ghi trên không được quyền tiếp tục đại diện trong việc giao dịch với Bên kia, hai bên cần có thông báo kịp thời, chính thức bằng văn bản/email/fax, gửi người đại diện liên lạc bên kia ngay lập tức và phải được đại diện liên lạc Bên kia xác nhận đã nhận được thông báo đó, nếu không, Bên gây thiệt hại phải chịu hoàn toàn trách nhiệm bồi hoàn chi phí thiệt hại cho Bên kia do việc chậm thông báo trên gây ra.",
+    );
+    this.text(
+      "6.2 Trong trường hợp có sự thay đổi về những thông tin liên quan đến quá trình giao dịch giữa hai Bên như: thay đổi trụ sở làm việc, thay đổi mã số thuế, thay đổi tài khoản…vv hai Bên phải có trách nhiệm thông báo bằng văn bản cho nhau trước khi phát sinh việc mua bán mới.",
+    );
+    this.text(
+      "6.3 Nếu bên nào muốn thay đổi các nội dung trong hợp đồng phải thông báo cho bên còn lại bằng văn bản và Hai Bên tiến hành thương thảo để ký kết Phụ lục Hợp đồng.",
+    );
+    this.text(
+      "6.4 Hai bên có trách nhiệm liên lạc kịp thời khi xảy ra các tình huống phát sinh trong quá trình giao hàng, vận hành (ví dụ hết hàng, hàng không thể giao kịp, thay đổi chất lượng sản phẩm,…) để kịp thời giải quyết tránh các thiệt hại cho đôi bên. Trường hợp xảy ra thiệt hại, bên chậm thông báo sẽ chịu hoàn toàn trách nhiệm bồi thường cho phía bên kia.",
+    );
+
+    this.heading("ĐIỀU 7: BỒI THƯỜNG THIỆT HẠI VÀ PHẠT VI PHẠM HỢP ĐỒNG");
+    this.text("7.1. Phạt vi phạm:");
+    this.text(
+      "7.1.1. Bên Mua chịu phạt vi phạm trong trường hợp thanh toán tiền hàng không đúng thời hạn quy định tại Hợp đồng này, tính từ thời điểm quá hạn thanh toán Bên mua phải chịu mức phạt vi phạm tương đương 8% giá trị đơn hàng, đồng thời phải chịu mức lãi suất chậm trả cho Bên Bán theo mức lãi xuất của Ngân hàng mà Bên Bán có tài khoản tại hợp đồng này theo mức lãi suất tại thời điểm vi phạm và các khoản bồi thường thiệt hại khác nếu có.",
+    );
+    this.text("7.1.2. Bên Bán chịu phạt vi phạm trong trường hợp:");
+    this.bullet(
+      "Hàng hóa không đúng chất lượng quy định tại Điểm 2.1.1 Khoản 2.1 Điều 2 Hợp đồng này.",
+    );
+    this.bullet(
+      "Mức phạt vi phạm tương đương 8%/ giá trị đơn hàng. Ngoài chịu phạt vi phạm hợp đồng, Bên Mua được quyền trả lại hàng và yêu cầu Bên Bán bồi thường thiệt hại theo khoản 7.2 dưới đây.",
+    );
+    this.text("7.2. Bồi thường thiệt hại:");
+    this.bullet(
+      "Nguyên tắc bồi thường: các thiệt hại thực tế, trực tiếp phát sinh do hành vi trái pháp luật của Một Bên gây thiệt hại cho Bên kia sẽ phải được bên vi phạm bồi thường toàn bộ, kịp thời cho Bên bị vi phạm.",
+    );
+    this.bullet(
+      "Bên Bán có nghĩa vụ bồi thường các thiệt hại (nếu có) do lỗi của Bên Bán bao gồm nhưng không giới hạn ở một số lỗi: sản phẩm không được công bố/đăng ký theo quy định pháp luật; công bố/đăng ký hết hạn; sản phẩm là hàng giả, hàng nhái, hàng kém chất lượng; sản phẩm không được dán tem nhãn theo đúng quy định pháp luật hiện hành, .....Mức bồi thường trong trường hợp này là toàn bộ số tiền phạt vi phạm từ cơ quan nhà nước, thiệt hại tiền hàng do hàng hóa bị thu hồi, chi phí thẩm định, chi phí tiêu hủy,...",
+    );
+    this.text("7.3 Miễn phạt vi phạm hợp đồng:");
+    this.text(
+      "1. Bên vi phạm hợp đồng được miễn trách nhiệm trong các trường hợp sau đây:",
+    );
+    this.text(
+      "a) Xảy ra trường hợp miễn trách nhiệm mà các bên đã thoả thuận;",
+    );
+    this.text("b) Xảy ra sự kiện bất khả kháng;");
+    this.text("c) Hành vi vi phạm của một bên hoàn toàn do lỗi của bên kia;");
+    this.text(
+      "d) Hành vi vi phạm của một bên do thực hiện quyết định của cơ quan quản lý nhà nước có thẩm quyền mà các bên không thể biết được vào thời điểm giao kết hợp đồng.",
+    );
+    this.text(
+      "2. Bên vi phạm hợp đồng có nghĩa vụ chứng minh các trường hợp miễn trách nhiệm.",
+    );
+
+    this.heading("ĐIỀU 8: BẢO MẬT THÔNG TIN");
+    this.text(
+      "8.1. Mỗi Bên sẽ giữ bí mật nghiêm ngặt mọi thông tin có được trong quá trình ký kết và thực hiện Hợp đồng này và các Phụ lục Hợp đồng, Hợp đồng mua bán (nếu có) được ký kết giữa hai Bên. Không Bên nào được tiết lộ thông tin đó cho bất kỳ người nào ngoài những nhân viên và người lao động của mình, và việc tiết lộ như vậy cho các nhân viên hoặc người lao động sẽ chỉ được thực hiện trong phạm vi cần thiết với mục đích để thực hiện Hợp đồng này, người được tiết lộ phải được biết và tuân thủ nghĩa vụ bảo mật thông tin Hai Bên đã thỏa thuận.",
+    );
+    this.text(
+      "8.2. Những quy định trên sẽ vẫn được áp dụng kể cả khi Hợp Đồng này đã kết thúc hoặc chấm dứt trong thời hạn 01 (một) năm kể từ khi chấm dứt Hợp đồng này.",
+    );
+
+    this.heading("ĐIỀU 9: CHỐNG THAM NHŨNG");
+    this.text(
+      "9.1. Bên Bán không được bằng bất kỳ hình thức nào trao cho nhân viên của Bên Mua các lợi ích bằng tiền hoặc/và hiện vật như tặng quà, thưởng tiền, trích phần trăm hoa hồng, cho nhân viên nâng giá để hưởng chênh lệch hoặc các hành vi có tính chất tương tự mà không có sự đồng ý bằng văn bản của Bên Mua. Bên Mua được quyền chấm dứt hợp đồng này nếu Bên Bán vi phạm cam kết này và đồng thời Bên Bán sẽ phải bồi thường cho Bên Mua tương đương số tiền mà Bên Bán đã chi trả cho nhân viên của Bên Mua.",
+    );
+    this.text(
+      "9.2. Bên Bán cam kết rằng, nếu biết việc nhân viên của Bên Mua có các hành vi đề nghị việc được hưởng tiền/ lợi ích vật chất như đã nêu ở trên thì thông báo cho Bên Mua theo thông tin sau:",
+    );
+    this.bulletParts([
+      { text: "Họ tên: " },
+      { text: contactName, bold: true },
+      { text: contactRole ? "                          Chức vụ: " : "" },
+      { text: contactRole, bold: true },
+    ]);
+    this.bulletParts([
+      { text: "Điện thoại: " },
+      { text: contactPhone, bold: true },
+    ]);
+    this.bulletParts([
+      { text: "Email: " },
+      { text: contactEmail, bold: true },
+    ]);
+    this.doc.moveDown(0.35);
+
+    this.heading("ĐIỀU 10: CHẤM DỨT HỢP ĐỒNG");
+    this.text("Hợp đồng này chấm dứt trong các trường hợp sau:");
+    this.text("10.1. Hợp đồng hết hạn mà Hai Bên không có nhu cầu gia hạn.");
+    this.text("10.2. Do hai Bên thỏa thuận chấm dứt Hợp đồng bằng văn bản.");
+    this.text(
+      "10.3. Do một Bên đơn phương chấm dứt hợp đồng. Một Bên được đơn phương chấm dứt hợp đồng trong các trường hợp sau:",
+    );
+    this.text(
+      "10.3.1. Nếu một trong hai Bên vi phạm các quy định trong hợp đồng và/hoặc các quy định của pháp luật, Bên vi phạm phải khắc phục các thiệt hại (nếu có) trong vòng 10 (mười) ngày kể từ ngày nhận thông báo yêu cầu của phía Bên bị vi phạm. Nếu quá thời gian khắc phục nêu trên mà các vi phạm vẫn chưa được khắc phục, Bên bị vi phạm có quyền đơn phương chấm dứt hợp đồng theo quy định của pháp luật và Bên vi phạm có nghĩa vụ bồi thường toàn bộ các thiệt hại theo quy định của pháp luật.",
+    );
+    this.text(
+      "10.3.2. Trừ trường hợp quy định tại điểm 10.3.1. nêu trên, nếu một Bên muốn chấm dứt hợp đồng trước thời hạn thì phải thông báo trước bằng văn bản cho Bên còn lại trước 30 (ba mươi) ngày.",
+    );
+    this.text(
+      "10.4. Trong mọi trường hợp chấm dứt hợp đồng trước thời hạn, Hai Bên phải thực hiện thực hiện đầy đủ các nghĩa vụ quy định trong Hợp đồng cho các giao dịch đã thực hiện trước đó. Hợp đồng chỉ được chấm dứt khi Hai Bên hoàn thành quyết toán hàng hóa và công nợ và người đại diện có thẩm quyền của hai Bên ký và đóng dấu biên bản thanh lý hợp đồng.",
+    );
+    this.text(
+      "10.5. Bên nào đơn phương chấm dứt hợp đồng trái các quy định tại Hợp đồng này và/hoặc trái pháp luật thì phải có nghĩa vụ bồi thường cho Bên còn lại toàn bộ các thiệt hại cho Bên kia theo quy định của pháp luật.",
+    );
+
+    this.heading("ĐIỀU 11: CAM KẾT CHUNG");
+    this.text(
+      "11.1. Hai bên cam kết thực hiện đúng những điều ghi trên Hợp đồng này. Nếu một trong hai bên cố ý vi phạm các điều khoản của Hợp đồng này sẽ phải chịu trách nhiệm tài sản về các hành vi vi phạm đó.",
+    );
+    this.text(
+      "11.2. Trong trường hợp xảy ra tranh chấp, hai bên cùng nhau bàn bạc các biện pháp giải quyết trên tinh thần hòa giải, có thiện chí và hợp tác. Nếu vẫn không thống nhất cách giải quyết thì hai Bên sẽ đưa vụ việc ra Tòa án có thẩm quyền giải quyết.",
+    );
+    this.text(
+      "11.3. Hợp đồng nguyên tắc này có giá trị 12 tháng kể từ ngày ký kết. Hết thời hạn trên, nếu hai Bên không có ý kiến gì thì Hợp đồng được tự động gia hạn thêm 12 tháng tiếp theo và tối đa không quá 2 năm tính từ ngày ký Hợp đồng này.",
+    );
+    this.text(
+      "11.4. Các Đơn đặt hàng cũng như các sửa đổi, bổ sung được coi như các phụ lục và là một phần không thể tách rời của Hợp đồng này.",
+    );
+    this.text(
+      "Hợp đồng Nguyên tắc bán hàng này được lập thành 04 bản, mỗi bên giữ 02 bản có giá trị pháp lý như nhau. Hợp đồng có hiệu lực kể từ ngày ký.",
+      {
+        gap: 0.35,
+      },
+    );
   }
 
   renderGenericValue(label, value, depth = 0) {
@@ -1248,10 +1716,11 @@ class ContractPdfService {
       .createHash("sha256")
       .update(pdfBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${contract.contractId}-${pdfHashHex.slice(
-      0,
-      12,
-    )}.pdf`;
+    const fileName = buildContractArtifactFileName(
+      contract,
+      null,
+      pdfHashHex.slice(0, 12),
+    );
 
     return {
       pdfBuffer,
@@ -1365,9 +1834,11 @@ class ContractPdfService {
       .createHash("sha256")
       .update(signedBuffer)
       .digest("hex");
-    const fileName = `hop-dong-picare-${
-      contract.contractId
-    }-signed-${signedPdfHash.slice(0, 12)}.pdf`;
+    const fileName = buildContractArtifactFileName(
+      contract,
+      "signed",
+      signedPdfHash.slice(0, 12),
+    );
     return {
       signedPdfHash,
       fileName,
@@ -1679,12 +2150,15 @@ ${xrefOffset}
       const { byteRange, preparedBuffer, contentsHexStart, contentsHexEnd } =
         this.buildByteRange(Buffer.from(placeholderBytes));
       const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
-      const fileName = `hop-dong-picare-${
-        contract.contractId
-      }-byte-range-${hashToSign.slice(0, 12)}.pdf`;
+      const fileName = buildContractArtifactFileName(
+        contract,
+        "byte_range",
+        hashToSign.slice(0, 12),
+      );
       return {
         preparedPdfBuffer: preparedBuffer,
         preparedPdfHash: hashToSign,
+        fileName,
         byteRange,
         signatureLength,
         contentsHexStart,
@@ -1745,12 +2219,15 @@ ${xrefOffset}
     const { byteRange, preparedBuffer, contentsHexStart, contentsHexEnd } =
       this.buildByteRange(Buffer.from(placeholderBytes));
     const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
-    const fileName = `hop-dong-picare-${
-      contract.contractId
-    }-byte-range-${hashToSign.slice(0, 12)}.pdf`;
+    const fileName = buildContractArtifactFileName(
+      contract,
+      "byte_range",
+      hashToSign.slice(0, 12),
+    );
     return {
       preparedPdfBuffer: preparedBuffer,
       preparedPdfHash: hashToSign,
+      fileName,
       byteRange,
       signatureLength,
       contentsHexStart,
@@ -1795,9 +2272,11 @@ ${xrefOffset}
     return {
       signedPdfHash,
       signedPdfBuffer: signedBuffer,
-      fileName: `hop-dong-picare-${
-        contract.contractId
-      }-ky-so-${signedPdfHash.slice(0, 12)}.pdf`,
+      fileName: buildContractArtifactFileName(
+        contract,
+        "ky_so",
+        signedPdfHash.slice(0, 12),
+      ),
       byteRange,
     };
   }
@@ -1865,9 +2344,11 @@ ${xrefOffset}
     return {
       signedPdfHash,
       signedPdfBuffer: signedBuffer,
-      fileName: `hop-dong-picare-${
-        contract.contractId
-      }-ky-tay-${signedPdfHash.slice(0, 12)}.pdf`,
+      fileName: buildContractArtifactFileName(
+        contract,
+        "ky_tay",
+        signedPdfHash.slice(0, 12),
+      ),
       widgetRect,
     };
   }

@@ -955,9 +955,7 @@ class ContractService {
         });
       const preparedPdfUpload = await uploadPdfBufferToS3({
         pdfBuffer: preparedSignaturePdf.preparedPdfBuffer,
-        fileName: `hop-dong-picare-${
-          contract.contractId
-        }-byte-range-${preparedSignaturePdf.preparedPdfHash.slice(0, 12)}.pdf`,
+        fileName: preparedSignaturePdf.fileName,
         folder: "byte-range",
         description: formatContractCreatedDescription(),
       });
