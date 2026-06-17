@@ -191,6 +191,164 @@ function formatMoney(value) {
   }).format(numberValue)} VND`;
 }
 
+const APPENDIX_CONTRACT_TYPES = new Set([
+  "appendix",
+  "phu_luc",
+  "phuluc",
+  "plhd",
+  "plhp",
+]);
+
+const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
+  { key: "productName", labels: ["Tên sản phẩm"] },
+  { key: "ingredients", labels: ["Thành phần", "Thành phần chính"] },
+  {
+    key: "packageSpecification",
+    labels: ["Quy cách đóng gói", "Quy cách"],
+  },
+  { key: "registrationNumber", labels: ["Số đăng ký", "Số công bố"] },
+  { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
+  {
+    key: "unitPriceVat",
+    labels: ["Đơn giá(+VAT)", "Đơn giá (+VAT)", "Đơn giá"],
+  },
+  { key: "classification", labels: ["Phân loại"] },
+];
+
+const decodeHtmlEntities = (value) => {
+  const entities = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+
+  return String(value).replace(
+    /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+    (match, entity) => {
+      if (entity[0] === "#") {
+        const isHex = entity[1].toLowerCase() === "x";
+        const codePoint = parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+        return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+      }
+
+      return entities[entity.toLowerCase()] || match;
+    },
+  );
+};
+
+function richTextToPlainText(rawContent) {
+  return decodeHtmlEntities(
+    String(rawContent || "")
+      .replace(/<\s*br\s*\/?>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
+      .replace(/<\s*li(?:\s[^>]*)?>/gi, "")
+      .replace(/<[^>]+>/g, ""),
+  )
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeRichTextLabel(value) {
+  return normalizeVietnameseText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const appendixProductLabelLookup = new Map(
+  APPENDIX_PRODUCT_FIELD_DEFINITIONS.flatMap(({ key, labels }) =>
+    labels.map((label) => [normalizeRichTextLabel(label), key]),
+  ),
+);
+
+function parseAppendixProductRichText(rawContent) {
+  const plainText = richTextToPlainText(rawContent);
+  const result = Object.fromEntries(
+    APPENDIX_PRODUCT_FIELD_DEFINITIONS.map(({ key }) => [key, null]),
+  );
+  let currentKey = null;
+
+  for (const rawLine of plainText.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const separatorIndex = line.indexOf(":");
+    const label =
+      separatorIndex >= 0
+        ? normalizeRichTextLabel(line.slice(0, separatorIndex))
+        : "";
+    const key = appendixProductLabelLookup.get(label);
+
+    if (key) {
+      currentKey = key;
+      result[currentKey] = line.slice(separatorIndex + 1).trim() || null;
+      continue;
+    }
+
+    if (currentKey) {
+      result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
+    }
+  }
+
+  return result;
+}
+
+function getAppendixProductRawContent(product) {
+  if (typeof product === "string") return product;
+
+  const data =
+    product?.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : product;
+
+  return (
+    data?.rawContent ||
+    data?.richText ||
+    data?.content ||
+    data?.html ||
+    data?.productRichText ||
+    null
+  );
+}
+
+function normalizeAppendixProduct(product) {
+  const rawContent = getAppendixProductRawContent(product);
+  const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
+  const data =
+    product?.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : typeof product === "object" && product
+        ? product
+        : {};
+
+  return {
+    productName: data.productName ?? parsed.productName,
+    ingredients: data.ingredients ?? parsed.ingredients,
+    packageSpecification:
+      data.packageSpecification ?? data.packageSpec ?? parsed.packageSpecification,
+    registrationNumber:
+      data.registrationNumber ?? data.registrationNo ?? parsed.registrationNumber,
+    origin: data.origin ?? data.countryOfOrigin ?? parsed.origin,
+    unitPriceVat:
+      data.unitPriceVat ??
+      data.unitPriceWithVat ??
+      data.priceVat ??
+      data.price ??
+      parsed.unitPriceVat,
+    classification: data.classification ?? data.category ?? parsed.classification,
+  };
+}
+
 function normalizeContractTypeForFileName(contractType) {
   const normalizedType = String(contractType || "principle")
     .trim()
@@ -1023,6 +1181,118 @@ class ContractPdfBuilder {
     doc.moveDown(0.2);
   }
 
+  collectAppendixProducts(contract, details = []) {
+    const contractData = contract.contractData || {};
+    const sourceProducts = [
+      ...(Array.isArray(contractData.products) ? contractData.products : []),
+      ...(Array.isArray(contractData.productRichTexts)
+        ? contractData.productRichTexts
+        : []),
+    ];
+    const products = sourceProducts.length ? sourceProducts : details;
+
+    return products.map((product) => normalizeAppendixProduct(product));
+  }
+
+  appendixProductTable(products = []) {
+    const doc = this.doc;
+    const startX = doc.page.margins.left;
+    const widths = [22, 72, 105, 58, 54, 56, 60, 56];
+    const headers = [
+      "STT",
+      "Tên sản phẩm",
+      "Thành phần",
+      "Quy cách đóng gói",
+      "Số đăng ký",
+      "Nước sản xuất",
+      "Đơn giá(+VAT)",
+      "Phân loại",
+    ];
+    const keys = [
+      null,
+      "productName",
+      "ingredients",
+      "packageSpecification",
+      "registrationNumber",
+      "origin",
+      "unitPriceVat",
+      "classification",
+    ];
+    const padding = 4;
+    const minRowHeight = 30;
+    const lineGap = 2;
+
+    const cellHeight = (text, width, bold = false) => {
+      doc.font(bold ? this.boldFontPath : this.fontPath).fontSize(7.2);
+      return (
+        doc.heightOfString(formatOptionalText(text, ""), {
+          width: width - padding * 2,
+          lineGap,
+        }) +
+        padding * 2
+      );
+    };
+
+    const drawRow = (cells, rowHeight, y, bold = false) => {
+      let x = startX;
+
+      cells.forEach((cell, cellIndex) => {
+        doc.rect(x, y, widths[cellIndex], rowHeight).stroke();
+        doc
+          .font(bold ? this.boldFontPath : this.fontPath)
+          .fontSize(7.2)
+          .text(formatOptionalText(cell, ""), x + padding, y + padding, {
+            width: widths[cellIndex] - padding * 2,
+            height: rowHeight - padding * 2,
+            lineGap,
+            align: cellIndex === 0 ? "center" : "left",
+          });
+        x += widths[cellIndex];
+      });
+    };
+
+    let y = doc.y + 4;
+    const headerHeight = Math.max(
+      minRowHeight,
+      ...headers.map((header, index) => cellHeight(header, widths[index], true)),
+    );
+
+    if (y + headerHeight > doc.page.height - doc.page.margins.bottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+
+    drawRow(headers, headerHeight, y, true);
+    y += headerHeight;
+
+    products.forEach((product, index) => {
+      const cells = keys.map((key) => {
+        if (!key) return String(index + 1);
+        if (key === "unitPriceVat") return formatMoney(product[key]);
+        return product[key];
+      });
+      const rowHeight = Math.max(
+        minRowHeight,
+        ...cells.map((cell, cellIndex) =>
+          cellHeight(cell, widths[cellIndex], false),
+        ),
+      );
+
+      if (y + rowHeight > doc.page.height - doc.page.margins.bottom) {
+        doc.addPage();
+        y = doc.page.margins.top;
+        drawRow(headers, headerHeight, y, true);
+        y += headerHeight;
+      }
+
+      drawRow(cells, rowHeight, y, false);
+      y += rowHeight;
+    });
+
+    doc.y = y + 14;
+    doc.x = doc.page.margins.left;
+  }
+
   signatureArea(ownerCompanyInfo = {}, partnerCompanyInfo = {}) {
     const doc = this.doc;
 
@@ -1637,6 +1907,74 @@ class ContractPdfBuilder {
     this.text(`${indent}${label}: ${asText(value)}`);
   }
 
+  renderAppendixContract(contract, details = []) {
+    const owner = contract.ownerCompanyInfo || {};
+    const partner = contract.partnerCompanyInfo || {};
+    const contractData = contract.contractData || {};
+    const renderedAt = new Date();
+    const principleContractNumber =
+      contractData.principleContractNumber || "08/2026/HĐNT/MOCELUX-PICARE";
+    const principleContractSignedDate =
+      contractData.principleContractSignedDate || "15/06/2026";
+    const products = this.collectAppendixProducts(contract, details);
+
+    this.text(owner.companyName, { width: 245, bold: true });
+    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
+    this.doc.y = 56;
+    this.doc.x = 300;
+    this.rightBlock("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
+      size: 11,
+      bold: true,
+      gap: 0.1,
+    });
+    this.doc.x = 300;
+    this.rightBlock("Độc lập - Tự do - Hạnh phúc", {
+      size: 10,
+      bold: true,
+      gap: 1.2,
+    });
+    this.doc.x = 300;
+    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
+      size: 10,
+      bold: true,
+      gap: 0.8,
+    });
+    this.doc.x = this.doc.page.margins.left;
+    this.centered("PHỤ LỤC HỢP ĐỒNG", 14, 0.25, true);
+    this.centered(
+      `Đính kèm Hợp đồng nguyên tắc số: ${principleContractNumber} ký ngày ${principleContractSignedDate}`,
+      10,
+      0.8,
+      true,
+    );
+
+    this.text(
+      `Hôm nay, ngày ${formatShortDate(
+        renderedAt,
+      )} tại văn phòng công ty chúng tôi gồm có:`,
+      { gap: 0.35, bold: true },
+    );
+
+    this.companyBlock("CÔNG TY BÁN ( Bên A)", owner, "Bên A");
+    this.companyBlock("CÔNG TY MUA ( Bên B)", partner, "Bên B");
+
+    this.text("Hai bên đồng ý ký kết Phụ lục với các điều khoản sau:", {
+      gap: 0.25,
+    });
+    this.text(
+      "Bảng giá: Bên B được hưởng các chính sách, chương trình hợp tác theo bảng liệt kê chi tiết (Giá và các chính sách, chương trình hợp tác đã bao gồm thuế GTGT). Mức chiết khấu này sẽ là căn cứ để Bên A xuất hóa đơn GTGT cho Bên B khi xuất bán hàng hóa. Khi bảng giá thay đổi đã được hai Bên thống nhất qua thư điện tử (email). Bên A cung cấp cho Bên B bảng giá mới trước 30 (ba mươi) ngày trước khi áp dụng.",
+      { gap: 0.25 },
+    );
+    this.text(
+      "Lưu ý: Thuế suất thuế GTGT của sản phẩm sẽ thay đổi tùy từng thời điểm. phù hợp theo quy định của pháp luật hiện hành.",
+      { gap: 0.35 },
+    );
+
+    this.appendixProductTable(products);
+
+    this.signatureArea(owner, partner);
+  }
+
   renderGenericContract(contract, details = []) {
     const owner = contract.ownerCompanyInfo || {};
     const partner = contract.partnerCompanyInfo || {};
@@ -1690,6 +2028,11 @@ class ContractPdfBuilder {
 
     if (["principle", "default", "digital"].includes(contractType)) {
       this.renderPrincipleContract(contract, details);
+      return;
+    }
+
+    if (APPENDIX_CONTRACT_TYPES.has(contractType)) {
+      this.renderAppendixContract(contract, details);
       return;
     }
 

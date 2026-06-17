@@ -15,6 +15,7 @@ function formatContractNumber(sequence, date = new Date()) {
   const paddedSequence = String(sequence).padStart(3, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
+  const documentCode = getContractDocumentCode(this.contractType);
   const rawCompanyCode = String(
     this.ownerCompanyInfo?.companyCode || this.contractType || "HD"
   )
@@ -23,12 +24,45 @@ function formatContractNumber(sequence, date = new Date()) {
     .replace(/[^A-Z0-9_-]/g, "");
   const companyCode = rawCompanyCode || "HD";
 
-  return `${paddedSequence}/${month}/${year}/${companyCode}`;
+  return `${paddedSequence}/${month}/${year}/${documentCode}/${companyCode}`;
+}
+
+function getContractDocumentCode(contractType) {
+  const normalizedType = String(contractType || "principle")
+    .trim()
+    .toLowerCase();
+
+  if (["appendix", "phu_luc", "phuluc", "plhd", "plhp"].includes(normalizedType)) {
+    return "PLHP";
+  }
+
+  if (["principle", "default", "digital"].includes(normalizedType)) {
+    return "HDNT";
+  }
+
+  return (
+    normalizedType
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .toUpperCase() || "HD"
+  );
 }
 
 async function buildNextContractNumber(contract, options = {}) {
   const baseDate = contract.createdAt || new Date();
   const { start, end } = getContractPeriodRange(baseDate);
+  const month = String(baseDate.getMonth() + 1).padStart(2, "0");
+  const year = baseDate.getFullYear();
+  const documentCode = getContractDocumentCode(contract.contractType);
+  const rawCompanyCode = String(
+    contract.ownerCompanyInfo?.companyCode || contract.contractType || "HD"
+  )
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "");
+  const companyCode = rawCompanyCode || "HD";
 
   const latestContract = await sequelize.models.Contract.findOne({
     where: {
@@ -37,7 +71,7 @@ async function buildNextContractNumber(contract, options = {}) {
         [Op.lt]: end,
       },
       contractNumber: {
-        [Op.ne]: null,
+        [Op.like]: `%/${month}/${year}/${documentCode}/${companyCode}`,
       },
     },
     order: [

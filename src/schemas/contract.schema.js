@@ -192,6 +192,22 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isISO8601()
     .withMessage("contractDueDate phải là ngày ISO8601 hợp lệ"),
+  body("principleContractNumber")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("principleContractNumber phải là chuỗi"),
+  body("principleContractSignedDate")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .withMessage("principleContractSignedDate phải là chuỗi"),
+  body("products")
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("products phải là array"),
+  body("productRichTexts")
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("productRichTexts phải là array"),
   body("contractType")
     .optional()
     .isString()

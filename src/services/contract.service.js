@@ -74,6 +74,16 @@ function normalizeContractData(input = {}) {
     details,
     contractData: {
       ...sourceData,
+      principleContractNumber:
+        input.principleContractNumber ?? sourceData.principleContractNumber,
+      principleContractSignedDate:
+        input.principleContractSignedDate ??
+        sourceData.principleContractSignedDate,
+      products:
+        input.products ??
+        input.productRichTexts ??
+        sourceData.products ??
+        sourceData.productRichTexts,
       ownerCompanyInfo,
       partnerCompanyInfo,
       contractDueDate,

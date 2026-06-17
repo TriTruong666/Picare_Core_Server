@@ -122,6 +122,38 @@ const credentialUpload = multer({
  *                     detailData:
  *                       name: Phí triển khai
  *                       fee: 5000000
+ *             appendix:
+ *               summary: Phụ lục hợp đồng
+ *               value:
+ *                 contractType: appendix
+ *                 principleContractNumber: 08/2026/HĐNT/MOCELUX-PICARE
+ *                 principleContractSignedDate: 15/06/2026
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY CỔ PHẦN PICARE VIỆT NAM
+ *                   address: 123 Nguyễn Trãi, TP.HCM
+ *                   phone: "0900000000"
+ *                   bankInfo: "0123456789 - Vietcombank"
+ *                   mst: "0312345678"
+ *                   ownerName: Nguyễn Văn A
+ *                   role: Giám đốc
+ *                 partnerCompanyInfo:
+ *                   companyName: CÔNG TY TNHH MOCELUX
+ *                   address: 456 Lê Lợi, TP.HCM
+ *                   phone: "0911111111"
+ *                   bankInfo: "9876543210 - ACB"
+ *                   mst: "0398765432"
+ *                   ownerName: Trần Văn B
+ *                   role: Giám đốc
+ *                 products:
+ *                   - |
+ *                     Tên sản phẩm: Mocelux Collagen
+ *                     Thành phần: Collagen peptide, Vitamin C
+ *                     Quy cách đóng gói: Hộp 30 gói x 10ml
+ *                     Số đăng ký: 1234/2026/ĐKSP
+ *                     Nước sản xuất: Việt Nam
+ *                     Đơn giá(+VAT): 350000
+ *                     Phân loại: Thực phẩm bảo vệ sức khỏe
  *     responses:
  *       201:
  *         description: Tạo hợp đồng thành công
