@@ -196,15 +196,20 @@ function normalizeContractTypeForFileName(contractType) {
     .trim()
     .toLowerCase();
 
-  if (!normalizedType || ["default", "digital", "principle"].includes(normalizedType)) {
+  if (
+    !normalizedType ||
+    ["default", "digital", "principle"].includes(normalizedType)
+  ) {
     return "nguyen_tac";
   }
 
-  return normalizeVietnameseText(normalizedType)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "hop_dong";
+  return (
+    normalizeVietnameseText(normalizedType)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "hop_dong"
+  );
 }
 
 function buildContractFilePrefix(contract) {
@@ -883,10 +888,7 @@ class ContractPdfBuilder {
 
   labelValue(label, value, options = {}) {
     this.richText(
-      [
-        { text: label },
-        { text: formatOptionalText(value), bold: true },
-      ],
+      [{ text: label }, { text: formatOptionalText(value), bold: true }],
       options,
     );
   }
@@ -1338,8 +1340,6 @@ class ContractPdfBuilder {
 
   renderPrincipleClauses(contract, owner = {}, partner = {}) {
     const contractData = contract.contractData || {};
-    const appendixDate =
-      contractData.appendixDate || contract.createdAt || new Date();
     const paymentTermDays = contractData.paymentTermDays || 30;
     const creditLimit = contractData.creditLimit || "Theo giá trị nhập hàng";
     const antiCorruptionContact =
@@ -1433,9 +1433,8 @@ class ContractPdfBuilder {
     this.text("4.1 Giá bán:");
     this.bulletParts([
       {
-        text: "Bảng giá chi tiết và chương trình hợp tác đính kèm tại Phụ lục số 01 ký ngày ",
+        text: "Bảng giá chi tiết và chương trình hợp tác đính kèm tại Phụ lục kèm theo",
       },
-      { text: formatShortDate(appendixDate), bold: true },
     ]);
     this.bullet(
       "Giá bán hàng hóa là giá Bên Bán niêm yết tùy từng thời điểm và có hiệu lực áp dụng vào thời điểm Bên Mua đặt hàng.",
@@ -1568,10 +1567,7 @@ class ContractPdfBuilder {
       { text: "Điện thoại: " },
       { text: contactPhone, bold: true },
     ]);
-    this.bulletParts([
-      { text: "Email: " },
-      { text: contactEmail, bold: true },
-    ]);
+    this.bulletParts([{ text: "Email: " }, { text: contactEmail, bold: true }]);
     this.doc.moveDown(0.35);
 
     this.heading("ĐIỀU 10: CHẤM DỨT HỢP ĐỒNG");

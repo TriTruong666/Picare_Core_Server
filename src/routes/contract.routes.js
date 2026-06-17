@@ -106,7 +106,6 @@ const credentialUpload = multer({
  *                   ownerName: Trần Văn B
  *                   role: Giám đốc
  *                 contractData:
- *                   appendixDate: 2026-06-15
  *                   paymentTermDays: 30
  *                   creditLimit: null
  *             custom:
