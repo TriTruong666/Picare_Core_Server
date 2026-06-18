@@ -41,13 +41,27 @@ const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
     key: "packageSpecification",
     labels: ["Quy cách đóng gói", "Quy cách"],
   },
-  { key: "registrationNumber", labels: ["Số đăng ký", "Số công bố"] },
+  {
+    key: "registrationNumber",
+    labels: [
+      "Số đăng ký",
+      "Số công bố",
+      "Số đăng ký(số công bố)",
+      "Số đăng ký (số công bố)",
+    ],
+  },
   { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
   {
     key: "unitPriceVat",
-    labels: ["Đơn giá(+VAT)", "Đơn giá (+VAT)", "Đơn giá"],
+    labels: [
+      "Đơn giá(+VAT)",
+      "Đơn giá (+VAT)",
+      "Đơn giá",
+      "Giá sản phẩm",
+      "Giá",
+    ],
   },
-  { key: "classification", labels: ["Phân loại"] },
+  { key: "classification", labels: ["Phân loại", "Phân loại sản phẩm"] },
 ];
 
 const decodeHtmlEntities = (value) => {
@@ -91,6 +105,8 @@ function richTextToPlainText(rawContent) {
 
 function normalizeRichTextLabel(value) {
   return String(value || "")
+    .replace(/^[\s\-–—•*]+/, "")
+    .replace(/^\d+[\).\s-]+/, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
@@ -130,6 +146,11 @@ function parseAppendixProductRichText(rawContent) {
       continue;
     }
 
+    if (separatorIndex >= 0) {
+      currentKey = null;
+      continue;
+    }
+
     if (currentKey) {
       result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
     }
@@ -141,12 +162,19 @@ function parseAppendixProductRichText(rawContent) {
 function getAppendixProductRawContent(product) {
   if (typeof product === "string") return product;
 
+  const data =
+    product?.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : product?.jsonContent && typeof product.jsonContent === "object"
+        ? product.jsonContent
+        : product;
+
   return (
-    product?.rawContent ||
-    product?.richText ||
-    product?.content ||
-    product?.html ||
-    product?.productRichText ||
+    data?.rawContent ||
+    data?.richText ||
+    data?.content ||
+    data?.html ||
+    data?.productRichText ||
     null
   );
 }
@@ -154,7 +182,14 @@ function getAppendixProductRawContent(product) {
 function normalizeAppendixProduct(product) {
   const rawContent = getAppendixProductRawContent(product);
   const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
-  const data = typeof product === "object" && product ? product : {};
+  const data =
+    product?.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : product?.jsonContent && typeof product.jsonContent === "object"
+        ? product.jsonContent
+        : typeof product === "object" && product
+          ? product
+          : {};
 
   return {
     rawContent,

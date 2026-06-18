@@ -206,13 +206,27 @@ const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
     key: "packageSpecification",
     labels: ["Quy cách đóng gói", "Quy cách"],
   },
-  { key: "registrationNumber", labels: ["Số đăng ký", "Số công bố"] },
+  {
+    key: "registrationNumber",
+    labels: [
+      "Số đăng ký",
+      "Số công bố",
+      "Số đăng ký(số công bố)",
+      "Số đăng ký (số công bố)",
+    ],
+  },
   { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
   {
     key: "unitPriceVat",
-    labels: ["Đơn giá(+VAT)", "Đơn giá (+VAT)", "Đơn giá"],
+    labels: [
+      "Đơn giá(+VAT)",
+      "Đơn giá (+VAT)",
+      "Đơn giá",
+      "Giá sản phẩm",
+      "Giá",
+    ],
   },
-  { key: "classification", labels: ["Phân loại"] },
+  { key: "classification", labels: ["Phân loại", "Phân loại sản phẩm"] },
 ];
 
 const decodeHtmlEntities = (value) => {
@@ -261,6 +275,8 @@ function richTextToPlainText(rawContent) {
 
 function normalizeRichTextLabel(value) {
   return normalizeVietnameseText(value)
+    .replace(/^[\s\-–—•*]+/, "")
+    .replace(/^\d+[\).\s-]+/, "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/đ/g, "d")
@@ -300,6 +316,11 @@ function parseAppendixProductRichText(rawContent) {
       continue;
     }
 
+    if (separatorIndex >= 0) {
+      currentKey = null;
+      continue;
+    }
+
     if (currentKey) {
       result[currentKey] = [result[currentKey], line]
         .filter(Boolean)
@@ -316,6 +337,8 @@ function getAppendixProductRawContent(product) {
   const data =
     product?.detailData && typeof product.detailData === "object"
       ? product.detailData
+      : product?.jsonContent && typeof product.jsonContent === "object"
+        ? product.jsonContent
       : product;
 
   return (
@@ -334,11 +357,14 @@ function normalizeAppendixProduct(product) {
   const data =
     product?.detailData && typeof product.detailData === "object"
       ? product.detailData
+      : product?.jsonContent && typeof product.jsonContent === "object"
+        ? product.jsonContent
       : typeof product === "object" && product
         ? product
         : {};
 
   return {
+    rawContent,
     productName: data.productName ?? parsed.productName,
     ingredients: data.ingredients ?? parsed.ingredients,
     packageSpecification:
@@ -366,24 +392,25 @@ function normalizeContractTypeForFileName(contractType) {
     .trim()
     .toLowerCase();
 
-  if (
-    !normalizedType ||
-    ["default", "digital", "principle"].includes(normalizedType)
-  ) {
-    return "nguyen_tac";
+  if (!normalizedType || ["default", "digital", "principle"].includes(normalizedType)) {
+    return "hop_dong_nguyen_tac";
+  }
+
+  if (["appendix", "phu_luc", "phuluc", "plhd", "plhp"].includes(normalizedType)) {
+    return "phu_luc_hop_dong";
   }
 
   return (
-    normalizeVietnameseText(normalizedType)
+    `hop_dong_${normalizeVietnameseText(normalizedType)
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "") || "hop_dong"
+      .replace(/^_+|_+$/g, "")}` || "hop_dong"
   );
 }
 
 function buildContractFilePrefix(contract) {
-  return `hop_dong_${normalizeContractTypeForFileName(contract?.contractType)}_picare`;
+  return normalizeContractTypeForFileName(contract?.contractType);
 }
 
 function buildContractArtifactFileName(contract, variant, token) {

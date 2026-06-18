@@ -310,9 +310,44 @@ router.delete(
  *               contractDueDate:
  *                 type: string
  *                 format: date
- *               contractData:
- *                 type: object
- *                 description: Payload động theo từng loại hợp đồng
+ *               principleContractNumber:
+ *                 type: string
+ *                 description: Số hợp đồng nguyên tắc đính kèm. Dùng cho contractType=appendix.
+ *                 example: 001/06/2026/HDNT/PIC
+ *               principleContractSignedDate:
+ *                 type: string
+ *                 description: Ngày ký hợp đồng nguyên tắc đính kèm. Dùng cho contractType=appendix.
+ *                 example: 15/06/2026
+ *               products:
+ *                 type: array
+ *                 description: Danh sách sản phẩm phụ lục. Mỗi item có thể là richtext HTML string hoặc object có rawContent/richText/html/content.
+ *                 items:
+ *                   oneOf:
+ *                     - type: string
+ *                       description: Richtext HTML/plain text từ editor hoặc QR product.
+ *                     - type: object
+ *                       properties:
+ *                         rawContent:
+ *                           type: string
+ *                         productName:
+ *                           type: string
+ *                         ingredients:
+ *                           type: string
+ *                         packageSpecification:
+ *                           type: string
+ *                         registrationNumber:
+ *                           type: string
+ *                         origin:
+ *                           type: string
+ *                         unitPriceVat:
+ *                           type: string
+ *                         classification:
+ *                           type: string
+ *               productRichTexts:
+ *                 type: array
+ *                 description: Alias của products khi chỉ truyền array richtext string.
+ *                 items:
+ *                   type: string
  *               details:
  *                 type: array
  *                 items:
@@ -328,6 +363,80 @@ router.delete(
  *                       type: string
  *                     price:
  *                       type: number
+ *           examples:
+ *             principle:
+ *               summary: Cập nhật hợp đồng nguyên tắc
+ *               value:
+ *                 contractType: principle
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY CỔ PHẦN PICARE VIỆT NAM
+ *                   address: 123 Nguyễn Trãi, TP.HCM
+ *                   phone: "0900000000"
+ *                   email: contract@picare.vn
+ *                   bankInfo: 0123456789 - Vietcombank
+ *                   mst: "0312345678"
+ *                   ownerName: Nguyễn Văn A
+ *                   role: Giám đốc
+ *                 partnerCompanyInfo:
+ *                   companyName: CÔNG TY TNHH MOCELUX
+ *                   address: 456 Lê Lợi, TP.HCM
+ *                   phone: "0911111111"
+ *                   email: purchase@mocelux.vn
+ *                   bankInfo: 9876543210 - ACB
+ *                   mst: "0398765432"
+ *                   ownerName: Trần Văn B
+ *                   role: Giám đốc
+ *                 contractDueDate: 2027-12-31
+ *                 contractData:
+ *                   paymentTermDays: 30
+ *                   creditLimit: Theo giá trị nhập hàng
+ *             appendix:
+ *               summary: Cập nhật phụ lục hợp đồng bằng richtext sản phẩm
+ *               value:
+ *                 contractType: appendix
+ *                 principleContractNumber: 001/06/2026/HDNT/PIC
+ *                 principleContractSignedDate: 15/06/2026
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY CỔ PHẦN PICARE VIỆT NAM
+ *                   address: 123 Nguyễn Trãi, TP.HCM
+ *                   phone: "0900000000"
+ *                   bankInfo: 0123456789 - Vietcombank
+ *                   mst: "0312345678"
+ *                   ownerName: Nguyễn Văn A
+ *                   role: Giám đốc
+ *                 partnerCompanyInfo:
+ *                   companyName: CÔNG TY TNHH MOCELUX
+ *                   address: 456 Lê Lợi, TP.HCM
+ *                   phone: "0911111111"
+ *                   bankInfo: 9876543210 - ACB
+ *                   mst: "0398765432"
+ *                   ownerName: Trần Văn B
+ *                   role: Giám đốc
+ *                 products:
+ *                   - rawContent: "<ol><li><p><strong>Tên sản phẩm: </strong>MIẾNG DÁN LOẠI BỎ MỤN CÓC TIMODORE&nbsp;</p></li><li><p><strong>Số công bố:</strong> 240001022/PCBA-HCM</p></li><li><p><strong>Thành phần chính: </strong>Salicylic 30%</p></li><li><p><strong>Quy cách: </strong>6 miếng/gói</p></li><li><p><strong>Xuất xứ: </strong>Ý</p></li><li><p><strong>Giá sản phẩm: </strong>125000</p></li><li><p><strong>Phân loại: </strong>Thiết bị y tế</p></li></ol>"
+ *                   - productName: Sản phẩm nhập tay
+ *                     ingredients: Thành phần A
+ *                     packageSpecification: Hộp 10 đơn vị
+ *                     registrationNumber: 12345/PCB
+ *                     origin: Việt Nam
+ *                     unitPriceVat: "250000"
+ *                     classification: Thực phẩm bảo vệ sức khỏe
+ *             custom:
+ *               summary: Cập nhật loại hợp đồng động
+ *               value:
+ *                 contractType: service
+ *                 contractData:
+ *                   title: Hợp đồng dịch vụ
+ *                   scope: Triển khai hệ thống
+ *                   paymentTerm: Thanh toán trong 30 ngày
+ *                 details:
+ *                   - detailKey: implementation
+ *                     detailType: service_fee
+ *                     detailData:
+ *                       name: Phí triển khai
+ *                       fee: 5000000
  *     responses:
  *       200:
  *         description: Cập nhật hợp đồng nháp thành công
