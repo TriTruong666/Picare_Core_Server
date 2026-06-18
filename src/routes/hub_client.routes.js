@@ -145,11 +145,9 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
  *                 type: string
  *               clientDescription:
  *                 type: string
- *               clientInternalUrl:
- *                 type: string
- *                 nullable: true
  *               clientExternalUrl:
  *                 type: string
+ *                 description: URL bên ngoài dùng để truy cập client; có thể tạo trước khi có clientInternalUrl.
  *               clientLogoImage:
  *                 type: string
  *               clientMockupImage:
@@ -162,6 +160,17 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
  *                   type: string
  *               note:
  *                 type: string
+ *           examples:
+ *             createClient:
+ *               summary: Tạo client mới
+ *               value:
+ *                 clientName: Mocelux Hub
+ *                 clientDescription: Client quản lý cho Mocelux
+ *                 clientExternalUrl: https://mocelux.example.com
+ *                 clientStatus: active
+ *                 allowedRoles:
+ *                   - admin
+ *                   - staff
  *     responses:
  *       201:
  *         description: Tạo thành công
@@ -200,6 +209,8 @@ router.post(
  *                 type: string
  *               clientInternalUrl:
  *                 type: string
+ *                 nullable: true
+ *                 description: Internal URL được set ở bước edit sau khi client được tạo.
  *               clientExternalUrl:
  *                 type: string
  *               clientLogoImage:
@@ -214,6 +225,18 @@ router.post(
  *                   type: string
  *               note:
  *                 type: string
+ *           examples:
+ *             updateClient:
+ *               summary: Cập nhật client
+ *               value:
+ *                 clientName: Mocelux Hub
+ *                 clientDescription: Client quản lý cho Mocelux
+ *                 clientInternalUrl: https://internal.mocelux.local
+ *                 clientExternalUrl: https://mocelux.example.com
+ *                 clientStatus: active
+ *                 allowedRoles:
+ *                   - admin
+ *                   - staff
  *     responses:
  *       200:
  *         description: Cập nhật thành công
