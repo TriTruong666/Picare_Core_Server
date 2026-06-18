@@ -145,14 +145,9 @@ const credentialUpload = multer({
  *                   ownerName: Trần Văn B
  *                   role: Giám đốc
  *                 products:
- *                   - |
- *                     Tên sản phẩm: Mocelux Collagen
- *                     Thành phần: Collagen peptide, Vitamin C
- *                     Quy cách đóng gói: Hộp 30 gói x 10ml
- *                     Số đăng ký: 1234/2026/ĐKSP
- *                     Nước sản xuất: Việt Nam
- *                     Đơn giá(+VAT): 350000
- *                     Phân loại: Thực phẩm bảo vệ sức khỏe
+ *                   - rawContent: "<ol><li><p><strong>Tên sản phẩm: </strong>Mocelux Collagen</p></li><li><p><strong>Số công bố:</strong> 1234/2026/ĐKSP</p></li><li><p><strong>Thành phần:</strong> Collagen peptide, Vitamin C</p></li><li><p><strong>Quy cách đóng gói:</strong> Hộp 30 gói x 10ml</p></li><li><p><strong>Nước sản xuất:</strong> Việt Nam</p></li><li><p><strong>Đơn giá(+VAT):</strong> 350000</p></li><li><p><strong>Phân loại:</strong> Thực phẩm bảo vệ sức khỏe</p></li></ol>"
+ *                   - rawContent: "- Tên sản phẩm: Sản phẩm plain text- Số công bố: 12345/PCB- Thành phần chính: Thành phần A- Quy cách: Hộp 10 đơn vị- Xuất xứ: Việt Nam- Đơn giá: 250000"
+ *                     html: "<ol><li><p><strong>Tên sản phẩm: </strong>Sản phẩm plain text</p></li><li><p><strong>Số công bố:</strong> 12345/PCB</p></li><li><p><strong>Thành phần chính:</strong> Thành phần A</p></li><li><p><strong>Quy cách:</strong> Hộp 10 đơn vị</p></li><li><p><strong>Xuất xứ:</strong> Việt Nam</p></li><li><p><strong>Đơn giá:</strong> 250000</p></li></ol>"
  *     responses:
  *       201:
  *         description: Tạo hợp đồng thành công
@@ -320,15 +315,28 @@ router.delete(
  *                 example: 15/06/2026
  *               products:
  *                 type: array
- *                 description: Danh sách sản phẩm phụ lục. Mỗi item có thể là richtext HTML string hoặc object có rawContent/richText/html/content.
+ *                 description: Danh sách sản phẩm phụ lục. Mỗi item có thể là richtext HTML string hoặc object. Nếu có html/rawHtml/richText/productRichText thì rawContent lưu HTML gốc; nếu chỉ có plain text thì API tự dựng rawContent thành HTML list sạch cho màn edit.
  *                 items:
  *                   oneOf:
  *                     - type: string
- *                       description: Richtext HTML/plain text từ editor hoặc QR product.
+ *                       description: Richtext HTML hoặc plain text từ editor/QR product.
  *                     - type: object
  *                       properties:
  *                         rawContent:
  *                           type: string
+ *                           description: HTML gốc hoặc plain text. Nếu plain text, API parse field và tự dựng lại rawContent dạng HTML list sạch.
+ *                         rawHtml:
+ *                           type: string
+ *                           description: HTML gốc, được ưu tiên để lưu lại rawContent.
+ *                         html:
+ *                           type: string
+ *                           description: HTML gốc, được ưu tiên nếu rawContent đang là plain text.
+ *                         richText:
+ *                           type: string
+ *                           description: HTML/rich text gốc.
+ *                         productRichText:
+ *                           type: string
+ *                           description: HTML/rich text gốc.
  *                         productName:
  *                           type: string
  *                         ingredients:
@@ -416,6 +424,8 @@ router.delete(
  *                   role: Giám đốc
  *                 products:
  *                   - rawContent: "<ol><li><p><strong>Tên sản phẩm: </strong>MIẾNG DÁN LOẠI BỎ MỤN CÓC TIMODORE&nbsp;</p></li><li><p><strong>Số công bố:</strong> 240001022/PCBA-HCM</p></li><li><p><strong>Thành phần chính: </strong>Salicylic 30%</p></li><li><p><strong>Quy cách: </strong>6 miếng/gói</p></li><li><p><strong>Xuất xứ: </strong>Ý</p></li><li><p><strong>Giá sản phẩm: </strong>125000</p></li><li><p><strong>Phân loại: </strong>Thiết bị y tế</p></li></ol>"
+ *                   - rawContent: "- Tên sản phẩm: Sản phẩm plain text- Số công bố: 12345/PCB- Thành phần chính: Thành phần A- Quy cách: Hộp 10 đơn vị- Xuất xứ: Việt Nam- Đơn giá: 250000"
+ *                     html: "<ol><li><p><strong>Tên sản phẩm: </strong>Sản phẩm plain text</p></li><li><p><strong>Số công bố:</strong> 12345/PCB</p></li><li><p><strong>Thành phần chính:</strong> Thành phần A</p></li><li><p><strong>Quy cách:</strong> Hộp 10 đơn vị</p></li><li><p><strong>Xuất xứ:</strong> Việt Nam</p></li><li><p><strong>Đơn giá:</strong> 250000</p></li></ol>"
  *                   - productName: Sản phẩm nhập tay
  *                     ingredients: Thành phần A
  *                     packageSpecification: Hộp 10 đơn vị

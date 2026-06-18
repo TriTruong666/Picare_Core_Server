@@ -99,8 +99,79 @@ function richTextToPlainText(rawContent) {
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n[ \t]+/g, "\n")
+    .replace(/-\s+(?=[^\n:]{1,80}:)/g, "\n- ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function isHtmlContent(value) {
+  return typeof value === "string" && /<[^>]+>/.test(value);
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function plainTextToRichHtml(rawContent) {
+  const plainText = richTextToPlainText(rawContent);
+  const items = [];
+  let currentItem = null;
+
+  for (const rawLine of plainText.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const separatorIndex = line.indexOf(":");
+
+    if (separatorIndex >= 0) {
+      currentItem = {
+        label: line.slice(0, separatorIndex).trim().replace(/^[\s\-–—•*]+/, ""),
+        value: line.slice(separatorIndex + 1).trim(),
+      };
+      items.push(currentItem);
+      continue;
+    }
+
+    if (currentItem) {
+      currentItem.value = [currentItem.value, line].filter(Boolean).join("\n");
+    } else {
+      items.push({ label: null, value: line });
+    }
+  }
+
+  if (!items.length) {
+    return null;
+  }
+
+  return `<ol>${items
+    .map((item) => {
+      const value = escapeHtml(item.value).replace(/\n/g, "<br>");
+      if (!item.label) return `<li><p>${value}</p></li>`;
+
+      return `<li><p><strong>${escapeHtml(item.label)}: </strong>${value}</p></li>`;
+    })
+    .join("")}</ol>`;
+}
+
+function resolveAppendixProductData(product) {
+  if (!product || typeof product !== "object") {
+    return {};
+  }
+
+  return {
+    ...(product.jsonContent && typeof product.jsonContent === "object"
+      ? product.jsonContent
+      : {}),
+    ...product,
+    ...(product.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : {}),
+  };
 }
 
 function normalizeRichTextLabel(value) {
@@ -162,37 +233,28 @@ function parseAppendixProductRichText(rawContent) {
 function getAppendixProductRawContent(product) {
   if (typeof product === "string") return product;
 
-  const data =
-    product?.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : product?.jsonContent && typeof product.jsonContent === "object"
-        ? product.jsonContent
-        : product;
-
-  return (
-    data?.rawContent ||
-    data?.richText ||
-    data?.content ||
+  const data = resolveAppendixProductData(product);
+  const htmlContent =
+    data?.rawHtml ||
     data?.html ||
+    data?.richText ||
     data?.productRichText ||
-    null
-  );
+    (isHtmlContent(data?.content) ? data.content : null);
+
+  if (isHtmlContent(data?.rawContent)) return data.rawContent;
+  return htmlContent || data?.rawContent || data?.content || null;
 }
 
 function normalizeAppendixProduct(product) {
   const rawContent = getAppendixProductRawContent(product);
   const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
-  const data =
-    product?.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : product?.jsonContent && typeof product.jsonContent === "object"
-        ? product.jsonContent
-        : typeof product === "object" && product
-          ? product
-          : {};
+  const data = resolveAppendixProductData(product);
+  const normalizedRawContent = isHtmlContent(rawContent)
+    ? rawContent
+    : plainTextToRichHtml(rawContent);
 
   return {
-    rawContent,
+    rawContent: normalizedRawContent || rawContent,
     productName: data.productName ?? parsed.productName,
     ingredients: data.ingredients ?? parsed.ingredients,
     packageSpecification:
@@ -216,6 +278,23 @@ function normalizeAppendixProducts(products) {
   }
 
   return products.map((product) => normalizeAppendixProduct(product));
+}
+
+function normalizeContractDataForResponse(contractData = {}) {
+  if (!contractData || typeof contractData !== "object") {
+    return contractData;
+  }
+
+  const normalizedProducts = normalizeAppendixProducts(contractData.products);
+
+  if (!normalizedProducts) {
+    return contractData;
+  }
+
+  return {
+    ...contractData,
+    products: normalizedProducts,
+  };
 }
 
 function normalizeContractType(contractType) {
@@ -1870,6 +1949,11 @@ class ContractService {
     if (!contract) {
       throw new NotFoundException(ErrorCodes.NOT_FOUND);
     }
+
+    contract.setDataValue(
+      "contractData",
+      normalizeContractDataForResponse(contract.contractData),
+    );
 
     return ContractDetailDTO.fromContract(contract);
   }

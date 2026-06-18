@@ -269,8 +269,29 @@ function richTextToPlainText(rawContent) {
     .replace(/\r\n?/g, "\n")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n[ \t]+/g, "\n")
+    .replace(/-\s+(?=[^\n:]{1,80}:)/g, "\n- ")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function isHtmlContent(value) {
+  return typeof value === "string" && /<[^>]+>/.test(value);
+}
+
+function resolveAppendixProductData(product) {
+  if (!product || typeof product !== "object") {
+    return {};
+  }
+
+  return {
+    ...(product.jsonContent && typeof product.jsonContent === "object"
+      ? product.jsonContent
+      : {}),
+    ...product,
+    ...(product.detailData && typeof product.detailData === "object"
+      ? product.detailData
+      : {}),
+  };
 }
 
 function normalizeRichTextLabel(value) {
@@ -334,34 +355,22 @@ function parseAppendixProductRichText(rawContent) {
 function getAppendixProductRawContent(product) {
   if (typeof product === "string") return product;
 
-  const data =
-    product?.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : product?.jsonContent && typeof product.jsonContent === "object"
-        ? product.jsonContent
-      : product;
-
-  return (
-    data?.rawContent ||
-    data?.richText ||
-    data?.content ||
+  const data = resolveAppendixProductData(product);
+  const htmlContent =
+    data?.rawHtml ||
     data?.html ||
+    data?.richText ||
     data?.productRichText ||
-    null
-  );
+    (isHtmlContent(data?.content) ? data.content : null);
+
+  if (isHtmlContent(data?.rawContent)) return data.rawContent;
+  return htmlContent || data?.rawContent || data?.content || null;
 }
 
 function normalizeAppendixProduct(product) {
   const rawContent = getAppendixProductRawContent(product);
   const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
-  const data =
-    product?.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : product?.jsonContent && typeof product.jsonContent === "object"
-        ? product.jsonContent
-      : typeof product === "object" && product
-        ? product
-        : {};
+  const data = resolveAppendixProductData(product);
 
   return {
     rawContent,
