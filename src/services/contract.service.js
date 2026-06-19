@@ -1353,7 +1353,13 @@ class ContractService {
       }
 
       if (draftDocument) {
-        await draftDocument.destroy({ transaction });
+        await draftDocument.update(
+          {
+            filePath: null,
+            fileUrl: null,
+          },
+          { transaction },
+        );
       }
 
       await contract.update(
@@ -1365,7 +1371,7 @@ class ContractService {
       );
 
       contract.details = updatedDetails;
-      contract.documents = [];
+      contract.documents = draftDocument ? [draftDocument] : [];
 
       return {
         contract: ContractDetailDTO.fromContract(contract),
