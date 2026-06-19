@@ -462,6 +462,37 @@ router.put(
 
 /**
  * @swagger
+ * /api/v1/contracts/{contractId}/draft-download:
+ *   post:
+ *     summary: Táº¡o link táº£i báº£n há»£p Ä‘á»“ng nhÃ¡p
+ *     description: Chá»‰ Ã¡p dá»¥ng cho há»£p Ä‘á»“ng draft. Náº¿u chÆ°a cÃ³ document v1 draft thÃ¬ API render PDF, upload lÃªn S3, lÆ°u contract_document version 1 vÃ  tráº£ link /api/v1/s3/download/{key} Ä‘á»ƒ client táº£i file.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: contractId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Táº¡o link táº£i báº£n nhÃ¡p thÃ nh cÃ´ng
+ *       400:
+ *         description: Há»£p Ä‘á»“ng khÃ´ng á»Ÿ tráº¡ng thÃ¡i draft
+ *       404:
+ *         description: KhÃ´ng tÃ¬m tháº¥y há»£p Ä‘á»“ng
+ */
+router.post(
+  "/:contractId/draft-download",
+  protect,
+  contractIdSchema,
+  ContractController.downloadDraftContract,
+);
+
+/**
+ * @swagger
  * /api/v1/contracts/{contractId}/publish-unsigned:
  *   post:
  *     summary: Phát hành bản hợp đồng chưa ký lên S3

@@ -1,6 +1,6 @@
 const { body, param, query } = require("express-validator");
 
-// ─── DTOs ────────────────────────────────────────────────────────────────────
+// DTOs
 
 class MessageDTO {
   constructor(msg) {
@@ -57,7 +57,7 @@ class ConversationDTO {
   }
 }
 
-// ─── Schemas ─────────────────────────────────────────────────────────────────
+// Schemas
 
 const createConversationSchema = [
   body("type")

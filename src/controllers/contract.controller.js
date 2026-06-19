@@ -181,6 +181,26 @@ class ContractController {
     }
   }
 
+  static async downloadDraftContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const { contractId } = req.params;
+      const result = await ContractService.downloadDraftContract(contractId);
+
+      return ResponseHandler.success(
+        res,
+        result,
+        "Tạo liên kết tải bản hợp đồng nháp thành công",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async publishOwnerSignedContract(req, res, next) {
     try {
       const errors = validationResult(req);

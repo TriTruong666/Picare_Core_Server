@@ -136,9 +136,7 @@ function validatePrincipleContractPayload(_, { req }) {
   }
 
   if (!ownerCompanyInfo.companyCode) {
-    throw new Error(
-      "ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng",
-    );
+    throw new Error("ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng");
   }
 
   if (!partnerCompanyInfo || typeof partnerCompanyInfo !== "object") {
@@ -210,15 +208,15 @@ const createContractTemplateSchema = [
   body("products")
     .optional({ nullable: true })
     .isArray()
-    .withMessage("products phải là array"),
+    .withMessage("products phải là mảng"),
   body("products.*")
     .optional({ nullable: true })
     .custom((value) => typeof value === "string" || typeof value === "object")
-    .withMessage("products item phải là richtext string hoặc object"),
+    .withMessage("products item phải là chuỗi richtext hoặc object"),
   body("productRichTexts")
     .optional({ nullable: true })
     .isArray()
-    .withMessage("productRichTexts phải là array"),
+    .withMessage("productRichTexts phải là mảng"),
   body("productRichTexts.*")
     .optional({ nullable: true })
     .isString()
@@ -232,7 +230,7 @@ const createContractTemplateSchema = [
   body("details")
     .optional({ nullable: true })
     .isArray()
-    .withMessage("details phải là array"),
+    .withMessage("details phải là mảng"),
   body("details.*.productName")
     .optional({ nullable: true, checkFalsy: true })
     .isString()

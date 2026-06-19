@@ -400,6 +400,10 @@ function buildContractPreviewUrl(contractId) {
   return `${appConfig.client.baseUrl}/contracts/${contractId}/preview`;
 }
 
+function buildS3DownloadUrl(key) {
+  return `/api/v1/s3/download/${encodeURIComponent(key)}`;
+}
+
 function getSignedContractFolder(status) {
   if (status === CONTRACT_STATUS.OWNER_SIGNED) {
     return "owner_signed";
@@ -716,6 +720,33 @@ class ContractService {
     });
   }
 
+  static async getLatestContractDocument(contractId, options = {}) {
+    const document = await ContractDocument.findOne({
+      where: { contractId },
+      order: [["version", "DESC"]],
+      transaction: options.transaction,
+    });
+
+    if (!document && options.required === false) {
+      return null;
+    }
+
+    if (!document) {
+      throw new NotFoundException(ErrorCodes.NOT_FOUND);
+    }
+
+    return document;
+  }
+
+  static async getNextContractDocumentVersion(contractId, options = {}) {
+    const latestDocument = await this.getLatestContractDocument(contractId, {
+      ...options,
+      required: false,
+    });
+
+    return latestDocument ? latestDocument.version + 1 : 1;
+  }
+
   static async ensureContractDocumentFile(contract, document, options = {}) {
     if (document.fileUrl) {
       return document;
@@ -751,6 +782,168 @@ class ContractService {
     );
 
     return document;
+  }
+
+  static async createContractDocumentFromPdf({
+    contract,
+    details,
+    status,
+    folder,
+    version,
+    transaction,
+  }) {
+    const { pdfBuffer, pdfHashHex, fileName } =
+      await ContractPdfService.generateContractPdf(contract, details);
+    const uploadedPdf = await uploadPdfBufferToS3({
+      pdfBuffer,
+      fileName,
+      folder,
+      description: formatContractCreatedDescription(),
+    });
+    const document = await ContractDocument.create(
+      {
+        contractId: contract.contractId,
+        version,
+        status,
+        fileName,
+        filePath: null,
+        fileUrl: uploadedPdf.url,
+        fileHash: pdfHashHex,
+      },
+      { transaction },
+    );
+
+    await contract.update(
+      {
+        contractChecksum: pdfHashHex,
+      },
+      { transaction },
+    );
+
+    return {
+      document,
+      pdfHashHex,
+      fileName,
+      fileUrl: uploadedPdf.url,
+      fileKey: uploadedPdf.key,
+      downloadUrl: buildS3DownloadUrl(uploadedPdf.key),
+    };
+  }
+
+  static async ensureSigningSourceDocument(contract, options = {}) {
+    const details =
+      options.details ||
+      (await this.getContractDetails(contract.contractId, options));
+    const latestDocument = await this.getLatestContractDocument(
+      contract.contractId,
+      {
+        transaction: options.transaction,
+        required: false,
+      },
+    );
+
+    if (latestDocument) {
+      await this.ensureContractDocumentFile(contract, latestDocument, {
+        transaction: options.transaction,
+        details,
+      });
+
+      return {
+        document: latestDocument,
+        details,
+      };
+    }
+
+    const created = await this.createContractDocumentFromPdf({
+      contract,
+      details,
+      status: contract.status,
+      folder: getSignedContractFolder(contract.status),
+      version: 1,
+      transaction: options.transaction,
+    });
+
+    return {
+      document: created.document,
+      details,
+    };
+  }
+
+  static async downloadDraftContract(contractId) {
+    return Contract.sequelize.transaction(async (transaction) => {
+      const contract = await Contract.findOne({
+        where: { contractId },
+        transaction,
+      });
+
+      if (!contract) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      if (contract.status !== CONTRACT_STATUS.DRAFT) {
+        throw new BadRequestException(
+          "Chỉ có thể tải bản hợp đồng nháp khi hợp đồng đang ở trạng thái draft",
+        );
+      }
+
+      const details = await this.getContractDetails(contractId, {
+        transaction,
+      });
+      let draftDocument = await ContractDocument.findOne({
+        where: {
+          contractId,
+          status: CONTRACT_STATUS.DRAFT,
+        },
+        order: [["version", "ASC"]],
+        transaction,
+      });
+
+      if (!draftDocument) {
+        const created = await this.createContractDocumentFromPdf({
+          contract,
+          details,
+          status: CONTRACT_STATUS.DRAFT,
+          folder: "draft-contracts",
+          version: 1,
+          transaction,
+        });
+        draftDocument = created.document;
+
+        return {
+          contractId,
+          contractDocumentId: draftDocument.contractDocumentId,
+          documentVersion: draftDocument.version,
+          status: draftDocument.status,
+          fileName: draftDocument.fileName,
+          fileUrl: created.fileUrl,
+          fileKey: created.fileKey,
+          downloadUrl: created.downloadUrl,
+          pdfHashHex: created.pdfHashHex,
+        };
+      }
+
+      await this.ensureContractDocumentFile(contract, draftDocument, {
+        transaction,
+        details,
+      });
+
+      const fileKey = extractS3KeyFromUrl(draftDocument.fileUrl);
+      if (!fileKey) {
+        throw new NotFoundException(ErrorCodes.NOT_FOUND);
+      }
+
+      return {
+        contractId,
+        contractDocumentId: draftDocument.contractDocumentId,
+        documentVersion: draftDocument.version,
+        status: draftDocument.status,
+        fileName: draftDocument.fileName,
+        fileUrl: draftDocument.fileUrl,
+        fileKey,
+        downloadUrl: buildS3DownloadUrl(fileKey),
+        pdfHashHex: draftDocument.fileHash,
+      };
+    });
   }
 
   static async createContractTemplate({
@@ -799,40 +992,13 @@ class ContractService {
         { transaction, returning: true },
       );
 
-      const { pdfHashHex, fileName } =
-        await ContractPdfService.generateContractPdfBuffer(
-          contract,
-          createdDetails,
-        );
       const previewUrl = buildContractPreviewUrl(contract.contractId);
 
-      await contract.update(
-        {
-          contractChecksum: pdfHashHex,
-          contractUrl: null,
-          status: CONTRACT_STATUS.DRAFT,
-        },
-        { transaction },
-      );
-
-      await ContractDocument.create(
-        {
-          contractId: contract.contractId,
-          version: 1,
-          status: CONTRACT_STATUS.DRAFT,
-          fileName,
-          filePath: null,
-          fileUrl: null,
-          fileHash: pdfHashHex,
-        },
-        { transaction },
-      );
-
       contract.details = createdDetails;
+      contract.documents = [];
 
       return {
         contract: ContractDetailDTO.fromContract(contract),
-        pdfHashHex,
         previewUrl,
       };
     });
@@ -855,32 +1021,54 @@ class ContractService {
         );
       }
 
-      const latestDocument = await this.getLatestContractDocument(contractId, {
-        transaction,
-      });
       const details = await this.getContractDetails(contractId, {
         transaction,
       });
-
-      await this.ensureContractDocumentFile(contract, latestDocument, {
+      const latestDocument = await this.getLatestContractDocument(contractId, {
         transaction,
-        details,
+        required: false,
       });
+      let sourceBuffer;
+      let sourceFileName;
+      let sourceFileHash;
 
-      const sourceBuffer = await readPdfBufferFromSource(
-        latestDocument.fileUrl,
-      );
+      if (latestDocument) {
+        await this.ensureContractDocumentFile(contract, latestDocument, {
+          transaction,
+          details,
+        });
+        sourceBuffer = await readPdfBufferFromSource(latestDocument.fileUrl);
+        sourceFileName = latestDocument.fileName;
+        sourceFileHash = latestDocument.fileHash;
+      } else {
+        const generatedPdf = await ContractPdfService.generateContractPdf(
+          contract,
+          details,
+        );
+        sourceBuffer = generatedPdf.pdfBuffer;
+        sourceFileName = generatedPdf.fileName;
+        sourceFileHash = generatedPdf.pdfHashHex;
+      }
+
+      const nextVersion = await this.getNextContractDocumentVersion(contractId, {
+        transaction,
+      });
       const s3Result = await uploadPdfBufferToS3({
         pdfBuffer: sourceBuffer,
-        fileName: latestDocument.fileName,
+        fileName: sourceFileName,
         folder: "unsigned-contracts",
         description: formatContractCreatedDescription(),
       });
 
-      await latestDocument.update(
+      const unsignedDocument = await ContractDocument.create(
         {
+          contractId,
+          version: nextVersion,
           status: CONTRACT_STATUS.UNSIGNED,
+          fileName: sourceFileName,
+          filePath: null,
           fileUrl: s3Result.url,
+          fileHash: sourceFileHash,
         },
         { transaction },
       );
@@ -889,14 +1077,15 @@ class ContractService {
         {
           status: CONTRACT_STATUS.UNSIGNED,
           contractUrl: s3Result.url,
+          contractChecksum: sourceFileHash,
         },
         { transaction },
       );
 
       return {
         contractId,
-        contractDocumentId: latestDocument.contractDocumentId,
-        documentVersion: latestDocument.version,
+        contractDocumentId: unsignedDocument.contractDocumentId,
+        documentVersion: unsignedDocument.version,
         status: CONTRACT_STATUS.UNSIGNED,
         contractUrl: s3Result.url,
         previewUrl: buildContractPreviewUrl(contractId),
@@ -1142,73 +1331,46 @@ class ContractService {
         { transaction, returning: true },
       );
 
-      const latestDocument = await this.getLatestContractDocument(contractId, {
+      const draftDocument = await ContractDocument.findOne({
+        where: {
+          contractId,
+          status: CONTRACT_STATUS.DRAFT,
+        },
+        order: [["version", "ASC"]],
         transaction,
       });
 
-      const previousFileUrl = latestDocument.fileUrl;
-      const { pdfBuffer, pdfHashHex, fileName } =
-        await ContractPdfService.generateContractPdf(contract, updatedDetails);
-      const uploadedDraftPdf = await uploadPdfBufferToS3({
-        pdfBuffer,
-        fileName,
-        folder: "draft-contracts",
-        description: formatContractCreatedDescription(),
-      });
-
-      await contract.update(
-        {
-          contractChecksum: pdfHashHex,
-          status: CONTRACT_STATUS.DRAFT,
-        },
-        { transaction },
-      );
-
-      await latestDocument.update(
-        {
-          status: CONTRACT_STATUS.DRAFT,
-          fileName,
-          filePath: null,
-          fileUrl: uploadedDraftPdf.url,
-          fileHash: pdfHashHex,
-        },
-        { transaction },
-      );
-
-      if (previousFileUrl && previousFileUrl !== uploadedDraftPdf.url) {
+      if (draftDocument?.fileUrl) {
         try {
-          const previousKey = extractS3KeyFromUrl(previousFileUrl);
+          const previousKey = extractS3KeyFromUrl(draftDocument.fileUrl);
           if (previousKey) {
             await deleteS3ObjectAndRecordIfExists(previousKey);
           }
         } catch (error) {
-          // Ignore cleanup failure because it should not break contract updates.
+          // Ignore cleanup failure because stale draft files are not business-critical.
         }
       }
 
+      if (draftDocument) {
+        await draftDocument.destroy({ transaction });
+      }
+
+      await contract.update(
+        {
+          contractChecksum: null,
+          status: CONTRACT_STATUS.DRAFT,
+        },
+        { transaction },
+      );
+
       contract.details = updatedDetails;
-      contract.documents = [latestDocument];
+      contract.documents = [];
 
       return {
         contract: ContractDetailDTO.fromContract(contract),
-        pdfHashHex,
         previewUrl: buildContractPreviewUrl(contractId),
       };
     });
-  }
-
-  static async getLatestContractDocument(contractId, options = {}) {
-    const document = await ContractDocument.findOne({
-      where: { contractId },
-      order: [["version", "DESC"]],
-      transaction: options.transaction,
-    });
-
-    if (!document) {
-      throw new NotFoundException(ErrorCodes.NOT_FOUND);
-    }
-
-    return document;
   }
 
   static async createSigningSession({
@@ -1239,17 +1401,14 @@ class ContractService {
         }
       }
 
-      const latestDocument = await this.getLatestContractDocument(contractId, {
-        transaction,
-      });
       const details = await this.getContractDetails(contractId, {
         transaction,
       });
-
-      await this.ensureContractDocumentFile(contract, latestDocument, {
-        transaction,
-        details,
-      });
+      const { document: latestDocument } =
+        await this.ensureSigningSourceDocument(contract, {
+          transaction,
+          details,
+        });
 
       const sourceBuffer = await readPdfBufferFromSource(
         latestDocument.fileUrl,

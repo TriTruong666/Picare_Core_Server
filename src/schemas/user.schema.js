@@ -27,40 +27,40 @@ const phoneValidator = body("phone")
   .custom(
     (value) => value === null || value === "" || /^[0-9+\-\s().]{8,20}$/.test(value)
   )
-  .withMessage("So dien thoai khong hop le");
+  .withMessage("Số điện thoại không hợp lệ");
 
 const createUserSchema = [
-  body("name").trim().notEmpty().withMessage("Ten khong duoc de trong"),
-  body("email").isEmail().withMessage("Email khong hop le").normalizeEmail(),
+  body("name").trim().notEmpty().withMessage("Tên không được để trống"),
+  body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
   body("password")
     .isLength({ min: 6 })
-    .withMessage("Mat khau phai co it nhat 6 ky tu"),
+    .withMessage("Mật khẩu phải có ít nhất 6 ký tự"),
   phoneValidator,
   body("role")
     .optional()
     .isString()
     .trim()
     .notEmpty()
-    .withMessage("Role khong hop le"),
+    .withMessage("Role không hợp lệ"),
 ];
 
 const updateUserSchema = [
-  param("userId").isUUID(4).withMessage("ID nguoi dung khong hop le"),
-  body("name").optional().trim().notEmpty().withMessage("Ten khong duoc de trong"),
-  body("email").optional().isEmail().withMessage("Email khong hop le").normalizeEmail(),
+  param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
+  body("name").optional().trim().notEmpty().withMessage("Tên không được để trống"),
+  body("email").optional().isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
   phoneValidator,
   body("role")
     .optional()
     .isString()
     .trim()
     .notEmpty()
-    .withMessage("Role khong hop le"),
-  body("isOnline").optional().isBoolean().withMessage("isOnline phai la boolean"),
+    .withMessage("Role không hợp lệ"),
+  body("isOnline").optional().isBoolean().withMessage("isOnline phải là boolean"),
   body("note").optional().trim(),
 ];
 
 const userIdSchema = [
-  param("userId").isUUID(4).withMessage("ID nguoi dung khong hop le"),
+  param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
 ];
 
 module.exports = {

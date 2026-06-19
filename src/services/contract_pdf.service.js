@@ -703,6 +703,60 @@ async function createDigitalSignatureAppearanceImage({
   };
 }
 
+async function createHandwrittenSignatureAppearanceImage({
+  width,
+  height,
+  signerName,
+  signerType,
+  signatureImageBuffer,
+  signingTime,
+}) {
+  const signaturePngBuffer = await sharp(signatureImageBuffer)
+    .resize({
+      width: Math.round((width - 16) * 3),
+      height: Math.round((height - 31) * 3),
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .png()
+    .toBuffer();
+  const signatureMeta = await sharp(signaturePngBuffer).metadata();
+  const signatureDataUri = `data:image/png;base64,${signaturePngBuffer.toString("base64")}`;
+  const scale = 3;
+  const imageWidth = Math.round(width * scale);
+  const imageHeight = Math.round(height * scale);
+  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
+  const displayName = normalizeVietnameseText(
+    signerName || signerRole,
+  ).toLocaleUpperCase("vi-VN");
+  const timeLine = `Ký tay lúc: ${formatVietnameseDateTime(signingTime)}`;
+  const maxImageWidth = width - 16;
+  const maxImageHeight = height - 31;
+  const rawSignatureWidth = signatureMeta.width || maxImageWidth;
+  const rawSignatureHeight = signatureMeta.height || maxImageHeight;
+  const imageScale = Math.min(
+    maxImageWidth / rawSignatureWidth,
+    maxImageHeight / rawSignatureHeight,
+    1,
+  );
+  const signatureWidth = rawSignatureWidth * imageScale;
+  const signatureHeight = rawSignatureHeight * imageScale;
+  const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" stroke="#737373" stroke-width="0.6"/>
+  <image href="${signatureDataUri}" x="${(width - signatureWidth) / 2}" y="8" width="${signatureWidth}" height="${signatureHeight}" preserveAspectRatio="xMidYMid meet"/>
+  <text x="${width / 2}" y="${height - 13}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8" font-weight="700" fill="#0d0d0d">${escapeXml(displayName)}</text>
+  <text x="${width / 2}" y="${height - 4}" text-anchor="middle" font-family="Times New Roman, serif" font-size="5.8" fill="#404040">${escapeXml(timeLine)}</text>
+</svg>`;
+  const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
+
+  return {
+    buffer,
+    width: imageWidth,
+    height: imageHeight,
+  };
+}
+
 function drawCenteredText(pdfPage, text, x, y, width, font, size, color) {
   const fittedText = fitTextToWidth(text, font, size, width);
   const textWidth = font.widthOfTextAtSize(fittedText, size);
@@ -2668,6 +2722,165 @@ ${xrefOffset}
     };
   }
 
+  static async appendIncrementalHandwrittenSignature({
+    sourceBytes,
+    signerName,
+    signerType,
+    widgetRect,
+    signatureImageBuffer,
+    signingTime,
+  }) {
+    const sourceBuffer = Buffer.isBuffer(sourceBytes)
+      ? sourceBytes
+      : Buffer.from(sourceBytes || []);
+    const sourceText = sourceBuffer.toString("latin1");
+    const rootMatch = /\/Root\s+(\d+)\s+(\d+)\s+R/.exec(sourceText);
+    const startXrefMatch = /startxref\s+(\d+)\s+%%EOF\s*$/s.exec(sourceText);
+    const objectMatches = [...sourceText.matchAll(/(\d+)\s+0\s+obj/g)];
+    const widgetMatches = [
+      ...sourceText.matchAll(
+        /(\d+)\s+0\s+obj\s*<<[\s\S]*?\/Subtype\s*\/Widget[\s\S]*?\/FT\s*\/Sig[\s\S]*?\/P\s+(\d+)\s+0\s+R[\s\S]*?endobj/g,
+      ),
+    ];
+
+    if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
+      throw new Error(
+        "PDF structure is not supported for incremental handwritten signing.",
+      );
+    }
+
+    if (!widgetMatches.length) {
+      throw new Error("PDF signature page is missing for incremental handwritten signing.");
+    }
+
+    const maxObjectNumber = Math.max(
+      ...objectMatches.map((match) => Number(match[1])),
+    );
+    const rootObjectNumber = Number(rootMatch[1]);
+    const prevStartXref = Number(startXrefMatch[1]);
+    const pageObjectNumber = Number(widgetMatches[widgetMatches.length - 1][2]);
+    const annotationObjectNumber = maxObjectNumber + 1;
+    const appearanceObjectNumber = maxObjectNumber + 2;
+    const imageObjectNumber = maxObjectNumber + 3;
+    const pageBody = this.getPdfObjectBody(sourceBuffer, pageObjectNumber);
+
+    if (!pageBody) {
+      throw new Error("PDF page object is missing for incremental handwritten signing.");
+    }
+
+    const resolvedWidgetRect = widgetRect || getSignatureWidgetRect(signerType);
+    const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
+    const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
+    const appearanceImage = await createHandwrittenSignatureAppearanceImage({
+      width: widgetWidth,
+      height: widgetHeight,
+      signerName,
+      signerType,
+      signatureImageBuffer,
+      signingTime,
+    });
+    const updatedPageBody = this.replaceOrAppendArrayItem(
+      pageBody,
+      "Annots",
+      `${annotationObjectNumber} 0 R`,
+    );
+    const annotationObject = `<<
+/Type /Annot
+/Subtype /Stamp
+/Rect [${resolvedWidgetRect.join(" ")}]
+/Name /Approved
+/F 4
+/P ${pageObjectNumber} 0 R
+/AP << /N ${appearanceObjectNumber} 0 R >>
+/T (${escapePdfString(signerName || signerType || "handwritten")})
+/M (${formatPdfDate(signingTime)})
+>>`;
+    const appearanceStream = `q
+${widgetWidth} 0 0 ${widgetHeight} 0 0 cm
+/ImSig Do
+Q`;
+    const appearanceObject = `<<
+/Type /XObject
+/Subtype /Form
+/BBox [0 0 ${widgetWidth} ${widgetHeight}]
+/Resources <<
+/XObject <<
+/ImSig ${imageObjectNumber} 0 R
+>>
+>>
+/Length ${Buffer.byteLength(appearanceStream, "latin1")}
+>>
+stream
+${appearanceStream}
+endstream`;
+    const imageObject = Buffer.concat([
+      Buffer.from(
+        `<<
+/Type /XObject
+/Subtype /Image
+/Width ${appearanceImage.width}
+/Height ${appearanceImage.height}
+/ColorSpace /DeviceRGB
+/BitsPerComponent 8
+/Filter /DCTDecode
+/Length ${appearanceImage.buffer.length}
+>>
+stream
+`,
+        "latin1",
+      ),
+      appearanceImage.buffer,
+      Buffer.from("\nendstream", "latin1"),
+    ]);
+    const objects = [
+      [pageObjectNumber, updatedPageBody],
+      [annotationObjectNumber, annotationObject],
+      [appearanceObjectNumber, appearanceObject],
+      [imageObjectNumber, imageObject],
+    ].sort((left, right) => left[0] - right[0]);
+    const chunks = [Buffer.from("\n", "latin1")];
+    const offsets = [];
+
+    for (const [objectNumber, body] of objects) {
+      const currentLength = chunks.reduce(
+        (sum, chunk) => sum + chunk.length,
+        0,
+      );
+      offsets.push([objectNumber, sourceBuffer.length + currentLength]);
+      chunks.push(Buffer.from(`${objectNumber} 0 obj\n`, "latin1"));
+      chunks.push(Buffer.isBuffer(body) ? body : Buffer.from(body, "latin1"));
+      chunks.push(Buffer.from("\nendobj\n", "latin1"));
+    }
+
+    const incrementalBody = Buffer.concat(chunks);
+    const xrefOffset = sourceBuffer.length + incrementalBody.length;
+    let trailer = "xref\n";
+
+    for (const [objectNumber, offset] of offsets) {
+      trailer += `${objectNumber} 1\n${String(offset).padStart(
+        10,
+        "0",
+      )} 00000 n \n`;
+    }
+
+    trailer += `trailer
+<<
+/Size ${imageObjectNumber + 1}
+/Root ${rootObjectNumber} 0 R
+/Prev ${prevStartXref}
+>>
+startxref
+${xrefOffset}
+%%EOF
+`;
+
+    return Buffer.concat([
+      sourceBuffer,
+      incrementalBody,
+      Buffer.from(trailer, "latin1"),
+    ]);
+  }
+
   static async embedHandwrittenSignature({
     sourceBytes,
     contract,
@@ -2680,9 +2893,44 @@ ${xrefOffset}
     const inputBytes = Buffer.isBuffer(sourceBytes)
       ? sourceBytes
       : Buffer.from(sourceBytes || []);
+    const isIncrementalAppend = inputBytes.includes(
+      Buffer.from("/ByteRange ["),
+    );
+    const signingTime = new Date();
+
+    if (isIncrementalAppend) {
+      const { signatureWidgets } = await this.generateContractPdfBuffer(
+        contract,
+        details,
+      );
+      const signatureWidget = signatureWidgets?.[signerType];
+      const signedBuffer = await this.appendIncrementalHandwrittenSignature({
+        sourceBytes: inputBytes,
+        signerName,
+        signerType,
+        widgetRect: signatureWidget?.rect,
+        signatureImageBuffer,
+        signingTime,
+      });
+      const signedPdfHash = crypto
+        .createHash("sha256")
+        .update(signedBuffer)
+        .digest("hex");
+
+      return {
+        signedPdfHash,
+        signedPdfBuffer: signedBuffer,
+        fileName: buildContractArtifactFileName(
+          contract,
+          "ky_tay",
+          signedPdfHash.slice(0, 12),
+        ),
+        widgetRect: signatureWidget?.rect || getSignatureWidgetRect(signerType),
+      };
+    }
+
     const pdfDoc = await PDFLibDocument.load(inputBytes);
     const pages = pdfDoc.getPages();
-    const signingTime = new Date();
     const { signatureWidgets } = await this.generateContractPdfBuffer(
       contract,
       details,

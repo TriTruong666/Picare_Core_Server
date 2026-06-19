@@ -1,6 +1,6 @@
 const { query, param } = require("express-validator");
 
-// ─── DTOs ────────────────────────────────────────────────────────────────────
+// DTOs
 
 /**
  * DTO cho thông tin object đã upload lên S3.
@@ -46,7 +46,7 @@ class S3ObjectMetaDTO {
   }
 }
 
-// ─── VALIDATION SCHEMAS ──────────────────────────────────────────────────────
+// Validation Schemas
 
 /**
  * Validate query params cho endpoint lấy presigned URL upload/download.
