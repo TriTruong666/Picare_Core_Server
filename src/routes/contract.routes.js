@@ -464,8 +464,8 @@ router.put(
  * @swagger
  * /api/v1/contracts/{contractId}/draft-download:
  *   post:
- *     summary: Táº¡o link táº£i báº£n há»£p Ä‘á»“ng nhÃ¡p
- *     description: Chá»‰ Ã¡p dá»¥ng cho há»£p Ä‘á»“ng draft. Náº¿u chÆ°a cÃ³ document v1 draft thÃ¬ API render PDF, upload lÃªn S3, lÆ°u contract_document version 1 vÃ  tráº£ link /api/v1/s3/download/{key} Ä‘á»ƒ client táº£i file.
+ *     summary: Tạo link tải bản hợp đồng nháp
+ *     description: Chỉ áp dụng cho hợp đồng draft. Nếu chưa có document v1 draft thì API render PDF, upload lên S3, lưu contract_document version 1 và trả link /api/v1/s3/download/{key} để client tải file.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -478,11 +478,11 @@ router.put(
  *           format: uuid
  *     responses:
  *       200:
- *         description: Táº¡o link táº£i báº£n nhÃ¡p thÃ nh cÃ´ng
+ *         description: Tạo link tải bản nháp thành công
  *       400:
- *         description: Há»£p Ä‘á»“ng khÃ´ng á»Ÿ tráº¡ng thÃ¡i draft
+ *         description: Hợp đồng không ở trạng thái draft
  *       404:
- *         description: KhÃ´ng tÃ¬m tháº¥y há»£p Ä‘á»“ng
+ *         description: Không tìm thấy hợp đồng
  */
 router.post(
   "/:contractId/draft-download",

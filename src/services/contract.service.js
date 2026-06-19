@@ -401,7 +401,7 @@ function buildContractPreviewUrl(contractId) {
 }
 
 function buildS3DownloadUrl(key) {
-  return `/api/v1/s3/download/${encodeURIComponent(key)}`;
+  return `${appConfig.client.baseUrl.replace(/\/+$/, "")}/api/v1/s3/download/${encodeURIComponent(key)}`;
 }
 
 function getSignedContractFolder(status) {
