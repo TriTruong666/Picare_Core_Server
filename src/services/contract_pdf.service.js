@@ -426,8 +426,8 @@ function buildContractArtifactFileName(contract, variant, token) {
   const parts = [
     buildContractFilePrefix(contract),
     contract?.contractId,
-    variant,
     token,
+    variant,
   ].filter(Boolean);
 
   return `${parts.join("-")}.pdf`;
@@ -706,15 +706,13 @@ async function createDigitalSignatureAppearanceImage({
 async function createHandwrittenSignatureAppearanceImage({
   width,
   height,
-  signerName,
-  signerType,
   signatureImageBuffer,
   signingTime,
 }) {
   const signaturePngBuffer = await sharp(signatureImageBuffer)
     .resize({
       width: Math.round((width - 16) * 3),
-      height: Math.round((height - 31) * 3),
+      height: Math.round((height - 20) * 3),
       fit: "inside",
       withoutEnlargement: true,
     })
@@ -725,13 +723,9 @@ async function createHandwrittenSignatureAppearanceImage({
   const scale = 3;
   const imageWidth = Math.round(width * scale);
   const imageHeight = Math.round(height * scale);
-  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
-  const displayName = normalizeVietnameseText(
-    signerName || signerRole,
-  ).toLocaleUpperCase("vi-VN");
   const timeLine = `Ký tay lúc: ${formatVietnameseDateTime(signingTime)}`;
   const maxImageWidth = width - 16;
-  const maxImageHeight = height - 31;
+  const maxImageHeight = height - 20;
   const rawSignatureWidth = signatureMeta.width || maxImageWidth;
   const rawSignatureHeight = signatureMeta.height || maxImageHeight;
   const imageScale = Math.min(
@@ -745,8 +739,7 @@ async function createHandwrittenSignatureAppearanceImage({
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff" stroke="#737373" stroke-width="0.6"/>
   <image href="${signatureDataUri}" x="${(width - signatureWidth) / 2}" y="8" width="${signatureWidth}" height="${signatureHeight}" preserveAspectRatio="xMidYMid meet"/>
-  <text x="${width / 2}" y="${height - 13}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8" font-weight="700" fill="#0d0d0d">${escapeXml(displayName)}</text>
-  <text x="${width / 2}" y="${height - 4}" text-anchor="middle" font-family="Times New Roman, serif" font-size="5.8" fill="#404040">${escapeXml(timeLine)}</text>
+  <text x="${width / 2}" y="${height - 6}" text-anchor="middle" font-family="Times New Roman, serif" font-size="5.8" fill="#404040">${escapeXml(timeLine)}</text>
 </svg>`;
   const buffer = await sharp(Buffer.from(svg)).jpeg({ quality: 95 }).toBuffer();
 
@@ -936,15 +929,14 @@ async function embedImageByMimeType(pdfDoc, imageBytes, mimeType = "") {
 function drawHandwrittenSignatureAppearance(
   pdfPage,
   widgetRect,
-  { image, signerName, signerType, font, boldFont, signingTime = new Date() },
+  { image, font, signingTime = new Date() },
 ) {
   const [x1, y1, x2, y2] = widgetRect;
   const width = x2 - x1;
   const height = y2 - y1;
   const paddingX = 8;
-  const signerRole = signerType === "partner" ? "Bên B" : "Bên A";
   const maxImageWidth = width - paddingX * 2;
-  const maxImageHeight = height - 31;
+  const maxImageHeight = height - 20;
   const scale = Math.min(
     maxImageWidth / image.width,
     maxImageHeight / image.height,
@@ -965,28 +957,16 @@ function drawHandwrittenSignatureAppearance(
 
   pdfPage.drawImage(image, {
     x: x1 + (width - imageWidth) / 2,
-    y: y1 + 24,
+    y: y1 + 16,
     width: imageWidth,
     height: imageHeight,
   });
 
   drawCenteredText(
     pdfPage,
-    normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
-      "vi-VN",
-    ),
-    x1 + paddingX,
-    y1 + 12,
-    width - paddingX * 2,
-    boldFont,
-    8,
-    rgb(0.05, 0.05, 0.05),
-  );
-  drawCenteredText(
-    pdfPage,
     `Ký tay lúc: ${formatVietnameseDateTime(signingTime)}`,
     x1 + paddingX,
-    y1 + 3,
+    y1 + 5,
     width - paddingX * 2,
     font,
     5.8,
@@ -2277,7 +2257,7 @@ class ContractPdfService {
       .digest("hex");
     const fileName = buildContractArtifactFileName(
       contract,
-      "signed",
+      "ky_so",
       signedPdfHash.slice(0, 12),
     );
     return {
@@ -2593,7 +2573,7 @@ ${xrefOffset}
       const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
       const fileName = buildContractArtifactFileName(
         contract,
-        "byte_range",
+        null,
         hashToSign.slice(0, 12),
       );
       return {
@@ -2662,7 +2642,7 @@ ${xrefOffset}
     const hashToSign = this.hashByteRange(preparedBuffer, byteRange);
     const fileName = buildContractArtifactFileName(
       contract,
-      "byte_range",
+      null,
       hashToSign.slice(0, 12),
     );
     return {
@@ -2774,8 +2754,6 @@ ${xrefOffset}
     const appearanceImage = await createHandwrittenSignatureAppearanceImage({
       width: widgetWidth,
       height: widgetHeight,
-      signerName,
-      signerType,
       signatureImageBuffer,
       signingTime,
     });
@@ -2963,10 +2941,7 @@ ${xrefOffset}
 
     drawHandwrittenSignatureAppearance(targetPage, widgetRect, {
       image: signatureImage,
-      signerName,
-      signerType,
       font: appearanceFont,
-      boldFont: appearanceBoldFont,
       signingTime,
     });
 

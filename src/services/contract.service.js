@@ -635,7 +635,8 @@ async function uploadPdfBufferToS3({
   description,
   visibility = "private",
 }) {
-  const s3Key = S3Service.buildKey(folder, fileName);
+  const safeFileName = String(fileName || "contract.pdf").replace(/[\\/]/g, "-");
+  const s3Key = `${folder}/${safeFileName}`;
   const s3Result = await S3Service.upload({
     key: s3Key,
     body: pdfBuffer,
