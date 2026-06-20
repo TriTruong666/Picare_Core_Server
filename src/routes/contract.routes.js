@@ -26,11 +26,6 @@ const credentialUpload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
 });
 
-const contractFileUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 20 * 1024 * 1024 },
-});
-
 /**
  * @swagger
  * tags:
@@ -179,11 +174,12 @@ router.post(
  *     requestBody:
  *       required: true
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
  *             required:
  *               - file
+ *               - fileName
  *               - contractNumber
  *               - contractType
  *               - ownerCompanyInfo
@@ -191,8 +187,12 @@ router.post(
  *             properties:
  *               file:
  *                 type: string
- *                 format: binary
- *                 description: File PDF hợp đồng, tối đa 20MB
+ *                 format: byte
+ *                 description: PDF dạng base64 hoặc data URI, tối đa 20MB sau khi decode
+ *                 example: data:application/pdf;base64,JVBERi0xLjQK...
+ *               fileName:
+ *                 type: string
+ *                 example: hop_dong_001.pdf
  *               contractNumber:
  *                 type: string
  *                 example: 001/06/2026/HDNT/PIC
@@ -200,13 +200,14 @@ router.post(
  *                 type: string
  *                 example: principle
  *               ownerCompanyInfo:
- *                 type: string
- *                 description: JSON string chứa thông tin bên công ty
- *                 example: '{"companyCode":"PIC","companyName":"Công ty Picare"}'
+ *                 type: object
+ *                 example:
+ *                   companyCode: PIC
+ *                   companyName: Công ty Picare
  *               partnerCompanyInfo:
- *                 type: string
- *                 description: JSON string chứa thông tin bên đối tác
- *                 example: '{"companyName":"Công ty đối tác"}'
+ *                 type: object
+ *                 example:
+ *                   companyName: Công ty đối tác
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -219,7 +220,6 @@ router.post(
 router.post(
   "/upload",
   protect,
-  contractFileUpload.single("file"),
   uploadContractSchema,
   ContractController.uploadContract,
 );
@@ -830,7 +830,7 @@ router.post(
  * /api/v1/contracts/{contractId}/organization-credential:
  *   post:
  *     summary: Upload hồ sơ tổ chức của đối tác
- *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc, power_of_attorney_image là không bắt buộc. Mỗi file có thể là ảnh hoặc PDF.
+ *     description: Chỉ dùng khi signerType = organization. business_license là bắt buộc; power_of_attorney_image, gdp và ccddk là không bắt buộc. Mỗi file có thể là ảnh hoặc PDF.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -858,6 +858,16 @@ router.post(
  *                 type: string
  *                 format: binary
  *                 description: Ảnh hoặc PDF giấy uỷ quyền
+ *               gdp:
+ *                 type: string
+ *                 format: binary
+ *                 nullable: true
+ *                 description: Ảnh hoặc PDF hồ sơ GDP
+ *               ccddk:
+ *                 type: string
+ *                 format: binary
+ *                 nullable: true
+ *                 description: Ảnh hoặc PDF hồ sơ CCDDK
  *     responses:
  *       200:
  *         description: Upload hồ sơ tổ chức thành công
@@ -868,6 +878,8 @@ router.post(
   credentialUpload.fields([
     { name: "business_license", maxCount: 1 },
     { name: "power_of_attorney_image", maxCount: 1 },
+    { name: "gdp", maxCount: 1 },
+    { name: "ccddk", maxCount: 1 },
   ]),
   uploadOrganizationCredentialSchema,
   ContractController.uploadOrganizationCredential,

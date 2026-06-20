@@ -122,22 +122,6 @@ function getBodyValue(req, field) {
   return req.body?.[field] ?? req.body?.contractData?.[field];
 }
 
-function parseMultipartJson(value) {
-  if (value && typeof value === "object") {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch (_) {
-    return value;
-  }
-}
-
 function validatePrincipleContractPayload(_, { req }) {
   const contractType = normalizeContractType(req.body?.contractType);
 
@@ -275,13 +259,15 @@ const createContractTemplateSchema = [
 ];
 
 const uploadContractSchema = [
-  body().custom((_, { req }) => {
-    if (!req.file) {
-      throw new Error("File hợp đồng là bắt buộc");
-    }
-
-    return true;
-  }),
+  body("file")
+    .isString()
+    .notEmpty()
+    .withMessage("file base64 là bắt buộc"),
+  body("fileName")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("fileName là bắt buộc"),
   body("contractNumber")
     .isString()
     .trim()
@@ -293,13 +279,11 @@ const uploadContractSchema = [
     .notEmpty()
     .withMessage("contractType là bắt buộc"),
   body("ownerCompanyInfo")
-    .customSanitizer(parseMultipartJson)
     .isObject()
-    .withMessage("ownerCompanyInfo phải là JSON object"),
+    .withMessage("ownerCompanyInfo phải là object"),
   body("partnerCompanyInfo")
-    .customSanitizer(parseMultipartJson)
     .isObject()
-    .withMessage("partnerCompanyInfo phải là JSON object"),
+    .withMessage("partnerCompanyInfo phải là object"),
   body("contractDueDate")
     .optional({ nullable: true, checkFalsy: true })
     .isISO8601()

@@ -80,7 +80,12 @@ class ContractController {
         ownerCompanyInfo: req.body.ownerCompanyInfo,
         partnerCompanyInfo: req.body.partnerCompanyInfo,
         contractDueDate: req.body.contractDueDate,
-        file: req.file,
+        file: base64ToMulterFile({
+          value: req.body.file,
+          fieldName: "file",
+          filename: req.body.fileName,
+          mimeType: "application/pdf",
+        }),
         uploadedBy: req.user?.userId || null,
       });
 
@@ -379,6 +384,8 @@ class ContractController {
         contractId,
         businessLicense: req.files?.business_license?.[0],
         powerOfAttorney: req.files?.power_of_attorney_image?.[0],
+        gdp: req.files?.gdp?.[0],
+        ccddk: req.files?.ccddk?.[0],
         uploadedBy: req.user?.userId || null,
       });
 

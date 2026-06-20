@@ -196,7 +196,8 @@ const Contract = sequelize.define(
       type: DataTypes.JSONB,
       allowNull: true,
       field: "organization_credential",
-      comment: "business_license, power_of_attorney_image(optional)",
+      comment:
+        "business_license, power_of_attorney_image(optional), gdp(optional), ccddk(optional)",
     },
   },
   {

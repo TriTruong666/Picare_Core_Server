@@ -26,6 +26,7 @@ const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
 const HANDWRITTEN_SIGNATURE_FOLDER = "handwritten_signature";
 const UPLOADED_CONTRACT_FOLDER = "uploaded-contracts";
+const MAX_UPLOADED_CONTRACT_FILE_SIZE = 20 * 1024 * 1024;
 
 const CONTRACT_STATUS = {
   DRAFT: "draft",
@@ -544,10 +545,14 @@ function collectCredentialS3Keys(credential = {}) {
     credential.second_identification_image_key,
     credential.business_license_key,
     credential.power_of_attorney_image_key,
+    credential.gdp_key,
+    credential.ccddk_key,
     extractS3KeyFromUrl(credential.first_identification_image),
     extractS3KeyFromUrl(credential.second_identification_image),
     extractS3KeyFromUrl(credential.business_license),
     extractS3KeyFromUrl(credential.power_of_attorney_image),
+    extractS3KeyFromUrl(credential.gdp),
+    extractS3KeyFromUrl(credential.ccddk),
   ].filter(Boolean);
 }
 
@@ -1019,6 +1024,7 @@ class ContractService {
   }) {
     if (
       !file?.buffer?.length ||
+      file.buffer.length > MAX_UPLOADED_CONTRACT_FILE_SIZE ||
       file.mimetype !== "application/pdf" ||
       file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-"
     ) {
@@ -1857,6 +1863,8 @@ class ContractService {
     contractId,
     businessLicense,
     powerOfAttorney = null,
+    gdp = null,
+    ccddk = null,
     uploadedBy = null,
   }) {
     if (!businessLicense) {
@@ -1893,6 +1901,18 @@ class ContractService {
       );
     }
 
+    if (gdp) {
+      assertImageOrPdfFile(gdp, "GDP phải là file ảnh hoặc PDF");
+    }
+
+    if (ccddk) {
+      assertImageOrPdfFile(ccddk, "CCDDK phải là file ảnh hoặc PDF");
+    }
+
+    const oldCredentialS3Keys = new Set(
+      collectCredentialS3Keys(contract.organizationCredential),
+    );
+
     const uploadFile = (file, description) =>
       S3Service.upload({
         key: S3Service.buildKey(
@@ -1909,11 +1929,18 @@ class ContractService {
         visibility: "private",
       });
 
-    const [businessLicenseUpload, powerOfAttorneyUpload] = await Promise.all([
+    const [
+      businessLicenseUpload,
+      powerOfAttorneyUpload,
+      gdpUpload,
+      ccddkUpload,
+    ] = await Promise.all([
       uploadFile(businessLicense, "Organization business license"),
       powerOfAttorney
         ? uploadFile(powerOfAttorney, "Organization power of attorney")
         : Promise.resolve(null),
+      gdp ? uploadFile(gdp, "Organization GDP") : Promise.resolve(null),
+      ccddk ? uploadFile(ccddk, "Organization CCDDK") : Promise.resolve(null),
     ]);
 
     const organizationCredential = {
@@ -1921,14 +1948,28 @@ class ContractService {
       business_license_key: businessLicenseUpload.key,
       power_of_attorney_image: powerOfAttorneyUpload?.url || null,
       power_of_attorney_image_key: powerOfAttorneyUpload?.key || null,
+      gdp: gdpUpload?.url || null,
+      gdp_key: gdpUpload?.key || null,
+      ccddk: ccddkUpload?.url || null,
+      ccddk_key: ccddkUpload?.key || null,
     };
 
     await contract.update({ organizationCredential });
+
+    let oldS3ObjectsDeleted = 0;
+    for (const key of oldCredentialS3Keys) {
+      if (await deleteS3ObjectAndRecordIfExists(key)) {
+        oldS3ObjectsDeleted += 1;
+      }
+    }
 
     return {
       contractId,
       signerType: contract.signerType,
       organizationCredential,
+      cleanup: {
+        oldS3ObjectsDeleted,
+      },
     };
   }
 
