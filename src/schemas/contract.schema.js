@@ -42,6 +42,7 @@ class ContractListDTO {
     this.contractData = contract.contractData;
     this.contractChecksum = contract.contractChecksum;
     this.contractType = contract.contractType;
+    this.contractMode = contract.contractMode;
     this.signerType = contract.signerType;
     this.status = contract.status;
     this.contractUrl = contract.contractUrl;
@@ -121,6 +122,22 @@ function getBodyValue(req, field) {
   return req.body?.[field] ?? req.body?.contractData?.[field];
 }
 
+function parseMultipartJson(value) {
+  if (value && typeof value === "object") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (_) {
+    return value;
+  }
+}
+
 function validatePrincipleContractPayload(_, { req }) {
   const contractType = normalizeContractType(req.body?.contractType);
 
@@ -166,6 +183,10 @@ const getContractsPaginateSchema = [
     .trim()
     .notEmpty()
     .withMessage("contractType phải là chuỗi không rỗng"),
+  query("contractMode")
+    .optional()
+    .isIn(["digital", "upload"])
+    .withMessage("contractMode chỉ nhận digital hoặc upload"),
 ];
 
 const contractIdSchema = [
@@ -251,6 +272,38 @@ const createContractTemplateSchema = [
     .optional({ nullable: true })
     .isObject()
     .withMessage("detailData phải là object"),
+];
+
+const uploadContractSchema = [
+  body().custom((_, { req }) => {
+    if (!req.file) {
+      throw new Error("File hợp đồng là bắt buộc");
+    }
+
+    return true;
+  }),
+  body("contractNumber")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("contractNumber là bắt buộc"),
+  body("contractType")
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage("contractType là bắt buộc"),
+  body("ownerCompanyInfo")
+    .customSanitizer(parseMultipartJson)
+    .isObject()
+    .withMessage("ownerCompanyInfo phải là JSON object"),
+  body("partnerCompanyInfo")
+    .customSanitizer(parseMultipartJson)
+    .isObject()
+    .withMessage("partnerCompanyInfo phải là JSON object"),
+  body("contractDueDate")
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage("contractDueDate phải là ngày ISO8601 hợp lệ"),
 ];
 
 const updateDraftContractSchema = [
@@ -342,6 +395,7 @@ module.exports = {
   ContractListDTO,
   ContractDetailDTO,
   createContractTemplateSchema,
+  uploadContractSchema,
   updateDraftContractSchema,
   createSigningSessionSchema,
   completeSigningSessionSchema,

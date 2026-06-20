@@ -34,13 +34,21 @@ const appConfig = {
         : "http://localhost:5173",
   },
 
+  server: {
+    baseUrl:
+      process.env.SERVER_BASE_URL ||
+      (process.env.NODE_ENV === "production"
+        ? "https://core.picare.vn"
+        : "http://localhost:1905"),
+  },
+
   db: {
     host: process.env.DB_HOST || "localhost",
     port: parseInt(process.env.DB_PORT, 10) || 5432,
     name: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    reset: false,
+    reset: true,
     force_reset: false,
     protectedTables: [
       "users",
@@ -51,10 +59,10 @@ const appConfig = {
       "s3_folders",
       "s3_assets",
       "app_configs",
-      "contract",
-      "contract_detail",
-      "contract_document",
-      "contract_signature",
+      // "contract",
+      // "contract_detail",
+      // "contract_document",
+      // "contract_signature",
       "product_qr",
     ],
   },

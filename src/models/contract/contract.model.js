@@ -153,6 +153,17 @@ const Contract = sequelize.define(
       defaultValue: "principle",
       field: "contract_type",
     },
+    contractMode: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "digital",
+      validate: {
+        isIn: [["digital", "upload"]],
+      },
+      field: "contract_mode",
+      comment:
+        "digital: xử lý và ký trên hệ thống; upload: lưu file hợp đồng đã có",
+    },
     signerType: {
       type: DataTypes.STRING,
       validate: {

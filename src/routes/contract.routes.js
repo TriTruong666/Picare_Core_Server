@@ -8,6 +8,7 @@ const {
 } = require("../middlewares/auth.middleware");
 const {
   createContractTemplateSchema,
+  uploadContractSchema,
   updateDraftContractSchema,
   createSigningSessionSchema,
   completeSigningSessionSchema,
@@ -23,6 +24,11 @@ const {
 const credentialUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
+});
+
+const contractFileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
 });
 
 /**
@@ -163,6 +169,63 @@ router.post(
 
 /**
  * @swagger
+ * /api/v1/contracts/upload:
+ *   post:
+ *     summary: Tải hợp đồng có sẵn lên hệ thống
+ *     description: Dùng cho hợp đồng chỉ cần lưu trữ, không thực hiện quy trình ký trên hệ thống. Hợp đồng được tạo với contractMode=upload, status=completed và document version 1.
+ *     tags: [Contracts]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *               - contractNumber
+ *               - contractType
+ *               - ownerCompanyInfo
+ *               - partnerCompanyInfo
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File PDF hợp đồng, tối đa 20MB
+ *               contractNumber:
+ *                 type: string
+ *                 example: 001/06/2026/HDNT/PIC
+ *               contractType:
+ *                 type: string
+ *                 example: principle
+ *               ownerCompanyInfo:
+ *                 type: string
+ *                 description: JSON string chứa thông tin bên công ty
+ *                 example: '{"companyCode":"PIC","companyName":"Công ty Picare"}'
+ *               partnerCompanyInfo:
+ *                 type: string
+ *                 description: JSON string chứa thông tin bên đối tác
+ *                 example: '{"companyName":"Công ty đối tác"}'
+ *               contractDueDate:
+ *                 type: string
+ *                 format: date
+ *     responses:
+ *       201:
+ *         description: Tải hợp đồng lên thành công
+ *       400:
+ *         description: Dữ liệu hoặc file PDF không hợp lệ
+ */
+router.post(
+  "/upload",
+  protect,
+  contractFileUpload.single("file"),
+  uploadContractSchema,
+  ContractController.uploadContract,
+);
+
+/**
+ * @swagger
  * /api/v1/contracts:
  *   get:
  *     summary: Lấy danh sách hợp đồng có phân trang
@@ -187,6 +250,12 @@ router.post(
  *         schema:
  *           type: string
  *         description: Tìm theo số hợp đồng, thông tin công ty hoặc contractData
+ *       - in: query
+ *         name: contractMode
+ *         schema:
+ *           type: string
+ *           enum: [digital, upload]
+ *         description: Lọc theo quy trình xử lý hợp đồng
  *       - in: query
  *         name: status
  *         schema:

@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+const crypto = require("crypto");
 const fs = require("fs/promises");
 const {
   Contract,
@@ -24,6 +25,7 @@ const JWTService = require("./jwt.service");
 const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
 const HANDWRITTEN_SIGNATURE_FOLDER = "handwritten_signature";
+const UPLOADED_CONTRACT_FOLDER = "uploaded-contracts";
 
 const CONTRACT_STATUS = {
   DRAFT: "draft",
@@ -401,7 +403,7 @@ function buildContractPreviewUrl(contractId) {
 }
 
 function buildS3DownloadUrl(key) {
-  return `${appConfig.client.baseUrl.replace(/\/+$/, "")}/api/v1/s3/download/${encodeURIComponent(key)}`;
+  return `${appConfig.server.baseUrl.replace(/\/+$/, "")}/api/v1/s3/download/${encodeURIComponent(key)}`;
 }
 
 function getSignedContractFolder(status) {
@@ -979,6 +981,7 @@ class ContractService {
           partnerCompanyInfo: normalizedContract.partnerCompanyInfo,
           contractDueDate: normalizedContract.contractDueDate,
           contractType: normalizedContract.contractType,
+          contractMode: "digital",
           contractData: normalizedContract.contractData,
           status: CONTRACT_STATUS.DRAFT,
         },
@@ -1003,6 +1006,124 @@ class ContractService {
         previewUrl,
       };
     });
+  }
+
+  static async createUploadedContract({
+    contractNumber,
+    contractType,
+    ownerCompanyInfo,
+    partnerCompanyInfo,
+    contractDueDate = null,
+    file,
+    uploadedBy = null,
+  }) {
+    if (
+      !file?.buffer?.length ||
+      file.mimetype !== "application/pdf" ||
+      file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-"
+    ) {
+      throw new BadRequestException("File hợp đồng phải là PDF hợp lệ");
+    }
+
+    const normalizedContractNumber = String(contractNumber || "").trim();
+    const normalizedContractType = normalizeContractType(contractType);
+    const existingContract = await Contract.findOne({
+      where: { contractNumber: normalizedContractNumber },
+      attributes: ["contractId"],
+    });
+
+    if (existingContract) {
+      throw new BadRequestException("Số hợp đồng đã tồn tại");
+    }
+
+    const transaction = await Contract.sequelize.transaction();
+    let uploadedKey = null;
+    let isCommitted = false;
+
+    try {
+      const contract = await Contract.create(
+        {
+          contractNumber: normalizedContractNumber,
+          ownerCompanyInfo,
+          partnerCompanyInfo,
+          contractDueDate: contractDueDate || null,
+          contractData: {},
+          contractType: normalizedContractType,
+          contractMode: "upload",
+          signerType: null,
+          status: CONTRACT_STATUS.COMPLETED,
+          individualCredential: null,
+          organizationCredential: null,
+        },
+        { transaction },
+      );
+
+      const fileHash = crypto
+        .createHash("sha256")
+        .update(file.buffer)
+        .digest("hex");
+      const safeFileName = String(file.originalname || "contract.pdf")
+        .replace(/[\\/]/g, "-")
+        .replace(/[<>:"|?*]/g, "-");
+      uploadedKey = `${UPLOADED_CONTRACT_FOLDER}/${contract.contractId}/${safeFileName}`;
+      const uploadedFile = await S3Service.upload({
+        key: uploadedKey,
+        body: file.buffer,
+        mimeType: "application/pdf",
+        originalName: safeFileName,
+        fileSize: file.buffer.length,
+        folder: UPLOADED_CONTRACT_FOLDER,
+        uploadedBy,
+        description: "Hợp đồng được tải lên hệ thống",
+        visibility: "private",
+      });
+      const document = await ContractDocument.create(
+        {
+          contractId: contract.contractId,
+          version: 1,
+          status: CONTRACT_STATUS.COMPLETED,
+          fileName: safeFileName,
+          filePath: null,
+          fileUrl: uploadedFile.url,
+          fileHash,
+        },
+        { transaction },
+      );
+
+      await contract.update(
+        {
+          contractUrl: uploadedFile.url,
+          contractChecksum: fileHash,
+        },
+        { transaction },
+      );
+      await transaction.commit();
+      isCommitted = true;
+
+      contract.details = [];
+      contract.documents = [document];
+      contract.signatures = [];
+
+      return {
+        contract: ContractDetailDTO.fromContract(contract),
+        fileKey: uploadedFile.key,
+        downloadUrl: buildS3DownloadUrl(uploadedFile.key),
+      };
+    } catch (error) {
+      if (!isCommitted) {
+        await transaction.rollback();
+      }
+
+      if (uploadedKey && !isCommitted) {
+        await S3Service.deleteAndRecord(uploadedKey).catch(() => null);
+      }
+
+      if (error.name === "SequelizeUniqueConstraintError") {
+        throw new BadRequestException("Số hợp đồng đã tồn tại");
+      }
+
+      throw error;
+    }
   }
 
   static async publishUnsignedContract(contractId) {
@@ -2028,6 +2149,7 @@ class ContractService {
     search = "",
     status = "",
     contractType = "",
+    contractMode = "",
   } = {}) {
     const pPage = parseInt(page, 10);
     const pLimit = parseInt(limit, 10);
@@ -2069,6 +2191,10 @@ class ContractService {
 
     if (contractType) {
       where.contractType = normalizeContractType(contractType);
+    }
+
+    if (contractMode) {
+      where.contractMode = contractMode.trim();
     }
 
     const { count, rows } = await Contract.findAndCountAll({

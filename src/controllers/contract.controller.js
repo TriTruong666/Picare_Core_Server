@@ -67,6 +67,33 @@ class ContractController {
     }
   }
 
+  static async uploadContract(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const result = await ContractService.createUploadedContract({
+        contractNumber: req.body.contractNumber,
+        contractType: req.body.contractType,
+        ownerCompanyInfo: req.body.ownerCompanyInfo,
+        partnerCompanyInfo: req.body.partnerCompanyInfo,
+        contractDueDate: req.body.contractDueDate,
+        file: req.file,
+        uploadedBy: req.user?.userId || null,
+      });
+
+      return ResponseHandler.created(
+        res,
+        result,
+        "Tải hợp đồng lên thành công",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getContractsPaginate(req, res, next) {
     try {
       const errors = validationResult(req);
@@ -80,6 +107,7 @@ class ContractController {
         search = "",
         status = "",
         contractType = "",
+        contractMode = "",
       } = req.query;
       const result = await ContractService.getContractsPaginate({
         page,
@@ -87,6 +115,7 @@ class ContractController {
         search,
         status,
         contractType,
+        contractMode,
       });
 
       return ResponseHandler.paginate(
