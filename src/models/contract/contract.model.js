@@ -1,5 +1,6 @@
 const { DataTypes, Op } = require("sequelize");
 const sequelize = require("../../config/postgres.config");
+const { ContractTypeRegistry } = require("../../contracts");
 
 function getContractPeriodRange(date = new Date()) {
   const year = date.getFullYear();
@@ -28,26 +29,7 @@ function formatContractNumber(sequence, date = new Date()) {
 }
 
 function getContractDocumentCode(contractType) {
-  const normalizedType = String(contractType || "principle")
-    .trim()
-    .toLowerCase();
-
-  if (["appendix", "phu_luc", "phuluc", "plhd", "plhp"].includes(normalizedType)) {
-    return "PLHP";
-  }
-
-  if (["principle", "default", "digital"].includes(normalizedType)) {
-    return "HDNT";
-  }
-
-  return (
-    normalizedType
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")
-      .toUpperCase() || "HD"
-  );
+  return ContractTypeRegistry.getDocumentCode(contractType);
 }
 
 async function buildNextContractNumber(contract, options = {}) {

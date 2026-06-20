@@ -21,6 +21,7 @@ const S3Service = require("./s3.service");
 const FptAiService = require("./fpt_ai.service");
 const appConfig = require("../config/app.config");
 const JWTService = require("./jwt.service");
+const { ContractTypeRegistry } = require("../contracts");
 
 const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
@@ -35,349 +36,12 @@ const CONTRACT_STATUS = {
   COMPLETED: "completed",
 };
 
-const PRINCIPLE_CONTRACT_TYPE = "principle";
-const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
-const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
-  { key: "productName", labels: ["Tên sản phẩm"] },
-  { key: "ingredients", labels: ["Thành phần", "Thành phần chính"] },
-  {
-    key: "packageSpecification",
-    labels: ["Quy cách đóng gói", "Quy cách"],
-  },
-  {
-    key: "registrationNumber",
-    labels: [
-      "Số đăng ký",
-      "Số công bố",
-      "Số đăng ký(số công bố)",
-      "Số đăng ký (số công bố)",
-    ],
-  },
-  { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
-  {
-    key: "unitPriceVat",
-    labels: [
-      "Đơn giá(+VAT)",
-      "Đơn giá (+VAT)",
-      "Đơn giá",
-      "Giá sản phẩm",
-      "Giá",
-    ],
-  },
-  { key: "classification", labels: ["Phân loại", "Phân loại sản phẩm"] },
-];
-
-const decodeHtmlEntities = (value) => {
-  const entities = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: " ",
-  };
-
-  return String(value || "").replace(
-    /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
-    (match, entity) => {
-      if (entity[0] === "#") {
-        const isHex = entity[1].toLowerCase() === "x";
-        const codePoint = parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
-        return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
-      }
-
-      return entities[entity.toLowerCase()] || match;
-    },
-  );
-};
-
-function richTextToPlainText(rawContent) {
-  return decodeHtmlEntities(
-    String(rawContent || "")
-      .replace(/<\s*br\s*\/?>/gi, "\n")
-      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-      .replace(/<\s*li(?:\s[^>]*)?>/gi, "")
-      .replace(/<[^>]+>/g, ""),
-  )
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/-\s+(?=[^\n:]{1,80}:)/g, "\n- ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function isHtmlContent(value) {
-  return typeof value === "string" && /<[^>]+>/.test(value);
-}
-
-function escapeHtml(value) {
-  return String(value || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function plainTextToRichHtml(rawContent) {
-  const plainText = richTextToPlainText(rawContent);
-  const items = [];
-  let currentItem = null;
-
-  for (const rawLine of plainText.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const separatorIndex = line.indexOf(":");
-
-    if (separatorIndex >= 0) {
-      currentItem = {
-        label: line.slice(0, separatorIndex).trim().replace(/^[\s\-–—•*]+/, ""),
-        value: line.slice(separatorIndex + 1).trim(),
-      };
-      items.push(currentItem);
-      continue;
-    }
-
-    if (currentItem) {
-      currentItem.value = [currentItem.value, line].filter(Boolean).join("\n");
-    } else {
-      items.push({ label: null, value: line });
-    }
+function validateContractTypeInput(input) {
+  try {
+    ContractTypeRegistry.validateInput(input);
+  } catch (error) {
+    throw new BadRequestException(error.message);
   }
-
-  if (!items.length) {
-    return null;
-  }
-
-  return `<ol>${items
-    .map((item) => {
-      const value = escapeHtml(item.value).replace(/\n/g, "<br>");
-      if (!item.label) return `<li><p>${value}</p></li>`;
-
-      return `<li><p><strong>${escapeHtml(item.label)}: </strong>${value}</p></li>`;
-    })
-    .join("")}</ol>`;
-}
-
-function resolveAppendixProductData(product) {
-  if (!product || typeof product !== "object") {
-    return {};
-  }
-
-  return {
-    ...(product.jsonContent && typeof product.jsonContent === "object"
-      ? product.jsonContent
-      : {}),
-    ...product,
-    ...(product.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : {}),
-  };
-}
-
-function normalizeRichTextLabel(value) {
-  return String(value || "")
-    .replace(/^[\s\-–—•*]+/, "")
-    .replace(/^\d+[\).\s-]+/, "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const appendixProductLabelLookup = new Map(
-  APPENDIX_PRODUCT_FIELD_DEFINITIONS.flatMap(({ key, labels }) =>
-    labels.map((label) => [normalizeRichTextLabel(label), key]),
-  ),
-);
-
-function parseAppendixProductRichText(rawContent) {
-  const plainText = richTextToPlainText(rawContent);
-  const result = Object.fromEntries(
-    APPENDIX_PRODUCT_FIELD_DEFINITIONS.map(({ key }) => [key, null]),
-  );
-  let currentKey = null;
-
-  for (const rawLine of plainText.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const separatorIndex = line.indexOf(":");
-    const label =
-      separatorIndex >= 0
-        ? normalizeRichTextLabel(line.slice(0, separatorIndex))
-        : "";
-    const key = appendixProductLabelLookup.get(label);
-
-    if (key) {
-      currentKey = key;
-      result[currentKey] = line.slice(separatorIndex + 1).trim() || null;
-      continue;
-    }
-
-    if (separatorIndex >= 0) {
-      currentKey = null;
-      continue;
-    }
-
-    if (currentKey) {
-      result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
-    }
-  }
-
-  return result;
-}
-
-function getAppendixProductRawContent(product) {
-  if (typeof product === "string") return product;
-
-  const data = resolveAppendixProductData(product);
-  const htmlContent =
-    data?.rawHtml ||
-    data?.html ||
-    data?.richText ||
-    data?.productRichText ||
-    (isHtmlContent(data?.content) ? data.content : null);
-
-  if (isHtmlContent(data?.rawContent)) return data.rawContent;
-  return htmlContent || data?.rawContent || data?.content || null;
-}
-
-function normalizeAppendixProduct(product) {
-  const rawContent = getAppendixProductRawContent(product);
-  const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
-  const data = resolveAppendixProductData(product);
-  const normalizedRawContent = isHtmlContent(rawContent)
-    ? rawContent
-    : plainTextToRichHtml(rawContent);
-
-  return {
-    rawContent: normalizedRawContent || rawContent,
-    productName: data.productName ?? parsed.productName,
-    ingredients: data.ingredients ?? parsed.ingredients,
-    packageSpecification:
-      data.packageSpecification ?? data.packageSpec ?? parsed.packageSpecification,
-    registrationNumber:
-      data.registrationNumber ?? data.registrationNo ?? parsed.registrationNumber,
-    origin: data.origin ?? data.countryOfOrigin ?? parsed.origin,
-    unitPriceVat:
-      data.unitPriceVat ??
-      data.unitPriceWithVat ??
-      data.priceVat ??
-      data.price ??
-      parsed.unitPriceVat,
-    classification: data.classification ?? data.category ?? parsed.classification,
-  };
-}
-
-function normalizeAppendixProducts(products) {
-  if (!Array.isArray(products)) {
-    return undefined;
-  }
-
-  return products.map((product) => normalizeAppendixProduct(product));
-}
-
-function normalizeContractDataForResponse(contractData = {}) {
-  if (!contractData || typeof contractData !== "object") {
-    return contractData;
-  }
-
-  const normalizedProducts = normalizeAppendixProducts(contractData.products);
-
-  if (!normalizedProducts) {
-    return contractData;
-  }
-
-  return {
-    ...contractData,
-    products: normalizedProducts,
-  };
-}
-
-function normalizeContractType(contractType) {
-  const normalizedType = String(contractType || PRINCIPLE_CONTRACT_TYPE)
-    .trim()
-    .toLowerCase();
-
-  if (!normalizedType || LEGACY_PRINCIPLE_CONTRACT_TYPES.has(normalizedType)) {
-    return PRINCIPLE_CONTRACT_TYPE;
-  }
-
-  return normalizedType;
-}
-
-function normalizeContractData(input = {}) {
-  const contractType = normalizeContractType(input.contractType);
-  const sourceData =
-    input.contractData && typeof input.contractData === "object"
-      ? input.contractData
-      : {};
-  const details = Array.isArray(input.details)
-    ? input.details
-    : Array.isArray(sourceData.details)
-      ? sourceData.details
-      : [];
-  const ownerCompanyInfo =
-    input.ownerCompanyInfo || sourceData.ownerCompanyInfo || null;
-  const partnerCompanyInfo =
-    input.partnerCompanyInfo || sourceData.partnerCompanyInfo || null;
-  const contractDueDate =
-    input.contractDueDate || sourceData.contractDueDate || null;
-  const rawProducts =
-    input.products ??
-    input.productRichTexts ??
-    sourceData.products ??
-    sourceData.productRichTexts;
-  const products = normalizeAppendixProducts(rawProducts);
-
-  return {
-    contractType,
-    ownerCompanyInfo,
-    partnerCompanyInfo,
-    contractDueDate,
-    details,
-    contractData: {
-      ...sourceData,
-      principleContractNumber:
-        input.principleContractNumber ?? sourceData.principleContractNumber,
-      principleContractSignedDate:
-        input.principleContractSignedDate ??
-        sourceData.principleContractSignedDate,
-      products,
-      ownerCompanyInfo,
-      partnerCompanyInfo,
-      contractDueDate,
-      details,
-    },
-  };
-}
-
-function buildContractDetailRows(contractId, details = []) {
-  return details.map((detail, index) => {
-    const detailData =
-      detail.detailData && typeof detail.detailData === "object"
-        ? detail.detailData
-        : detail;
-
-    return {
-      contractId,
-      detailKey:
-        detail.detailKey ||
-        detail.key ||
-        detail.productName ||
-        `detail_${index + 1}`,
-      detailType: detail.detailType || detail.type || "item",
-      detailData,
-      productName: detail.productName ?? detailData.productName ?? null,
-      price: detail.price ?? detailData.price ?? null,
-    };
-  });
 }
 
 function formatContractCreatedDescription(date = new Date()) {
@@ -954,30 +618,9 @@ class ContractService {
     });
   }
 
-  static async createContractTemplate({
-    ownerCompanyInfo,
-    partnerCompanyInfo,
-    contractDueDate,
-    contractType = PRINCIPLE_CONTRACT_TYPE,
-    contractData = {},
-    details = [],
-    principleContractNumber,
-    principleContractSignedDate,
-    products,
-    productRichTexts,
-  } = {}) {
-    const normalizedContract = normalizeContractData({
-      ownerCompanyInfo,
-      partnerCompanyInfo,
-      contractDueDate,
-      contractType,
-      contractData,
-      details,
-      principleContractNumber,
-      principleContractSignedDate,
-      products,
-      productRichTexts,
-    });
+  static async createContractTemplate(input = {}) {
+    validateContractTypeInput(input);
+    const normalizedContract = ContractTypeRegistry.normalizeInput(input);
 
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.create(
@@ -994,9 +637,10 @@ class ContractService {
       );
 
       const createdDetails = await ContractDetail.bulkCreate(
-        buildContractDetailRows(
+        ContractTypeRegistry.buildDetailRows(
           contract.contractId,
           normalizedContract.details,
+          normalizedContract.contractType,
         ),
         { transaction, returning: true },
       );
@@ -1032,7 +676,7 @@ class ContractService {
     }
 
     const normalizedContractNumber = String(contractNumber || "").trim();
-    const normalizedContractType = normalizeContractType(contractType);
+    const normalizedContractType = ContractTypeRegistry.normalizeType(contractType);
     const existingContract = await Contract.findOne({
       where: { contractNumber: normalizedContractNumber },
       attributes: ["contractId"],
@@ -1410,7 +1054,8 @@ class ContractService {
       const hasDetailsUpdate =
         Object.prototype.hasOwnProperty.call(updateData, "details") ||
         Object.prototype.hasOwnProperty.call(sourceData, "details");
-      const normalizedContract = normalizeContractData({
+      const normalizedContract = ContractTypeRegistry.normalizeInput({
+        ...updateData,
         ownerCompanyInfo:
           updateData.ownerCompanyInfo ?? contract.ownerCompanyInfo,
         partnerCompanyInfo:
@@ -1425,18 +1070,8 @@ class ContractService {
         details: hasDetailsUpdate
           ? (updateData.details ?? sourceData.details ?? [])
           : currentDetails,
-        principleContractNumber:
-          updateData.principleContractNumber ??
-          sourceData.principleContractNumber,
-        principleContractSignedDate:
-          updateData.principleContractSignedDate ??
-          sourceData.principleContractSignedDate,
-        products:
-          updateData.products ??
-          updateData.productRichTexts ??
-          sourceData.products ??
-          sourceData.productRichTexts,
       });
+      validateContractTypeInput(normalizedContract);
 
       const contractUpdateData = {
         ownerCompanyInfo: normalizedContract.ownerCompanyInfo,
@@ -1455,7 +1090,11 @@ class ContractService {
       });
 
       const updatedDetails = await ContractDetail.bulkCreate(
-        buildContractDetailRows(contractId, normalizedContract.details),
+        ContractTypeRegistry.buildDetailRows(
+          contractId,
+          normalizedContract.details,
+          normalizedContract.contractType,
+        ),
         { transaction, returning: true },
       );
 
@@ -2231,7 +1870,7 @@ class ContractService {
     }
 
     if (contractType) {
-      where.contractType = normalizeContractType(contractType);
+      where.contractType = ContractTypeRegistry.normalizeType(contractType);
     }
 
     if (contractMode) {
@@ -2285,7 +1924,7 @@ class ContractService {
 
     contract.setDataValue(
       "contractData",
-      normalizeContractDataForResponse(contract.contractData),
+      ContractTypeRegistry.normalizeResponse(contract.contractData),
     );
 
     return ContractDetailDTO.fromContract(contract);

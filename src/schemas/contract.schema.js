@@ -1,4 +1,5 @@
 const { body, param, query } = require("express-validator");
+const { ContractTypeRegistry } = require("../contracts");
 
 const CONTRACT_STATUS_VALUES = [
   "draft",
@@ -6,8 +7,6 @@ const CONTRACT_STATUS_VALUES = [
   "owner_signed",
   "completed",
 ];
-const PRINCIPLE_CONTRACT_TYPE = "principle";
-const LEGACY_PRINCIPLE_CONTRACT_TYPES = new Set(["default", "digital"]);
 
 class ContractDetailItemDTO {
   constructor(detail) {
@@ -106,45 +105,8 @@ class ContractDetailDTO extends ContractListDTO {
   }
 }
 
-function normalizeContractType(contractType) {
-  const normalizedType = String(contractType || PRINCIPLE_CONTRACT_TYPE)
-    .trim()
-    .toLowerCase();
-
-  if (!normalizedType || LEGACY_PRINCIPLE_CONTRACT_TYPES.has(normalizedType)) {
-    return PRINCIPLE_CONTRACT_TYPE;
-  }
-
-  return normalizedType;
-}
-
-function getBodyValue(req, field) {
-  return req.body?.[field] ?? req.body?.contractData?.[field];
-}
-
-function validatePrincipleContractPayload(_, { req }) {
-  const contractType = normalizeContractType(req.body?.contractType);
-
-  if (contractType !== PRINCIPLE_CONTRACT_TYPE) {
-    return true;
-  }
-
-  const ownerCompanyInfo = getBodyValue(req, "ownerCompanyInfo");
-  const partnerCompanyInfo = getBodyValue(req, "partnerCompanyInfo");
-
-  if (!ownerCompanyInfo || typeof ownerCompanyInfo !== "object") {
-    throw new Error("ownerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
-  }
-
-  if (!ownerCompanyInfo.companyCode) {
-    throw new Error("ownerCompanyInfo.companyCode là bắt buộc để tạo số hợp đồng");
-  }
-
-  if (!partnerCompanyInfo || typeof partnerCompanyInfo !== "object") {
-    throw new Error("partnerCompanyInfo là bắt buộc với hợp đồng nguyên tắc");
-  }
-
-  return true;
+function validateContractTypePayload(_, { req }) {
+  return ContractTypeRegistry.validateInput(req.body || {});
 }
 
 const getContractsPaginateSchema = [
@@ -185,7 +147,7 @@ const contractSignatureIdSchema = [
 ];
 
 const createContractTemplateSchema = [
-  body().custom(validatePrincipleContractPayload),
+  body().custom(validateContractTypePayload),
   body("contractData")
     .optional({ nullable: true })
     .isObject()
@@ -292,7 +254,7 @@ const uploadContractSchema = [
 
 const updateDraftContractSchema = [
   ...contractIdSchema,
-  ...createContractTemplateSchema,
+  ...createContractTemplateSchema.slice(1),
 ];
 
 const createSigningSessionSchema = [

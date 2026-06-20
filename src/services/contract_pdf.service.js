@@ -6,6 +6,11 @@ const PDFDocument = require("pdfkit");
 const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 const sharp = require("sharp");
+const { ContractTypeRegistry } = require("../contracts");
+const {
+  normalizeProduct: normalizeContractProduct,
+} = require("../contracts/common/contract-input.normalizer");
+
 function resolveAssetPath(fileName) {
   return path.resolve(__dirname, "..", "..", fileName);
 }
@@ -191,235 +196,9 @@ function formatMoney(value) {
   }).format(numberValue)} VND`;
 }
 
-const APPENDIX_CONTRACT_TYPES = new Set([
-  "appendix",
-  "phu_luc",
-  "phuluc",
-  "plhd",
-  "plhp",
-]);
-
-const APPENDIX_PRODUCT_FIELD_DEFINITIONS = [
-  { key: "productName", labels: ["Tên sản phẩm"] },
-  { key: "ingredients", labels: ["Thành phần", "Thành phần chính"] },
-  {
-    key: "packageSpecification",
-    labels: ["Quy cách đóng gói", "Quy cách"],
-  },
-  {
-    key: "registrationNumber",
-    labels: [
-      "Số đăng ký",
-      "Số công bố",
-      "Số đăng ký(số công bố)",
-      "Số đăng ký (số công bố)",
-    ],
-  },
-  { key: "origin", labels: ["Nước sản xuất", "Xuất xứ"] },
-  {
-    key: "unitPriceVat",
-    labels: [
-      "Đơn giá(+VAT)",
-      "Đơn giá (+VAT)",
-      "Đơn giá",
-      "Giá sản phẩm",
-      "Giá",
-    ],
-  },
-  { key: "classification", labels: ["Phân loại", "Phân loại sản phẩm"] },
-];
-
-const decodeHtmlEntities = (value) => {
-  const entities = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: " ",
-  };
-
-  return String(value).replace(
-    /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
-    (match, entity) => {
-      if (entity[0] === "#") {
-        const isHex = entity[1].toLowerCase() === "x";
-        const codePoint = parseInt(
-          entity.slice(isHex ? 2 : 1),
-          isHex ? 16 : 10,
-        );
-        return Number.isNaN(codePoint)
-          ? match
-          : String.fromCodePoint(codePoint);
-      }
-
-      return entities[entity.toLowerCase()] || match;
-    },
-  );
-};
-
-function richTextToPlainText(rawContent) {
-  return decodeHtmlEntities(
-    String(rawContent || "")
-      .replace(/<\s*br\s*\/?>/gi, "\n")
-      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-      .replace(/<\s*li(?:\s[^>]*)?>/gi, "")
-      .replace(/<[^>]+>/g, ""),
-  )
-    .replace(/\r\n?/g, "\n")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n[ \t]+/g, "\n")
-    .replace(/-\s+(?=[^\n:]{1,80}:)/g, "\n- ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-function isHtmlContent(value) {
-  return typeof value === "string" && /<[^>]+>/.test(value);
-}
-
-function resolveAppendixProductData(product) {
-  if (!product || typeof product !== "object") {
-    return {};
-  }
-
-  return {
-    ...(product.jsonContent && typeof product.jsonContent === "object"
-      ? product.jsonContent
-      : {}),
-    ...product,
-    ...(product.detailData && typeof product.detailData === "object"
-      ? product.detailData
-      : {}),
-  };
-}
-
-function normalizeRichTextLabel(value) {
-  return normalizeVietnameseText(value)
-    .replace(/^[\s\-–—•*]+/, "")
-    .replace(/^\d+[\).\s-]+/, "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const appendixProductLabelLookup = new Map(
-  APPENDIX_PRODUCT_FIELD_DEFINITIONS.flatMap(({ key, labels }) =>
-    labels.map((label) => [normalizeRichTextLabel(label), key]),
-  ),
-);
-
-function parseAppendixProductRichText(rawContent) {
-  const plainText = richTextToPlainText(rawContent);
-  const result = Object.fromEntries(
-    APPENDIX_PRODUCT_FIELD_DEFINITIONS.map(({ key }) => [key, null]),
-  );
-  let currentKey = null;
-
-  for (const rawLine of plainText.split("\n")) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    const separatorIndex = line.indexOf(":");
-    const label =
-      separatorIndex >= 0
-        ? normalizeRichTextLabel(line.slice(0, separatorIndex))
-        : "";
-    const key = appendixProductLabelLookup.get(label);
-
-    if (key) {
-      currentKey = key;
-      result[currentKey] = line.slice(separatorIndex + 1).trim() || null;
-      continue;
-    }
-
-    if (separatorIndex >= 0) {
-      currentKey = null;
-      continue;
-    }
-
-    if (currentKey) {
-      result[currentKey] = [result[currentKey], line]
-        .filter(Boolean)
-        .join("\n");
-    }
-  }
-
-  return result;
-}
-
-function getAppendixProductRawContent(product) {
-  if (typeof product === "string") return product;
-
-  const data = resolveAppendixProductData(product);
-  const htmlContent =
-    data?.rawHtml ||
-    data?.html ||
-    data?.richText ||
-    data?.productRichText ||
-    (isHtmlContent(data?.content) ? data.content : null);
-
-  if (isHtmlContent(data?.rawContent)) return data.rawContent;
-  return htmlContent || data?.rawContent || data?.content || null;
-}
-
-function normalizeAppendixProduct(product) {
-  const rawContent = getAppendixProductRawContent(product);
-  const parsed = rawContent ? parseAppendixProductRichText(rawContent) : {};
-  const data = resolveAppendixProductData(product);
-
-  return {
-    rawContent,
-    productName: data.productName ?? parsed.productName,
-    ingredients: data.ingredients ?? parsed.ingredients,
-    packageSpecification:
-      data.packageSpecification ??
-      data.packageSpec ??
-      parsed.packageSpecification,
-    registrationNumber:
-      data.registrationNumber ??
-      data.registrationNo ??
-      parsed.registrationNumber,
-    origin: data.origin ?? data.countryOfOrigin ?? parsed.origin,
-    unitPriceVat:
-      data.unitPriceVat ??
-      data.unitPriceWithVat ??
-      data.priceVat ??
-      data.price ??
-      parsed.unitPriceVat,
-    classification:
-      data.classification ?? data.category ?? parsed.classification,
-  };
-}
-
-function normalizeContractTypeForFileName(contractType) {
-  const normalizedType = String(contractType || "principle")
-    .trim()
-    .toLowerCase();
-
-  if (!normalizedType || ["default", "digital", "principle"].includes(normalizedType)) {
-    return "hop_dong_nguyen_tac";
-  }
-
-  if (["appendix", "phu_luc", "phuluc", "plhd", "plhp"].includes(normalizedType)) {
-    return "phu_luc_hop_dong";
-  }
-
-  return (
-    `hop_dong_${normalizeVietnameseText(normalizedType)
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "")}` || "hop_dong"
-  );
-}
 
 function buildContractFilePrefix(contract) {
-  return normalizeContractTypeForFileName(contract?.contractType);
+  return ContractTypeRegistry.getFilePrefix(contract?.contractType);
 }
 
 function buildContractArtifactFileName(contract, variant, token) {
@@ -1273,7 +1052,7 @@ class ContractPdfBuilder {
     ];
     const products = sourceProducts.length ? sourceProducts : details;
 
-    return products.map((product) => normalizeAppendixProduct(product));
+    return products.map((product) => normalizeContractProduct(product));
   }
 
   appendixProductTable(products = []) {
@@ -2106,19 +1885,7 @@ class ContractPdfBuilder {
   }
 
   render(contract, details) {
-    const contractType = String(contract.contractType || "").toLowerCase();
-
-    if (["principle", "default", "digital"].includes(contractType)) {
-      this.renderPrincipleContract(contract, details);
-      return;
-    }
-
-    if (APPENDIX_CONTRACT_TYPES.has(contractType)) {
-      this.renderAppendixContract(contract, details);
-      return;
-    }
-
-    this.renderGenericContract(contract, details);
+    ContractTypeRegistry.renderPdf(this, contract, details);
   }
 }
 

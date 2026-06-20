@@ -38,7 +38,7 @@ const credentialUpload = multer({
  * /api/v1/contracts:
  *   post:
  *     summary: Tạo hợp đồng theo loại hợp đồng
- *     description: Tạo hợp đồng ở trạng thái nháp. contractType=principle dùng template hợp đồng nguyên tắc hiện tại; các loại khác lưu input động trong contractData/details và render PDF generic.
+ *     description: Tạo hợp đồng ở trạng thái nháp. contractType được resolve qua contract type registry; principle và appendix dùng builder riêng, type chưa đăng ký dùng generic builder với dữ liệu động trong contractData/details.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
