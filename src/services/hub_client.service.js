@@ -33,6 +33,11 @@ class HubClientService {
     return `${parsedUrl.protocol.toLowerCase()}//${parsedUrl.host.toLowerCase()}${pathname}${parsedUrl.search}`;
   }
 
+  static normalizeNullableValue(value) {
+    const rawValue = String(value ?? "").trim();
+    return rawValue ? rawValue : null;
+  }
+
   static extractOrigin(url) {
     const normalizedUrl = this.normalizeUrl(url);
     return new URL(normalizedUrl).origin.toLowerCase();
@@ -162,16 +167,18 @@ class HubClientService {
    * Create a new hub client
    */
   static async createClient(clientData) {
+    const safeClientData = clientData || {};
     const existingClient = await HubClient.findOne({
-      where: { clientName: clientData.clientName },
+      where: { clientName: safeClientData.clientName },
     });
     if (existingClient) {
       throw new BadRequestException("Ten Hub Client da ton tai");
     }
 
-    const { clientInternalUrl: _clientInternalUrl, ...createData } = clientData || {};
+    const { clientInternalUrl: _clientInternalUrl, ...createData } = safeClientData;
     const newClient = await HubClient.create({
       ...createData,
+      clientInternalUrl: null,
     });
     return HubClientDTO.fromClient(newClient);
   }
@@ -180,22 +187,31 @@ class HubClientService {
    * Update hub client information
    */
   static async updateClient(clientId, updateData) {
+    const safeUpdateData = updateData || {};
     const client = await HubClient.findOne({ where: { clientId } });
 
     if (!client) {
       throw new NotFoundException("Khong tim thay Hub Client");
     }
 
-    if (updateData.clientName && updateData.clientName !== client.clientName) {
+    if (safeUpdateData.clientName && safeUpdateData.clientName !== client.clientName) {
       const existingName = await HubClient.findOne({
-        where: { clientName: updateData.clientName },
+        where: { clientName: safeUpdateData.clientName },
       });
       if (existingName) {
         throw new BadRequestException("Ten Hub Client da ton tai");
       }
     }
 
-    await client.update(updateData);
+    const normalizedUpdateData = {
+      ...safeUpdateData,
+      clientInternalUrl:
+        Object.prototype.hasOwnProperty.call(safeUpdateData, "clientInternalUrl")
+          ? this.normalizeNullableValue(safeUpdateData.clientInternalUrl)
+          : safeUpdateData.clientInternalUrl,
+    };
+
+    await client.update(normalizedUpdateData);
     return HubClientDTO.fromClient(client);
   }
 

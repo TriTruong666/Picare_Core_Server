@@ -32,21 +32,22 @@ class HubClientDTO {
  * Validation Schemas for HubClient CRUD
  */
 const createHubClientSchema = [
-  body("clientName").trim().notEmpty().withMessage("Tên client không được để trống"),
+  body("clientName").trim().notEmpty().withMessage("Ten client khong duoc de trong"),
   body("clientInternalUrl")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
+    .trim()
     .isURL({ require_tld: false })
-    .withMessage("Internal URL không hợp lệ"),
+    .withMessage("Internal URL khong hop le"),
   body("clientExternalUrl")
     .isURL({ require_tld: false })
-    .withMessage("External URL không hợp lệ"),
+    .withMessage("External URL khong hop le"),
   body("clientStatus")
     .notEmpty()
-    .withMessage("Trạng thái client không được để trống"),
+    .withMessage("Trang thai client khong duoc de trong"),
   body("allowedRoles")
     .optional()
     .isArray()
-    .withMessage("Danh sách role cho phép phải là một mảng"),
+    .withMessage("Danh sach role cho phep phai la mot mang"),
   body("clientDescription").optional().trim(),
   body("clientLogoImage").optional().trim(),
   body("clientMockupImage").optional().trim(),
@@ -54,24 +55,25 @@ const createHubClientSchema = [
 ];
 
 const updateHubClientSchema = [
-  param("clientId").isUUID(4).withMessage("ID client không hợp lệ"),
-  body("clientName").optional().trim().notEmpty().withMessage("Tên client không được để trống"),
+  param("clientId").isUUID(4).withMessage("ID client khong hop le"),
+  body("clientName").optional().trim().notEmpty().withMessage("Ten client khong duoc de trong"),
   body("clientInternalUrl")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
+    .trim()
     .isURL({ require_tld: false })
-    .withMessage("Internal URL không hợp lệ"),
+    .withMessage("Internal URL khong hop le"),
   body("clientExternalUrl")
     .optional()
     .isURL({ require_tld: false })
-    .withMessage("External URL không hợp lệ"),
+    .withMessage("External URL khong hop le"),
   body("clientStatus")
     .optional()
     .notEmpty()
-    .withMessage("Trạng thái client không được để trống"),
+    .withMessage("Trang thai client khong duoc de trong"),
   body("allowedRoles")
     .optional()
     .isArray()
-    .withMessage("Danh sách role cho phép phải là một mảng"),
+    .withMessage("Danh sach role cho phep phai la mot mang"),
   body("clientDescription").optional().trim(),
   body("clientLogoImage").optional().trim(),
   body("clientMockupImage").optional().trim(),
@@ -79,20 +81,20 @@ const updateHubClientSchema = [
 ];
 
 const clientIdSchema = [
-  param("clientId").isUUID(4).withMessage("ID client không hợp lệ"),
+  param("clientId").isUUID(4).withMessage("ID client khong hop le"),
 ];
 
 const checkAccessSchema = [
-  param("clientId").isUUID(4).withMessage("ID client không hợp lệ"),
+  param("clientId").isUUID(4).withMessage("ID client khong hop le"),
 ];
 
 const checkAccessByUrlSchema = [
   query("externalUrl")
     .notEmpty()
-    .withMessage("externalUrl không được để trống")
+    .withMessage("externalUrl khong duoc de trong")
     .bail()
     .isURL({ require_tld: false })
-    .withMessage("externalUrl không hợp lệ"),
+    .withMessage("externalUrl khong hop le"),
 ];
 
 module.exports = {

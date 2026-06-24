@@ -145,7 +145,7 @@ const startServer = async () => {
 
     await seedingRBAC();
     await seedingUsers();
-    await seedingHubClients();
+    // await seedingHubClients();
     await seedAppConfig();
     await loadDynamicConfig();
 
