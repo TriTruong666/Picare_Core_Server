@@ -15,7 +15,6 @@ const User = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "user_id",
     },
     name: {
@@ -24,7 +23,6 @@ const User = sequelize.define(
     },
     email: {
       type: DataTypes.STRING,
-      unique: true,
       allowNull: false,
     },
     password: {
@@ -33,7 +31,6 @@ const User = sequelize.define(
     },
     phone: {
       type: DataTypes.STRING,
-      unique: true,
       allowNull: true,
     },
     isOnline: {
@@ -61,6 +58,11 @@ const User = sequelize.define(
   {
     tableName: "users",
     timestamps: true,
+    indexes: [
+      { name: "users_user_id_key", unique: true, fields: ["user_id"] },
+      { name: "users_email_key", unique: true, fields: ["email"] },
+      { name: "users_phone_key", unique: true, fields: ["phone"] },
+    ],
     hooks: {
       beforeCreate: async (user) => {
         if (user.password) {

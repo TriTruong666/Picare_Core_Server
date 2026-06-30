@@ -22,7 +22,6 @@ const ContractDetail = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "contract_detail_id",
     },
     detailKey: {
@@ -55,6 +54,13 @@ const ContractDetail = sequelize.define(
   {
     tableName: "contract_detail",
     timestamps: true,
+    indexes: [
+      {
+        name: "contract_detail_contract_detail_id_key",
+        unique: true,
+        fields: ["contract_detail_id"],
+      },
+    ],
   }
 );
 

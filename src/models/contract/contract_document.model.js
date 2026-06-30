@@ -13,7 +13,6 @@ const ContractDocument = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "contract_document_id",
     },
     contractId: {
@@ -60,6 +59,11 @@ const ContractDocument = sequelize.define(
     tableName: "contract_document",
     timestamps: true,
     indexes: [
+      {
+        name: "contract_document_contract_document_id_key",
+        unique: true,
+        fields: ["contract_document_id"],
+      },
       {
         unique: true,
         fields: ["contract_id", "version"],

@@ -17,14 +17,12 @@ const S3Folder = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "folder_id",
     },
 
     name: {
       type: DataTypes.STRING(255),
       allowNull: false,
-      unique: true,
       comment: "Tên thư mục (vd: avatars, public, invoices)",
     },
 
@@ -51,6 +49,10 @@ const S3Folder = sequelize.define(
   {
     tableName: "s3_folders",
     timestamps: true,
+    indexes: [
+      { name: "s3_folders_folder_id_key", unique: true, fields: ["folder_id"] },
+      { name: "s3_folders_name_key", unique: true, fields: ["name"] },
+    ],
   }
 );
 

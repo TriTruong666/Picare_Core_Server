@@ -12,7 +12,6 @@ const AppConfig = sequelize.define(
     key: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
     },
     appVersion: {
       type: DataTypes.STRING,
@@ -34,6 +33,7 @@ const AppConfig = sequelize.define(
   {
     timestamps: true,
     tableName: "app_configs",
+    indexes: [{ name: "app_configs_key_key", unique: true, fields: ["key"] }],
   },
 );
 

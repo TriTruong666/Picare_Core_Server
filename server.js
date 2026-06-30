@@ -36,12 +36,30 @@ function getProtectedTableSet(protectedTables = []) {
   return new Set(protectedTables.map((table) => normalizeTableName(table)));
 }
 
-function getModelTableName(model) {
-  if (!model) return "";
-  if (typeof model.getTableName === "function") {
-    return normalizeTableName(model.getTableName());
+function logSyncSql(sql) {
+  console.log(`[DB-SYNC] ${sql}`);
+}
+
+async function logDatabaseSchema(queryInterface) {
+  const tables = await queryInterface.showAllTables();
+
+  for (const table of tables) {
+    const tableName = normalizeTableName(table);
+    const columns = await queryInterface.describeTable(table);
+    const schema = Object.fromEntries(
+      Object.entries(columns).map(([columnName, column]) => [
+        columnName,
+        {
+          type: column.type,
+          allowNull: column.allowNull,
+          primaryKey: column.primaryKey,
+          defaultValue: column.defaultValue,
+        },
+      ]),
+    );
+
+    console.log(`[DB-SCHEMA] ${tableName}: ${JSON.stringify(schema)}`);
   }
-  return normalizeTableName(model.tableName || model?.options?.tableName);
 }
 
 app.use(morgan("dev"));
@@ -88,13 +106,14 @@ const startServer = async () => {
     const isReset = config.db.reset;
     const protectedTables = config.db.protectedTables || [];
     const protectedTableSet = getProtectedTableSet(protectedTables);
+    const queryInterface = sequelize.getQueryInterface();
 
     if (isForceReset && !isReset) {
       console.log(
         "[WARNING]: Đây là cảnh báo Force Reset DB, vui lòng kiểm tra kỹ Production.",
       );
       console.log("[DATABASE]: Đang khởi tạo lại database...");
-      await sequelize.sync({ force: true });
+      await sequelize.sync({ force: true, logging: logSyncSql });
       console.log("[DATABASE]: Database đã được khởi tạo lại.");
 
       try {
@@ -111,7 +130,6 @@ const startServer = async () => {
         "[DATABASE]: Đang khởi tạo lại database (có bảo vệ các bảng quan trọng)...",
       );
 
-      const queryInterface = sequelize.getQueryInterface();
       const allTables = await queryInterface.showAllTables();
 
       for (const table of allTables) {
@@ -124,13 +142,7 @@ const startServer = async () => {
         }
       }
 
-      for (const model of Object.values(sequelize.models)) {
-        const tableName = getModelTableName(model);
-
-        if (!protectedTableSet.has(tableName)) {
-          await model.sync();
-        }
-      }
+      await sequelize.sync({ alter: true, logging: logSyncSql });
 
       console.log(
         `[DATABASE]: Database đã được khởi tạo lại (trừ bảng: ${protectedTables.join(
@@ -139,9 +151,11 @@ const startServer = async () => {
       );
     } else {
       console.log("[DATABASE]: Đang kiểm tra và đồng bộ cấu trúc database...");
-      await sequelize.sync();
+      await sequelize.sync({ logging: logSyncSql });
       console.log("[DATABASE]: Database đã sẵn sàng.");
     }
+
+    await logDatabaseSchema(queryInterface);
 
     await seedingRBAC();
     await seedingUsers();

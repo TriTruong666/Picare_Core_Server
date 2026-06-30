@@ -14,13 +14,11 @@ const HubClient = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "client_id",
     },
     clientName: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
       field: "client_name",
     },
     clientDescription: {
@@ -71,6 +69,10 @@ const HubClient = sequelize.define(
   {
     tableName: "hub_clients",
     timestamps: true,
+    indexes: [
+      { name: "hub_clients_client_id_key", unique: true, fields: ["client_id"] },
+      { name: "hub_clients_client_name_key", unique: true, fields: ["client_name"] },
+    ],
   },
 );
 

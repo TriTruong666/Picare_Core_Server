@@ -11,7 +11,6 @@ const Permission = sequelize.define(
     },
     name: {
       type: DataTypes.STRING,
-      unique: true,
       allowNull: false,
     },
     description: {
@@ -26,6 +25,7 @@ const Permission = sequelize.define(
   {
     tableName: "permissions",
     timestamps: true,
+    indexes: [{ name: "permissions_name_key", unique: true, fields: ["name"] }],
   }
 );
 

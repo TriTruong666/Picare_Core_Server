@@ -89,13 +89,11 @@ const Contract = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "contract_id",
     },
     contractNumber: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true,
       field: "contract_number",
     },
     ownerCompanyInfo: {
@@ -185,6 +183,14 @@ const Contract = sequelize.define(
   {
     tableName: "contract",
     timestamps: true,
+    indexes: [
+      { name: "contract_contract_id_key", unique: true, fields: ["contract_id"] },
+      {
+        name: "contract_contract_number_key",
+        unique: true,
+        fields: ["contract_number"],
+      },
+    ],
     hooks: {
       beforeValidate: async (contract, options) => {
         if (!contract.contractNumber) {

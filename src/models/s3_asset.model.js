@@ -21,7 +21,6 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "asset_id",
       comment: "ID định danh duy nhất của asset",
     },
@@ -100,10 +99,13 @@ const S3Asset = sequelize.define(
     },
 
     assetType: {
-      type: DataTypes.ENUM(...ASSET_TYPE),
+      type: DataTypes.STRING(20),
       allowNull: false,
       defaultValue: "other",
       field: "asset_type",
+      validate: {
+        isIn: [ASSET_TYPE],
+      },
       comment: "Nhóm loại file: image | video | document | audio | other",
     },
 
@@ -116,9 +118,12 @@ const S3Asset = sequelize.define(
     },
 
     visibility: {
-      type: DataTypes.ENUM(...ASSET_VISIBILITY),
+      type: DataTypes.STRING(20),
       allowNull: false,
       defaultValue: AssetVisibility.PRIVATE,
+      validate: {
+        isIn: [ASSET_VISIBILITY],
+      },
       comment: "public = ai cũng truy cập được, private = cần presigned URL",
     },
 
@@ -162,6 +167,7 @@ const S3Asset = sequelize.define(
     tableName: "s3_assets",
     timestamps: true, // createdAt, updatedAt
     indexes: [
+      { name: "s3_assets_asset_id_key", unique: true, fields: ["asset_id"] },
       { fields: ["client_id"] },
       { fields: ["user_id"] },
       { fields: ["asset_type"] },

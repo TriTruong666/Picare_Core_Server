@@ -13,7 +13,6 @@ const ContractSignature = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "contract_signature_id",
     },
     contractId: {
@@ -150,6 +149,13 @@ const ContractSignature = sequelize.define(
   {
     tableName: "contract_signature",
     timestamps: true,
+    indexes: [
+      {
+        name: "contract_signature_contract_signature_id_key",
+        unique: true,
+        fields: ["contract_signature_id"],
+      },
+    ],
   }
 );
 

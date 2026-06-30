@@ -13,7 +13,6 @@ const ProductQR = sequelize.define(
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      unique: true,
       field: "product_id",
       comment: "ID định danh duy nhất của product",
     },
@@ -50,6 +49,9 @@ const ProductQR = sequelize.define(
   {
     tableName: "product_qr",
     timestamps: true,
+    indexes: [
+      { name: "product_qr_product_id_key", unique: true, fields: ["product_id"] },
+    ],
   },
 );
 
