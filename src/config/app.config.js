@@ -58,7 +58,7 @@ const appConfig = {
       "roles",
       "permissions",
       "role_permissions",
-      "hub_clients",
+      // "hub_clients",
       "s3_folders",
       "s3_assets",
       "app_configs",
