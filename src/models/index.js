@@ -59,24 +59,6 @@ if (db.User && db.Role && db.Permission) {
   });
 }
 
-if (db.User && db.S3Asset) {
-  db.User.hasMany(db.S3Asset, {
-    foreignKey: "userId",
-    sourceKey: "userId",
-    as: "ownedAssets",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-
-  db.User.hasMany(db.S3Asset, {
-    foreignKey: "uploadedBy",
-    sourceKey: "userId",
-    as: "uploadedAssets",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-}
-
 db.sequelize = sequelize;
 
 module.exports = db;

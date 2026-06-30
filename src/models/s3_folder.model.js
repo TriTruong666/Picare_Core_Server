@@ -56,15 +56,4 @@ const S3Folder = sequelize.define(
   }
 );
 
-S3Folder.associate = (db) => {
-  // Một Folder chứa nhiều Assets
-  S3Folder.hasMany(db.S3Asset, {
-    foreignKey: "folderId",
-    sourceKey: "folderId",
-    as: "assets",
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE",
-  });
-};
-
 module.exports = S3Folder;

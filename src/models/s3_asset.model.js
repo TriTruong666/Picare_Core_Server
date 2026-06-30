@@ -5,7 +5,7 @@ const { ASSET_VISIBILITY, ASSET_TYPE, AssetVisibility } = require("../common/enu
 /**
  * S3Asset – Lưu metadata của từng file đã upload lên AWS S3.
  *
- * clientId chỉ là metadata nhận diện app, không ràng buộc khóa ngoại.
+ * Các UUID liên quan chỉ là metadata, không ràng buộc khóa ngoại.
  */
 const S3Asset = sequelize.define(
   "S3Asset",
@@ -36,11 +36,7 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true, // null = asset của hệ thống hoặc client-level
       field: "user_id",
-      references: {
-        model: "users",
-        key: "user_id",
-      },
-      comment: "FK → users.user_id – User sở hữu tài nguyên này (vd: avatar)",
+      comment: "ID user sở hữu tài nguyên này, không ràng buộc khóa ngoại",
     },
 
     // ── Thông tin lưu trữ S3 ────────────────────────────────────────────────
@@ -127,11 +123,7 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true,
       field: "folder_id",
-      references: {
-        model: "s3_folders",
-        key: "folder_id",
-      },
-      comment: "FK trỏ tới S3Folder",
+      comment: "ID thư mục logic, không ràng buộc khóa ngoại",
     },
 
     tags: {
@@ -151,11 +143,7 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true,
       field: "uploaded_by",
-      references: {
-        model: "users",
-        key: "user_id",
-      },
-      comment: "userId của người đã upload file",
+      comment: "ID người upload, không ràng buộc khóa ngoại",
     },
   },
   {
@@ -232,36 +220,6 @@ S3Asset.formatFileSize = (bytes) => {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
-};
-
-// ─── Associations ────────────────────────────────────────────────────────────
-S3Asset.associate = (db) => {
-  // S3Asset thuộc về một User (nếu là tài nguyên cá nhân)
-  S3Asset.belongsTo(db.User, {
-    foreignKey: "userId",
-    targetKey: "userId",
-    as: "user",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-
-  // S3Asset được upload bởi một User
-  S3Asset.belongsTo(db.User, {
-    foreignKey: "uploadedBy",
-    targetKey: "userId",
-    as: "uploader",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-
-  // S3Asset thuộc về một Folder
-  S3Asset.belongsTo(db.S3Folder, {
-    foreignKey: "folderId",
-    targetKey: "folderId",
-    as: "folder",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
 };
 
 module.exports = S3Asset;
