@@ -5,8 +5,7 @@ const { ASSET_VISIBILITY, ASSET_TYPE, AssetVisibility } = require("../common/enu
 /**
  * S3Asset – Lưu metadata của từng file đã upload lên AWS S3.
  *
- * Quan hệ:
- *   - BelongsTo HubClient (clientId) → Biết app nào sở hữu tài nguyên này.
+ * clientId chỉ là metadata nhận diện app, không ràng buộc khóa ngoại.
  */
 const S3Asset = sequelize.define(
   "S3Asset",
@@ -30,11 +29,7 @@ const S3Asset = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true, // null = asset của hệ thống hoặc cá nhân
       field: "client_id",
-      references: {
-        model: "hub_clients",
-        key: "client_id",
-      },
-      comment: "FK → hub_clients.client_id – App sử dụng tài nguyên này",
+      comment: "ID client sử dụng tài nguyên này, không ràng buộc khóa ngoại",
     },
 
     userId: {
@@ -241,15 +236,6 @@ S3Asset.formatFileSize = (bytes) => {
 
 // ─── Associations ────────────────────────────────────────────────────────────
 S3Asset.associate = (db) => {
-  // S3Asset thuộc về một HubClient
-  S3Asset.belongsTo(db.HubClient, {
-    foreignKey: "clientId",
-    targetKey: "clientId",
-    as: "client",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-
   // S3Asset thuộc về một User (nếu là tài nguyên cá nhân)
   S3Asset.belongsTo(db.User, {
     foreignKey: "userId",

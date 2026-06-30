@@ -59,16 +59,6 @@ if (db.User && db.Role && db.Permission) {
   });
 }
 
-if (db.HubClient && db.S3Asset) {
-  db.HubClient.hasMany(db.S3Asset, {
-    foreignKey: "clientId",
-    sourceKey: "clientId",
-    as: "assets",
-    onDelete: "SET NULL",
-    onUpdate: "CASCADE",
-  });
-}
-
 if (db.User && db.S3Asset) {
   db.User.hasMany(db.S3Asset, {
     foreignKey: "userId",
