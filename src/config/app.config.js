@@ -17,6 +17,9 @@ const ALLOWED_CLIENT_URL_2 =
 const ALLOWED_CLIENT_URL_3 =
   process.env.ALLOWED_CLIENT_URL_3 || "http://localhost:2345";
 
+const ALLOWED_CLIENT_URL_4 =
+  process.env.ALLOWED_CLIENT_URL_4 || "http://localhost:2345";
+
 const appConfig = {
   app: {
     name: "Picare Core Hub",
@@ -90,7 +93,12 @@ const appConfig = {
     level: process.env.LOG_LEVEL || "info",
   },
 
-  cors: [ALLOWED_CLIENT_URL_1, ALLOWED_CLIENT_URL_2, ALLOWED_CLIENT_URL_3],
+  cors: [
+    ALLOWED_CLIENT_URL_1,
+    ALLOWED_CLIENT_URL_2,
+    ALLOWED_CLIENT_URL_3,
+    ALLOWED_CLIENT_URL_4,
+  ],
 
   jwt: {
     secret: process.env.JWT_SECRET || null,
