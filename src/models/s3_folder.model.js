@@ -56,4 +56,13 @@ const S3Folder = sequelize.define(
   }
 );
 
+S3Folder.associate = (db) => {
+  S3Folder.hasMany(db.S3Asset, {
+    foreignKey: "folderId",
+    sourceKey: "folderId",
+    as: "assets",
+    constraints: false,
+  });
+};
+
 module.exports = S3Folder;

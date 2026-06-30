@@ -222,4 +222,13 @@ S3Asset.formatFileSize = (bytes) => {
   return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${units[i]}`;
 };
 
+S3Asset.associate = (db) => {
+  S3Asset.belongsTo(db.S3Folder, {
+    foreignKey: "folderId",
+    targetKey: "folderId",
+    as: "folder",
+    constraints: false,
+  });
+};
+
 module.exports = S3Asset;
