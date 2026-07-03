@@ -38,12 +38,10 @@ try {
 }
 
 try {
-  Object.assign(db, require("./liscence"));
+  Object.assign(db, require("./license"));
 } catch (err) {
-  console.warn("[MODELS]: Failed to load liscence models.", err.message);
+  console.warn("[MODELS]: Failed to load license models.", err.message);
 }
-
-
 
 Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
