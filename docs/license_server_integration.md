@@ -56,17 +56,17 @@ chat, hub-clients, s3, s3-folders, contracts, mail, product-qrs
 
 `auth`, `users` và `license/check` không bị feature gate để người dùng luôn đăng nhập và nhập/check key được.
 
-`serverConfig` khuyến nghị lưu dạng:
+`serverConfig` chỉ nhận array JSONB theo dạng:
 
 ```json
 [
-  { "value": "hub-clients", "active": false },
-  { "value": "s3", "active": true },
-  { "value": "mail", "active": true }
+  { "name": "hub-clients", "active": false },
+  { "name": "s3", "active": true },
+  { "name": "mail", "active": true }
 ]
 ```
 
-Format object cũ `{ "s3": true, "mail": false }` vẫn được hỗ trợ. Nếu Hub online và feature có `active=false`, API trả:
+Nếu Hub online và feature có `active=false`, API trả:
 
 ```json
 {
@@ -128,14 +128,17 @@ Cookie: token=<admin-session>
       "price": 10000000,
       "status": "active",
       "type": "server",
-      "serverConfig": { "s3": true, "mail": true }
+      "serverConfig": [
+        { "name": "s3", "active": true },
+        { "name": "mail", "active": true }
+      ]
     },
     {
       "name": "Company A OMS Server",
       "price": 5000000,
       "status": "active",
       "type": "server",
-      "serverConfig": {}
+      "serverConfig": []
     },
     {
       "name": "Company A OMS Client",

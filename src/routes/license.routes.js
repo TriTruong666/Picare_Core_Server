@@ -51,19 +51,14 @@ const router = express.Router();
  *         domain: { type: string, nullable: true }
  *         type: { type: string, enum: [client, server] }
  *         serverConfig:
+ *           type: array
  *           nullable: true
- *           oneOf:
- *             - type: object
- *               additionalProperties: true
- *               example:
- *                 hub-clients: false
- *             - type: array
- *               items:
- *                 type: object
- *                 required: [value, active]
- *                 properties:
- *                   value: { type: string, example: hub-clients }
- *                   active: { type: boolean, example: false }
+ *           items:
+ *             type: object
+ *             required: [name, active]
+ *             properties:
+ *               name: { type: string, example: hub-clients }
+ *               active: { type: boolean, example: false }
  *         note: { type: string, nullable: true }
  *     LicenseTicketInput:
  *       type: object

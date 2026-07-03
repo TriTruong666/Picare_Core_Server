@@ -8,16 +8,11 @@ const ticketInclude = { model: LicenseTicket, as: "tickets" };
 
 class LicenseService {
   static getEnabledFeatures(serverConfig) {
-    if (Array.isArray(serverConfig)) {
-      return serverConfig
-        .filter((item) => item && String(item.active).toLowerCase() === "true")
-        .map((item) => item.value)
-        .filter(Boolean);
-    }
-
-    return Object.entries(serverConfig || {})
-      .filter(([, active]) => String(active).toLowerCase() === "true")
-      .map(([value]) => value);
+    if (!Array.isArray(serverConfig)) return [];
+    return serverConfig
+      .filter((item) => item?.active === true)
+      .map((item) => item.name)
+      .filter(Boolean);
   }
 
   static pick(payload, fields) {

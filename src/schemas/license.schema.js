@@ -69,22 +69,16 @@ const softwareBodyRules = ({ optional = false, prefix = "" } = {}) => {
     body(field("serverConfig"))
       .optional({ nullable: true })
       .custom((value) => {
-        if (
-          !Array.isArray(value) &&
-          (typeof value !== "object" || value === null)
-        ) {
-          throw new Error("serverConfig phải là object hoặc array");
+        if (!Array.isArray(value)) {
+          throw new Error("serverConfig phải là array");
         }
-        if (
-          Array.isArray(value) &&
-          value.some(
-            (item) =>
-              !item ||
-              typeof item.value !== "string" ||
-              ![true, false, "true", "false"].includes(item.active),
-          )
-        ) {
-          throw new Error("Mỗi feature cần value và active boolean");
+        if (value.some((item) =>
+          !item ||
+          typeof item.name !== "string" ||
+          !item.name.trim() ||
+          typeof item.active !== "boolean"
+        )) {
+          throw new Error("Mỗi feature cần name và active kiểu boolean");
         }
         return true;
       }),
