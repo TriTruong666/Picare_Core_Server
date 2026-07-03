@@ -29,3 +29,20 @@ message CheckPermissionRequest {
 message CheckPermissionResponse {
   bool allowed = 1;
 }
+
+service LicenseService {
+  // Lấy trạng thái kích hoạt của client và danh sách các tính năng được mở khóa
+  rpc GetLicenseConfig (LicenseConfigRequest) returns (LicenseConfigResponse) {}
+}
+
+message LicenseConfigRequest {
+  string clientId = 1;
+}
+
+message LicenseConfigResponse {
+  bool active = 1;
+  string status = 2; // e.g. "active", "inactive"
+  repeated string enabledFeatures = 3; // e.g. ["s3", "mail", "chat"]
+  string message = 4;
+}
+

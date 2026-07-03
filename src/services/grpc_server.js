@@ -2,6 +2,7 @@ const grpc = require("@grpc/grpc-js");
 const protoLoader = require("@grpc/proto-loader");
 const path = require("path");
 const grpcAuthHandler = require("./grpc_auth.handler");
+const grpcLicenseHandler = require("./grpc_license.handler");
 
 // Đường dẫn file proto
 const PROTO_PATH = path.join(__dirname, "../../proto/auth.proto");
@@ -23,11 +24,17 @@ const authProto = grpc.loadPackageDefinition(packageDefinition).auth;
 function startGrpcServer(port = 50051) {
   const server = new grpc.Server();
 
-  // Đăng ký service
+  // Đăng ký service Auth
   server.addService(authProto.AuthService.service, {
     VerifyToken: grpcAuthHandler.verifyToken,
     CheckPermission: grpcAuthHandler.checkPermission,
   });
+
+  // Đăng ký service License
+  server.addService(authProto.LicenseService.service, {
+    GetLicenseConfig: grpcLicenseHandler.getLicenseConfig,
+  });
+
 
   server.bindAsync(
     `0.0.0.0:${port}`,
