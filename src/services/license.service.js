@@ -85,8 +85,40 @@ class LicenseService {
     };
   }
 
-  static async activateServer({ licenseKey, softwareId }) {
-    return this.checkServerAccess({ licenseKey, softwareId });
+  static async checkSoftwareAccess({ licenseKey, softwareId }) {
+    const software = await LicenseSoftware.findOne({
+      where: { id: softwareId },
+      include: [{
+        model: License,
+        as: "license",
+        where: { licenseKey },
+        attributes: ["id", "customerName", "customerEmail"],
+      }],
+    });
+
+    if (!software) throw new NotFoundException("License key hoặc software ID không hợp lệ");
+    if (software.status !== "active") {
+      throw new ForbiddenException("Phần mềm đã bị khoá hoặc đang có lỗi bản quyền");
+    }
+
+    return {
+      active: true,
+      status: software.status,
+      customer: {
+        id: software.license.id,
+        name: software.license.customerName,
+        email: software.license.customerEmail,
+      },
+      software: {
+        id: software.id,
+        name: software.name,
+        type: software.type,
+        domain: software.domain,
+        enabledFeatures: Object.entries(software.serverConfig || {})
+          .filter(([, enabled]) => enabled === true)
+          .map(([feature]) => feature),
+      },
+    };
   }
 
   static async updateSoftware(licenseId, softwareId, payload) {

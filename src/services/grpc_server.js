@@ -33,7 +33,7 @@ function startGrpcServer(port = 50051) {
   // Đăng ký service License
   server.addService(authProto.LicenseService.service, {
     GetLicenseConfig: grpcLicenseHandler.getLicenseConfig,
-    ActivateLicense: grpcLicenseHandler.activateLicense,
+    CheckLicense: grpcLicenseHandler.checkLicense,
   });
 
 

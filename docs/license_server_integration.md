@@ -1,135 +1,144 @@
-# Tích hợp License Control cho server khách hàng
+# License check cho phần mềm thương mại
 
-## 1. Nguyên tắc
+## Kiến trúc
 
-- Hub sinh duy nhất một `licenseKey` cho mỗi khách hàng.
-- Mỗi server là một record `LicenseSoftware` có `id`, `type=server`, `status` và `serverConfig` riêng.
-- Server khách hàng giữ `LICENSE_SOFTWARE_ID`; key khách nhập được lưu trong `app_configs.app_config.license.key` phía server.
-- Không lưu license key trong `localStorage`; browser không phải trusted environment và không có quyền quyết định server API được mở hay khoá.
-- Mỗi lần đồng bộ, server gửi key đã nhập và `softwareId`. Hub đối chiếu trực tiếp với `licenseKey`, đồng thời kiểm tra software thuộc đúng license, là loại `server` và đang `active`.
-- License middleware chỉ bảo vệ HTTP API. Nó không dừng Node.js process, worker, cron job, queue consumer hoặc socket server đang chạy ngầm.
+Một khách hàng có đúng một record `License` và một `licenseKey`. Mỗi sản phẩm khách mua là một record `LicenseSoftware` riêng, có `softwareId`, `type`, `status`, domain và cấu hình tương ứng.
 
-## 2. Luồng cấp và kích hoạt
+Ví dụ Công ty A:
 
-1. Admin tạo license cùng danh sách software qua `POST /api/v1/licenses`.
-2. Hub tự sinh `licenseKey`; mỗi software tự có `id`.
-3. Picare cấu hình `LICENSE_SOFTWARE_ID` cho đúng server và giao `licenseKey` cho khách hàng.
-4. Khách nhập key vào `POST /api/v1/license/activate` trên server thương mại.
-5. Server gọi `ActivateLicense` qua gRPC. Hub đối chiếu key với `licenseKey` và xác nhận software thuộc đúng license.
-6. Server chỉ lưu key vào `app_configs` khi Hub kích hoạt thành công.
-7. Middleware gọi `GetLicenseConfig`; Hub chỉ mở quyền khi key lưu phía Happycare khớp `licenseKey` trên Hub.
-8. Hub trả danh sách feature có giá trị `true` trong `serverConfig`.
+```text
+License Công ty A
+├── Core Server chạy ngầm (S3, mail, worker...)
+├── OMS Server
+└── OMS Client
+```
 
-## 3. Tạo license
+License check chỉ phục vụ UI xác định software hiện tại đã được cấp quyền hay chưa. Nó không phải middleware bảo vệ server và không thay thế authentication/authorization của OMS.
+
+## Luồng OMS
+
+1. Người dùng đăng nhập OMS bằng auth hiện tại.
+2. OMS Client đọc `licenseKey` và `softwareId` từ `localStorage`.
+3. Nếu thiếu một trong hai giá trị, UI hiển thị form yêu cầu nhập license.
+4. Client gọi endpoint có auth của OMS Server:
+
+```http
+POST /api/v1/license/check
+Cookie: token=<oms-session>
+Content-Type: application/json
+
+{
+  "licenseKey": "<key-của-công-ty-a>",
+  "softwareId": "<id-của-oms-client-hoặc-software-oms-cần-check>"
+}
+```
+
+5. OMS Server chuyển hai giá trị sang Picare Core Hub qua gRPC `CheckLicense`.
+6. Hub tìm software theo `softwareId`, đồng thời kiểm tra software thuộc License có đúng `licenseKey` và `status=active`.
+7. Hợp lệ: UI tiếp tục chức năng đồng bộ. Không hợp lệ: UI chặn màn hình/chức năng và yêu cầu nhập lại.
+
+`localStorage` chỉ dùng để giữ cấu hình UX. Quyết định hợp lệ luôn đến từ Hub; client không tự coi có key là hợp lệ.
+
+## Những thành phần không bị chặn
+
+- Core Server chạy ngầm vẫn chạy S3, mail, worker, cron và queue bình thường.
+- OMS Server vẫn chạy bình thường và tiếp tục dùng middleware `protect`/RBAC hiện có.
+- Không gắn license middleware toàn cục vào `/api/v1`.
+- Không gắn license middleware vào background job, socket hoặc server bootstrap.
+- Chỉ UI hoặc chức năng cụ thể chủ động gọi `/api/v1/license/check` trước khi tiếp tục.
+
+## Khi Picare Core Hub bị gián đoạn
+
+Server thương mại không được phụ thuộc khả năng sống của Hub:
+
+- gRPC check có deadline mặc định 3 giây (`LICENSE_GRPC_TIMEOUT_MS`).
+- Nếu Hub trả response hợp lệ với `active=false`, UI vẫn chặn vì license đã được xác nhận là sai hoặc bị khoá.
+- Nếu gRPC timeout, mất kết nối hoặc Hub sập, Happycare dùng chính sách fail-open và trả HTTP 200:
+
+```json
+{
+  "active": true,
+  "verified": false,
+  "hubAvailable": false,
+  "status": "verification_deferred",
+  "message": "Tạm thời không thể xác minh license; hệ thống tiếp tục hoạt động."
+}
+```
+
+- UI không chặn người dùng khi `status=verification_deferred`; có thể hiển thị cảnh báo nhỏ và thử check lại sau.
+- Server, auth, API, worker và job không dừng hoặc crash khi Hub mất kết nối.
+
+Đây là đánh đổi có chủ đích: trong lúc Hub offline không thể thu hồi license ngay, nhưng hệ thống khách hàng không bị downtime theo Hub.
+
+## Hub API
+
+### Tạo License cùng nhiều software
 
 ```http
 POST /api/v1/licenses
 Cookie: token=<admin-session>
-Content-Type: application/json
 ```
 
 ```json
 {
-  "customerName": "Happycare",
+  "customerName": "Công ty A",
   "customerPhone": "0900000000",
-  "customerEmail": "admin@happycare.vn",
+  "customerEmail": "admin@company-a.vn",
   "software": [
     {
-      "name": "Happycare Core API",
+      "name": "Company A Core Server",
       "price": 10000000,
       "status": "active",
-      "domain": "https://core.happycare.vn",
       "type": "server",
-      "serverConfig": {
-        "chat": true,
-        "s3": true,
-        "s3-folders": true,
-        "contracts": false,
-        "mail": true,
-        "product-qrs": true
-      }
+      "serverConfig": { "s3": true, "mail": true }
     },
     {
-      "name": "Happycare Worker API",
+      "name": "Company A OMS Server",
       "price": 5000000,
       "status": "active",
       "type": "server",
-      "serverConfig": { "jobs": true }
+      "serverConfig": {}
     },
     {
-      "name": "Happycare Web",
-      "price": 0,
+      "name": "Company A OMS Client",
+      "price": 3000000,
       "status": "active",
-      "domain": "https://hub.happycare.vn",
       "type": "client"
     }
   ]
 }
 ```
 
-Chỉ hai record `server` được dùng để kiểm soát API. Record `client` chỉ phục vụ quản lý thương mại.
+Hub trả một `licenseKey` và ba `software.id`. Picare cấp cho khách đúng cặp key/ID mà UI cần kiểm tra.
 
-### Trường hợp 2 server và 1 client
-
-- `client`: chỉ hiển thị form nhập key và gọi API activation; không tự quyết định quyền truy cập.
-- `main server`: lưu key trong `app_configs`, dùng software ID của main server và chặn toàn bộ `/api/v1/*` khi chưa kích hoạt.
-- `background server`: tiếp tục chạy worker/job bình thường. Nếu không public HTTP API thì không gắn middleware license. Nếu nó có API riêng cần bảo vệ, cấu hình software ID riêng và gắn middleware trên API của server đó.
-- Nếu hai server dùng chung database, background server có thể đọc cùng key trong `app_configs`; không cần khách nhập key lần thứ hai.
-
-## 4. Kiểm tra qua HTTP
+### Kiểm tra trực tiếp
 
 ```http
 POST /api/v1/licenses/check
 Content-Type: application/json
-```
 
-```json
 {
-  "licenseKey": "<LICENSE_KEY>",
-  "softwareId": "<LICENSE_SOFTWARE_ID>"
+  "licenseKey": "<license-key>",
+  "softwareId": "<software-id>"
 }
 ```
 
-Endpoint HTTP phù hợp cho kiểm tra cài đặt hoặc activation UI nội bộ. Server-to-server runtime dùng gRPC.
+Endpoint chấp nhận cả software `client` và `server`. Với software server, response có thể kèm `enabledFeatures` lấy từ `serverConfig`.
 
-## 5. Contract gRPC
+## Quy tắc dữ liệu
 
-```protobuf
-message LicenseConfigRequest {
-  string licenseKey = 1;
-  string softwareId = 2;
-}
-```
+- `licenseKey` unique và được Hub tự sinh.
+- `softwareId` phải thuộc đúng License của key được gửi lên.
+- Software `status=error` hoặc không tồn tại bị từ chối.
+- Key của Công ty A kết hợp software ID của Công ty B bị từ chối.
+- Không cần field key thứ hai trong bảng `licenses`.
+- Không ghi license key vào log.
 
-Server khách hàng cấu hình:
+## Áp dụng cho công ty khác
 
-```env
-HUB_GRPC_HOST=picare-core-hub:50051
-LICENSE_SOFTWARE_ID=<id-cua-record-server>
-LICENSE_CACHE_TTL_MS=60000
-LICENSE_OFFLINE_GRACE_MS=300000
-```
-
-Trong Docker/Kubernetes, `HUB_GRPC_HOST` phải là DNS nội bộ/service name, không dùng `localhost` nếu Hub chạy ở container/pod khác.
-
-## 6. Chính sách lỗi
-
-- Key sai, software không thuộc license, `type!=server`, hoặc `status=error`: chặn API (`403`).
-- Feature không có hoặc bằng `false`: chặn route tương ứng (`403`).
-- Hub tạm mất kết nối: dùng bản cache hợp lệ gần nhất tối đa `LICENSE_OFFLINE_GRACE_MS`.
-- Chưa từng lấy được license hợp lệ hoặc cache quá grace period: chặn API (`503`).
-- Không dùng fallback `active=true`; cách đó làm chức năng thu hồi license mất tác dụng.
-
-Các endpoint health check và activation nội bộ có thể được miễn middleware để hỗ trợ chẩn đoán, nhưng phải được bảo vệ riêng.
-
-Trong Happycare, `/health` và `/api/v1/license/activate` nằm ngoài license guard. Tất cả HTTP route còn lại dưới `/api/v1` đi qua `requireLicense`. Middleware này không được đặt trong bootstrap worker hoặc queue.
-
-## 7. Checklist áp dụng cho công ty mới
-
-1. Copy cùng phiên bản protobuf từ Hub.
-2. Thêm gRPC client đọc bốn biến môi trường ở trên.
-3. Gắn `checkFeature("feature-name")` trước từng route module cần kiểm soát.
-4. Tên feature trên route phải trùng chính xác key trong `serverConfig`.
-5. Không log key khách nhập và không trả lại key trong response.
-6. Bảo vệ kết nối production bằng private network và TLS/mTLS; không expose port gRPC trực tiếp ra Internet.
-7. Test đủ: key sai, software sai license, client software, status error, feature false, Hub offline và cache hết hạn.
+1. Đồng bộ cùng phiên bản protobuf với Hub.
+2. Tạo endpoint server `POST /api/v1/license/check` có middleware auth sẵn có.
+3. Endpoint nhận `licenseKey` và `softwareId`, không lấy cố định từ `.env`.
+4. Server gọi gRPC `CheckLicense` và trả kết quả cho UI.
+5. UI lưu cặp giá trị vào localStorage và gọi check sau khi đăng nhập hoặc trước chức năng cần license.
+6. Không thay đổi middleware auth, worker hoặc luồng chạy của server.

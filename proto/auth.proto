@@ -33,7 +33,7 @@ message CheckPermissionResponse {
 service LicenseService {
   // Lấy trạng thái kích hoạt của client và danh sách các tính năng được mở khóa
   rpc GetLicenseConfig (LicenseConfigRequest) returns (LicenseConfigResponse) {}
-  rpc ActivateLicense (LicenseConfigRequest) returns (LicenseConfigResponse) {}
+  rpc CheckLicense (LicenseConfigRequest) returns (LicenseConfigResponse) {}
 }
 
 message LicenseConfigRequest {

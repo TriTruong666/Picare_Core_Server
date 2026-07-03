@@ -4,7 +4,6 @@ const { protect, restrictTo } = require("../middlewares/auth.middleware");
 const {
   createLicenseSchema,
   checkLicenseSchema,
-  activateLicenseSchema,
   licenseIdSchema,
   updateSoftwareSchema,
 } = require("../schemas/license.schema");
@@ -32,7 +31,6 @@ const router = express.Router();
  *       403: { description: Server bị khoá }
  */
 router.post("/check", checkLicenseSchema, LicenseController.check);
-router.post("/activate", activateLicenseSchema, LicenseController.activate);
 
 router.use(protect, restrictTo("admin"));
 

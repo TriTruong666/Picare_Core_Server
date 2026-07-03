@@ -38,8 +38,6 @@ const checkLicenseSchema = [
   body("softwareId").isUUID(4).withMessage("Software ID không hợp lệ"),
 ];
 
-const activateLicenseSchema = [...checkLicenseSchema];
-
 const licenseIdSchema = [param("licenseId").isUUID(4).withMessage("License ID không hợp lệ")];
 
 const softwareIdSchema = [
@@ -61,7 +59,6 @@ module.exports = {
   LicenseDTO,
   createLicenseSchema,
   checkLicenseSchema,
-  activateLicenseSchema,
   licenseIdSchema,
   updateSoftwareSchema,
 };

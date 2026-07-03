@@ -4,7 +4,7 @@ const LicenseService = require("./license.service");
  * Handler cho các RPC của LicenseService
  */
 const grpcLicenseHandler = {
-  activateLicense: async (call, callback) => {
+  checkLicense: async (call, callback) => {
     try {
       const { licenseKey, softwareId } = call.request;
       if (!licenseKey || !softwareId) {
@@ -16,12 +16,12 @@ const grpcLicenseHandler = {
         });
       }
 
-      const result = await LicenseService.activateServer({ licenseKey, softwareId });
+      const result = await LicenseService.checkSoftwareAccess({ licenseKey, softwareId });
       return callback(null, {
         active: true,
         status: result.status,
         enabledFeatures: result.software.enabledFeatures,
-        message: "Kích hoạt license thành công.",
+        message: "License hợp lệ.",
         customerName: result.customer.name,
         softwareName: result.software.name,
       });

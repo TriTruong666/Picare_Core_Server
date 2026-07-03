@@ -35,19 +35,8 @@ class LicenseController {
       validate(req);
       return ResponseHandler.success(
         res,
-        await LicenseService.checkServerAccess(req.body),
+        await LicenseService.checkSoftwareAccess(req.body),
         "License hợp lệ",
-      );
-    } catch (error) { next(error); }
-  }
-
-  static async activate(req, res, next) {
-    try {
-      validate(req);
-      return ResponseHandler.success(
-        res,
-        await LicenseService.activateServer(req.body),
-        "Kích hoạt license thành công",
       );
     } catch (error) { next(error); }
   }
