@@ -7,6 +7,7 @@ const { PDFDocument: PDFLibDocument, StandardFonts, rgb } = require("pdf-lib");
 const { pdflibAddPlaceholder } = require("@signpdf/placeholder-pdf-lib");
 const sharp = require("sharp");
 const { ContractTypeRegistry } = require("../contracts");
+const ErrorCodes = require("../common/exceptions/error_codes");
 const {
   normalizeProduct: normalizeContractProduct,
 } = require("../contracts/common/contract-input.normalizer");
@@ -398,7 +399,7 @@ async function getWatermarkLogoDataUri(logoPath) {
         })
         .catch((error) => {
           if (error?.code === "ENOENT") {
-            throw new Error(`Watermark logo asset not found at ${logoPath}`);
+            throw new Error(ErrorCodes.PDF_WATERMARK_LOGO_NOT_FOUND(logoPath).message);
           }
 
           throw error;
@@ -770,7 +771,7 @@ async function findFontPath() {
   }
 
   throw new Error(
-    "No Unicode font found. Set CONTRACT_FONT_PATH to a .ttf font file.",
+    ErrorCodes.PDF_UNICODE_FONT_NOT_FOUND.message,
   );
 }
 
@@ -2039,7 +2040,7 @@ class ContractPdfService {
     const byteRangeStart = buffer.lastIndexOf(byteRangeToken);
 
     if (byteRangeStart < 0) {
-      throw new Error("PDF signature placeholder is missing /ByteRange.");
+      throw new Error(ErrorCodes.PDF_BYTE_RANGE_MISSING.message);
     }
 
     const byteRangeEnd = buffer.indexOf("]", byteRangeStart);
@@ -2050,21 +2051,21 @@ class ContractPdfService {
     const contentsStart = buffer.indexOf(contentsTag, byteRangeEnd);
 
     if (contentsStart < 0) {
-      throw new Error("PDF signature placeholder is missing /Contents.");
+      throw new Error(ErrorCodes.PDF_CONTENTS_MISSING.message);
     }
 
     const hexStart = buffer.indexOf("<", contentsStart);
     const hexEnd = buffer.indexOf(">", hexStart);
 
     if (hexStart < 0 || hexEnd < 0) {
-      throw new Error("PDF signature /Contents hex placeholder is invalid.");
+      throw new Error(ErrorCodes.PDF_CONTENTS_HEX_INVALID.message);
     }
 
     const byteRange = [0, hexStart, hexEnd + 1, buffer.length - hexEnd - 1];
     const replacement = `/ByteRange [${byteRange.join(" ")}]`;
 
     if (replacement.length > placeholder.length) {
-      throw new Error("PDF ByteRange replacement is longer than placeholder.");
+      throw new Error(ErrorCodes.PDF_BYTE_RANGE_TOO_LONG.message);
     }
 
     const preparedBuffer = Buffer.from(buffer);
@@ -2137,12 +2138,12 @@ class ContractPdfService {
 
     if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
       throw new Error(
-        "PDF structure is not supported for incremental signing.",
+        ErrorCodes.PDF_INCREMENTAL_STRUCTURE_UNSUPPORTED.message,
       );
     }
 
     if (!widgetMatches.length || !acroFormMatch) {
-      throw new Error("PDF signature form is missing for incremental signing.");
+      throw new Error(ErrorCodes.PDF_SIGNATURE_FORM_MISSING.message);
     }
 
     const maxObjectNumber = Math.max(
@@ -2163,7 +2164,7 @@ class ContractPdfService {
     );
 
     if (!pageBody || !acroFormBody) {
-      throw new Error("PDF page or AcroForm object is missing.");
+      throw new Error(ErrorCodes.PDF_PAGE_OR_ACROFORM_MISSING.message);
     }
 
     const widgetRef = `${widgetObjectNumber} 0 R`;
@@ -2437,12 +2438,12 @@ ${xrefOffset}
     const placeholderLength = contentsHexEnd - contentsHexStart;
 
     if (!/^[0-9a-fA-F]+$/.test(cleanSignatureHex)) {
-      throw new Error("signatureHex phải là chuỗi hex hợp lệ.");
+      throw new Error(ErrorCodes.PDF_SIGNATURE_HEX_INVALID.message);
     }
 
     if (cleanSignatureHex.length > placeholderLength) {
       throw new Error(
-        `signatureHex dài hơn vùng placeholder (${cleanSignatureHex.length}/${placeholderLength}).`,
+        ErrorCodes.PDF_SIGNATURE_HEX_TOO_LONG(cleanSignatureHex.length, placeholderLength).message,
       );
     }
 
@@ -2492,12 +2493,12 @@ ${xrefOffset}
 
     if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
       throw new Error(
-        "PDF structure is not supported for incremental handwritten signing.",
+        ErrorCodes.PDF_HANDWRITTEN_STRUCTURE_UNSUPPORTED.message,
       );
     }
 
     if (!widgetMatches.length) {
-      throw new Error("PDF signature page is missing for incremental handwritten signing.");
+      throw new Error(ErrorCodes.PDF_SIGNATURE_PAGE_MISSING.message);
     }
 
     const maxObjectNumber = Math.max(
@@ -2512,7 +2513,7 @@ ${xrefOffset}
     const pageBody = this.getPdfObjectBody(sourceBuffer, pageObjectNumber);
 
     if (!pageBody) {
-      throw new Error("PDF page object is missing for incremental handwritten signing.");
+      throw new Error(ErrorCodes.PDF_PAGE_OBJECT_MISSING.message);
     }
 
     const resolvedWidgetRect = widgetRect || getSignatureWidgetRect(signerType);

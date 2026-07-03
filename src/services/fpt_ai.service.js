@@ -1,5 +1,6 @@
 const appConfig = require("../config/app.config");
 const { BadRequestException } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 class FptAiService {
   static getIdRecognitionConfig() {
@@ -7,11 +8,11 @@ class FptAiService {
     const url = appConfig.fptAi?.idRecognitionUrl;
 
     if (!apiKey) {
-      throw new BadRequestException("Chưa cấu hình FPT_AI_API_KEY");
+      throw new BadRequestException(ErrorCodes.FPT_AI_API_KEY_MISSING);
     }
 
     if (!url) {
-      throw new BadRequestException("Chưa cấu hình FPT_AI_ID_RECOGNITION_URL");
+      throw new BadRequestException(ErrorCodes.FPT_AI_URL_MISSING);
     }
 
     return { apiKey, url };
@@ -19,7 +20,7 @@ class FptAiService {
 
   static async recognizeVietnamIdCard(file) {
     if (!file?.buffer) {
-      throw new BadRequestException("File ảnh CMND/CCCD không hợp lệ");
+      throw new BadRequestException(ErrorCodes.FPT_AI_INVALID_ID_IMAGE);
     }
 
     const { apiKey, url } = this.getIdRecognitionConfig();
@@ -42,11 +43,11 @@ class FptAiService {
     try {
       payload = await response.json();
     } catch (error) {
-      throw new BadRequestException("FPT AI trả về response không phải JSON");
+      throw new BadRequestException(ErrorCodes.FPT_AI_INVALID_RESPONSE);
     }
 
     if (!response.ok) {
-      throw new BadRequestException("Gọi FPT AI thất bại", {
+      throw new BadRequestException(ErrorCodes.FPT_AI_REQUEST_FAILED, {
         status: response.status,
         payload,
       });
@@ -54,7 +55,7 @@ class FptAiService {
 
     if (payload.errorCode !== 0) {
       throw new BadRequestException(
-        payload.errorMessage || "FPT AI không nhận diện được ảnh CMND/CCCD",
+        payload.errorMessage || ErrorCodes.FPT_AI_RECOGNITION_FAILED,
         payload
       );
     }

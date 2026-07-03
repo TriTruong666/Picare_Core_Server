@@ -9,6 +9,7 @@ const S3Service = require("./s3.service");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 const { ProductQRDTO } = require("../schemas/product_qr.schema");
 const { NotFoundException } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 const LOGO_PATH = path.join(process.cwd(), "picare_logo_light.svg");
 const QR_FOLDER = "product_qr";
@@ -179,7 +180,7 @@ class ProductQRService {
     });
 
     if (!productQR) {
-      throw new NotFoundException("Không tìm thấy QR sản phẩm");
+      throw new NotFoundException(ErrorCodes.QR_PRODUCT_NOT_FOUND);
     }
 
     return productQR;

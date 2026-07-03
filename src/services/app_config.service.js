@@ -1,4 +1,5 @@
 const AppConfig = require("../models/app_config.model");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 class AppConfigService {
   constructor() {
@@ -10,7 +11,7 @@ class AppConfigService {
 
     const config = await AppConfig.findOne({ where: { key: "main" } });
     if (!config) {
-      throw new Error("Main configuration not found in database");
+      throw new Error(ErrorCodes.APP_CONFIG_NOT_FOUND.message);
     }
 
     this.cache = config;

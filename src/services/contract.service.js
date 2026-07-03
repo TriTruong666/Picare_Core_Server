@@ -85,40 +85,40 @@ function getSignedContractFolder(status) {
 
 function getPublishContractErrorMessage(status) {
   if (status === CONTRACT_STATUS.UNSIGNED) {
-    return "Chỉ có thể phát hành hợp đồng đang ở trạng thái unsigned";
+    return ErrorCodes.CONTRACT_UNSIGNED_PUBLISH_ONLY;
   }
 
   if (status === CONTRACT_STATUS.OWNER_SIGNED) {
-    return "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed";
+    return ErrorCodes.CONTRACT_OWNER_SIGNED_PUBLISH_ONLY;
   }
 
   if (status === CONTRACT_STATUS.COMPLETED) {
-    return "Chỉ có thể publish hợp đồng đang ở trạng thái completed";
+    return ErrorCodes.CONTRACT_COMPLETED_PUBLISH_ONLY;
   }
 
-  return "Trạng thái hợp đồng không hợp lệ để publish";
+  return ErrorCodes.CONTRACT_PUBLISH_STATUS_INVALID;
 }
 
 function ensureContractSigningState(contract, signerType) {
   if (contract.status === CONTRACT_STATUS.DRAFT) {
     throw new BadRequestException(
-      "Hợp đồng đang ở trạng thái nháp, cần phát hành bản unsigned trước khi ký",
+      ErrorCodes.CONTRACT_DRAFT_MUST_BE_PUBLISHED,
     );
   }
 
   if (contract.status === CONTRACT_STATUS.COMPLETED) {
-    throw new BadRequestException("Hợp đồng đã hoàn tất ký");
+    throw new BadRequestException(ErrorCodes.CONTRACT_SIGNING_COMPLETED);
   }
 
   if (contract.status === CONTRACT_STATUS.UNSIGNED && signerType !== "owner") {
-    throw new BadRequestException("Owner phải ký trước");
+    throw new BadRequestException(ErrorCodes.CONTRACT_OWNER_MUST_SIGN_FIRST);
   }
 
   if (
     contract.status === CONTRACT_STATUS.OWNER_SIGNED &&
     signerType !== "partner"
   ) {
-    throw new BadRequestException("Partner phải ký sau khi owner đã ký");
+    throw new BadRequestException(ErrorCodes.CONTRACT_PARTNER_MUST_SIGN_AFTER_OWNER);
   }
 }
 
@@ -135,7 +135,7 @@ function getNextContractStatus(contract, signerType) {
 function ensurePartnerSignerTypeSelected(contract) {
   if (!contract.signerType) {
     throw new BadRequestException(
-      "Đối tác phải cập nhật signerType trước khi thực hiện flow ký",
+      ErrorCodes.CONTRACT_SIGNER_TYPE_REQUIRED,
     );
   }
 }
@@ -151,7 +151,7 @@ function ensurePartnerCredentialReady(contract) {
       !credential.second_identification_image
     ) {
       throw new BadRequestException(
-        "Đối tác cá nhân phải upload đủ 2 mặt CMND/CCCD trước khi ký tay",
+        ErrorCodes.CONTRACT_INDIVIDUAL_ID_REQUIRED,
       );
     }
   }
@@ -161,27 +161,27 @@ function ensurePartnerCredentialReady(contract) {
 
     if (!credential.business_license) {
       throw new BadRequestException(
-        "Đối tác tổ chức phải upload giấy phép kinh doanh trước khi ký số",
+        ErrorCodes.CONTRACT_ORGANIZATION_LICENSE_REQUIRED,
       );
     }
   }
 }
 
-function assertImageOrPdfFile(file, message = "File phải là ảnh hoặc PDF") {
+function assertImageOrPdfFile(file, errorCode = ErrorCodes.CONTRACT_IMAGE_OR_PDF_REQUIRED) {
   const mimeType = String(file?.mimetype || "").toLowerCase();
   const isImage = mimeType.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
 
   if (!file?.buffer || (!isImage && !isPdf)) {
-    throw new BadRequestException(message);
+    throw new BadRequestException(errorCode);
   }
 }
 
-function assertImageFile(file, message = "File phải là ảnh") {
+function assertImageFile(file, errorCode = ErrorCodes.CONTRACT_IMAGE_REQUIRED) {
   const mimeType = String(file?.mimetype || "").toLowerCase();
 
   if (!file?.buffer || !mimeType.startsWith("image/")) {
-    throw new BadRequestException(message);
+    throw new BadRequestException(errorCode);
   }
 }
 
@@ -554,7 +554,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
         throw new BadRequestException(
-          "Chỉ có thể tải bản hợp đồng nháp khi hợp đồng đang ở trạng thái draft",
+          ErrorCodes.CONTRACT_DRAFT_DOWNLOAD_ONLY,
         );
       }
 
@@ -672,7 +672,7 @@ class ContractService {
       file.mimetype !== "application/pdf" ||
       file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-"
     ) {
-      throw new BadRequestException("File hợp đồng phải là PDF hợp lệ");
+      throw new BadRequestException(ErrorCodes.CONTRACT_PDF_INVALID);
     }
 
     const normalizedContractNumber = String(contractNumber || "").trim();
@@ -683,7 +683,7 @@ class ContractService {
     });
 
     if (existingContract) {
-      throw new BadRequestException("Số hợp đồng đã tồn tại");
+      throw new BadRequestException(ErrorCodes.CONTRACT_NUMBER_TAKEN);
     }
 
     const transaction = await Contract.sequelize.transaction();
@@ -769,7 +769,7 @@ class ContractService {
       }
 
       if (error.name === "SequelizeUniqueConstraintError") {
-        throw new BadRequestException("Số hợp đồng đã tồn tại");
+        throw new BadRequestException(ErrorCodes.CONTRACT_NUMBER_TAKEN);
       }
 
       throw error;
@@ -789,7 +789,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
         throw new BadRequestException(
-          "Chỉ có thể phát hành hợp đồng đang ở trạng thái nháp",
+          ErrorCodes.CONTRACT_DRAFT_PUBLISH_ONLY,
         );
       }
 
@@ -878,7 +878,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
         throw new BadRequestException(
-          "Chỉ có thể publish hợp đồng đang ở trạng thái owner_signed",
+          ErrorCodes.CONTRACT_OWNER_SIGNED_PUBLISH_ONLY,
         );
       }
 
@@ -888,7 +888,7 @@ class ContractService {
 
       if (latestDocument.status !== CONTRACT_STATUS.OWNER_SIGNED) {
         throw new BadRequestException(
-          "Phiên bản hợp đồng mới nhất không ở trạng thái owner_signed",
+          ErrorCodes.CONTRACT_LATEST_NOT_OWNER_SIGNED,
         );
       }
 
@@ -959,7 +959,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.COMPLETED) {
         throw new BadRequestException(
-          "Chỉ có thể publish hợp đồng đang ở trạng thái completed",
+          ErrorCodes.CONTRACT_COMPLETED_PUBLISH_ONLY,
         );
       }
 
@@ -969,7 +969,7 @@ class ContractService {
 
       if (latestDocument.status !== CONTRACT_STATUS.COMPLETED) {
         throw new BadRequestException(
-          "Phiên bản hợp đồng mới nhất không ở trạng thái completed",
+          ErrorCodes.CONTRACT_LATEST_NOT_COMPLETED,
         );
       }
 
@@ -1040,7 +1040,7 @@ class ContractService {
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
         throw new BadRequestException(
-          "Chỉ được cập nhật hợp đồng ở trạng thái draft",
+          ErrorCodes.CONTRACT_DRAFT_UPDATE_ONLY,
         );
       }
 
@@ -1169,7 +1169,7 @@ class ContractService {
 
         if (contract.signerType === "individual") {
           throw new BadRequestException(
-            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay",
+            ErrorCodes.CONTRACT_INDIVIDUAL_DIGITAL_SIGNATURE_UNAVAILABLE,
           );
         }
       }
@@ -1268,14 +1268,14 @@ class ContractService {
 
         if (contract.signerType === "individual") {
           throw new BadRequestException(
-            "Đối tác cá nhân không có chữ ký số, vui lòng sử dụng flow ký tay",
+            ErrorCodes.CONTRACT_INDIVIDUAL_DIGITAL_SIGNATURE_UNAVAILABLE,
           );
         }
       }
 
       if (signature.status !== "pending") {
         throw new BadRequestException(
-          "Phiên ký không còn ở trạng thái pending",
+          ErrorCodes.CONTRACT_SIGNING_SESSION_NOT_PENDING,
         );
       }
 
@@ -1375,7 +1375,7 @@ class ContractService {
 
     if (contract.status === CONTRACT_STATUS.COMPLETED) {
       throw new BadRequestException(
-        "Hợp đồng đã hoàn tất, không thể cập nhật signerType",
+        ErrorCodes.CONTRACT_SIGNER_TYPE_UPDATE_COMPLETED,
       );
     }
 
@@ -1399,7 +1399,7 @@ class ContractService {
   }) {
     if (!firstIdentificationImage || !secondIdentificationImage) {
       throw new BadRequestException(
-        "Cần upload đủ 2 ảnh CMND/CCCD mặt trước và mặt sau",
+        ErrorCodes.CONTRACT_TWO_ID_IMAGES_REQUIRED,
       );
     }
 
@@ -1411,13 +1411,13 @@ class ContractService {
 
     if (!contract.signerType) {
       throw new BadRequestException(
-        "Vui lòng cập nhật signerType trước khi upload hồ sơ cá nhân",
+        ErrorCodes.CONTRACT_SIGNER_TYPE_REQUIRED_FOR_INDIVIDUAL,
       );
     }
 
     if (contract.signerType !== "individual") {
       throw new BadRequestException(
-        "Chỉ signerType individual mới được upload CMND/CCCD",
+        ErrorCodes.CONTRACT_INDIVIDUAL_UPLOAD_ONLY,
       );
     }
 
@@ -1427,11 +1427,11 @@ class ContractService {
 
     assertImageFile(
       firstIdentificationImage,
-      "Ảnh mặt trước CMND/CCCD không hợp lệ",
+      ErrorCodes.CONTRACT_ID_FRONT_IMAGE_INVALID,
     );
     assertImageFile(
       secondIdentificationImage,
-      "Ảnh mặt sau CMND/CCCD không hợp lệ",
+      ErrorCodes.CONTRACT_ID_BACK_IMAGE_INVALID,
     );
 
     const [firstUpload, secondUpload] = await Promise.all([
@@ -1507,7 +1507,7 @@ class ContractService {
     uploadedBy = null,
   }) {
     if (!businessLicense) {
-      throw new BadRequestException("Giấy phép kinh doanh là bắt buộc");
+      throw new BadRequestException(ErrorCodes.CONTRACT_BUSINESS_LICENSE_REQUIRED);
     }
 
     const contract = await Contract.findOne({ where: { contractId } });
@@ -1518,34 +1518,34 @@ class ContractService {
 
     if (!contract.signerType) {
       throw new BadRequestException(
-        "Vui lòng cập nhật signerType trước khi upload hồ sơ tổ chức",
+        ErrorCodes.CONTRACT_SIGNER_TYPE_REQUIRED_FOR_ORGANIZATION,
       );
     }
 
     if (contract.signerType !== "organization") {
       throw new BadRequestException(
-        "Chỉ signerType organization mới được upload hồ sơ tổ chức",
+        ErrorCodes.CONTRACT_ORGANIZATION_UPLOAD_ONLY,
       );
     }
 
     assertImageOrPdfFile(
       businessLicense,
-      "Giấy phép kinh doanh phải là file ảnh hoặc PDF",
+      ErrorCodes.CONTRACT_BUSINESS_LICENSE_FILE_INVALID,
     );
 
     if (powerOfAttorney) {
       assertImageOrPdfFile(
         powerOfAttorney,
-        "Giấy uỷ quyền phải là file ảnh hoặc PDF",
+        ErrorCodes.CONTRACT_POWER_OF_ATTORNEY_FILE_INVALID,
       );
     }
 
     if (gdp) {
-      assertImageOrPdfFile(gdp, "GDP phải là file ảnh hoặc PDF");
+      assertImageOrPdfFile(gdp, ErrorCodes.CONTRACT_GDP_FILE_INVALID);
     }
 
     if (ccddk) {
-      assertImageOrPdfFile(ccddk, "CCDDK phải là file ảnh hoặc PDF");
+      assertImageOrPdfFile(ccddk, ErrorCodes.CONTRACT_CCDDK_FILE_INVALID);
     }
 
     const oldCredentialS3Keys = new Set(
@@ -1615,7 +1615,7 @@ class ContractService {
   static async deletePartnerCredential({ contractId, credentialType }) {
     if (!["individual", "organization"].includes(credentialType)) {
       throw new BadRequestException(
-        "credentialType ch\u1ec9 nh\u1eadn individual ho\u1eb7c organization",
+        ErrorCodes.CONTRACT_CREDENTIAL_TYPE_INVALID,
       );
     }
 
@@ -1627,7 +1627,7 @@ class ContractService {
 
     if (contract.status === CONTRACT_STATUS.COMPLETED) {
       throw new BadRequestException(
-        "H\u1ee3p \u0111\u1ed3ng \u0111\u00e3 ho\u00e0n t\u1ea5t, kh\u00f4ng th\u1ec3 xo\u00e1 h\u1ed3 s\u01a1 k\u00fd",
+        ErrorCodes.CONTRACT_CREDENTIAL_DELETE_COMPLETED,
       );
     }
 
@@ -1668,7 +1668,7 @@ class ContractService {
     signatureImage,
     uploadedBy = null,
   }) {
-    assertImageFile(signatureImage, "Ảnh chữ ký tay không hợp lệ");
+    assertImageFile(signatureImage, ErrorCodes.CONTRACT_HANDWRITTEN_SIGNATURE_INVALID);
 
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.findOne({
@@ -1688,25 +1688,25 @@ class ContractService {
 
       if (!resolvedPartnerSignerType) {
         throw new BadRequestException(
-          "Đối tác phải cập nhật signerType trước khi thực hiện flow ký tay",
+          ErrorCodes.CONTRACT_HANDWRITTEN_SIGNER_TYPE_REQUIRED,
         );
       }
 
       if (!["individual", "organization"].includes(resolvedPartnerSignerType)) {
         throw new BadRequestException(
-          "signerType chỉ nhận individual hoặc organization",
+          ErrorCodes.CONTRACT_SIGNER_TYPE_INVALID,
         );
       }
 
       if (contract.signerType !== resolvedPartnerSignerType) {
         throw new BadRequestException(
-          "signerType không khớp với loại đối tác đã cập nhật trên hợp đồng",
+          ErrorCodes.CONTRACT_SIGNER_TYPE_MISMATCH,
         );
       }
 
       if (resolvedPartnerSignerType !== "individual") {
         throw new BadRequestException(
-          "Đối tác tổ chức phải sử dụng flow ký số",
+          ErrorCodes.CONTRACT_ORGANIZATION_DIGITAL_FLOW_REQUIRED,
         );
       }
 
@@ -2063,7 +2063,7 @@ class ContractService {
 
     if (contract.status !== CONTRACT_STATUS.OWNER_SIGNED) {
       throw new BadRequestException(
-        "Chỉ có thể sinh link ký cho đối tác khi hợp đồng ở trạng thái đối tác ký (owner_signed)",
+        ErrorCodes.CONTRACT_PARTNER_SIGN_LINK_STATE_INVALID,
       );
     }
 

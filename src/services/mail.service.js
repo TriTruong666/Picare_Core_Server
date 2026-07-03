@@ -21,10 +21,7 @@ function assertMailConfig() {
   ].filter(Boolean);
 
   if (missingFields.length > 0) {
-    throw new BaseException({
-      ...ErrorCodes.BAD_REQUEST,
-      message: `Thiếu cấu hình SMTP: ${missingFields.join(", ")}`,
-    });
+    throw new BaseException(ErrorCodes.MAIL_SMTP_CONFIG_MISSING(missingFields));
   }
 }
 
@@ -80,15 +77,15 @@ class MailService {
     from,
   }) {
     if (!to) {
-      throw new BadRequestException("Trường to là bắt buộc.");
+      throw new BadRequestException(ErrorCodes.MAIL_TO_REQUIRED);
     }
 
     if (!subject) {
-      throw new BadRequestException("Trường subject là bắt buộc.");
+      throw new BadRequestException(ErrorCodes.MAIL_SUBJECT_REQUIRED);
     }
 
     if (!text && !html) {
-      throw new BadRequestException("Phải có ít nhất text hoặc html.");
+      throw new BadRequestException(ErrorCodes.MAIL_CONTENT_REQUIRED);
     }
 
     const transporter = this.getTransporter();
@@ -115,10 +112,7 @@ class MailService {
         response: info.response || "",
       };
     } catch (error) {
-      throw new BaseException({
-        ...ErrorCodes.INTERNAL_SERVER_ERROR,
-        message: `Gửi mail thất bại: ${error.message}`,
-      });
+      throw new BaseException(ErrorCodes.MAIL_SEND_FAILED(error.message));
     }
   }
 

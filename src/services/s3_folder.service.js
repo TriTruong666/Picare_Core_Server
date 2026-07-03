@@ -2,6 +2,7 @@ const S3Folder = require("../models/s3_folder.model");
 const S3Asset = require("../models/s3_asset.model");
 const S3Service = require("./s3.service");
 const { BadRequestException, NotFoundException } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 const { Op } = require("sequelize");
 
 class S3FolderService {
@@ -11,7 +12,7 @@ class S3FolderService {
   static async create(data) {
     const existing = await S3Folder.findOne({ where: { name: data.name } });
     if (existing) {
-      throw new BadRequestException(`Thư mục với tên "${data.name}" đã tồn tại`);
+      throw new BadRequestException(ErrorCodes.S3_FOLDER_DUPLICATE(data.name));
     }
     return await S3Folder.create(data);
   }
@@ -41,7 +42,7 @@ class S3FolderService {
   static async getById(folderId) {
     const folder = await S3Folder.findOne({ where: { folderId } });
     if (!folder) {
-      throw new NotFoundException("Không tìm thấy thư mục");
+      throw new NotFoundException(ErrorCodes.S3_FOLDER_NOT_FOUND);
     }
     return folder;
   }
@@ -57,7 +58,7 @@ class S3FolderService {
         where: { name: data.name, folderId: { [Op.ne]: folderId } } 
       });
       if (existing) {
-        throw new BadRequestException(`Tên thư mục "${data.name}" đã bị trùng`);
+        throw new BadRequestException(ErrorCodes.S3_FOLDER_NAME_DUPLICATE(data.name));
       }
     }
 

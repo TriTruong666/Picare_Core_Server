@@ -26,7 +26,7 @@ class HubClientService {
     try {
       parsedUrl = new URL(rawUrl);
     } catch (error) {
-      throw new BadRequestException("External URL khong hop le");
+      throw new BadRequestException(ErrorCodes.HUB_CLIENT_EXTERNAL_URL_INVALID);
     }
 
     const pathname = parsedUrl.pathname.replace(/\/+$/, "") || "/";
@@ -94,7 +94,7 @@ class HubClientService {
     } else if (externalUrl) {
       client = await this.findClientByExternalUrl(externalUrl);
     } else {
-      throw new BadRequestException("Thieu clientId hoac externalUrl de kiem tra quyen");
+      throw new BadRequestException(ErrorCodes.HUB_CLIENT_PERMISSION_INPUT_MISSING);
     }
 
     if (!client) {
@@ -157,7 +157,7 @@ class HubClientService {
     });
 
     if (!client) {
-      throw new NotFoundException("Khong tim thay Hub Client");
+      throw new NotFoundException(ErrorCodes.HUB_CLIENT_NOT_FOUND);
     }
 
     return HubClientDTO.fromClient(client);
@@ -172,7 +172,7 @@ class HubClientService {
       where: { clientName: safeClientData.clientName },
     });
     if (existingClient) {
-      throw new BadRequestException("Ten Hub Client da ton tai");
+      throw new BadRequestException(ErrorCodes.HUB_CLIENT_NAME_TAKEN);
     }
 
     const { clientInternalUrl: _clientInternalUrl, ...createData } = safeClientData;
@@ -191,7 +191,7 @@ class HubClientService {
     const client = await HubClient.findOne({ where: { clientId } });
 
     if (!client) {
-      throw new NotFoundException("Khong tim thay Hub Client");
+      throw new NotFoundException(ErrorCodes.HUB_CLIENT_NOT_FOUND);
     }
 
     if (safeUpdateData.clientName && safeUpdateData.clientName !== client.clientName) {
@@ -199,7 +199,7 @@ class HubClientService {
         where: { clientName: safeUpdateData.clientName },
       });
       if (existingName) {
-        throw new BadRequestException("Ten Hub Client da ton tai");
+        throw new BadRequestException(ErrorCodes.HUB_CLIENT_NAME_TAKEN);
       }
     }
 
@@ -222,7 +222,7 @@ class HubClientService {
     const client = await HubClient.findOne({ where: { clientId } });
 
     if (!client) {
-      throw new NotFoundException("Khong tim thay Hub Client");
+      throw new NotFoundException(ErrorCodes.HUB_CLIENT_NOT_FOUND);
     }
 
     await client.destroy();

@@ -1,4 +1,5 @@
 const LicenseService = require("./license.service");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 /**
  * Handler cho các RPC của LicenseService
@@ -12,7 +13,7 @@ const grpcLicenseHandler = {
           active: false,
           status: "inactive",
           enabledFeatures: [],
-          message: "Thiếu licenseKey hoặc softwareId.",
+          message: ErrorCodes.GRPC_LICENSE_INPUT_MISSING.message,
         });
       }
 
@@ -46,7 +47,7 @@ const grpcLicenseHandler = {
           active: false,
           status: "inactive",
           enabledFeatures: [],
-          message: "Thiếu licenseKey hoặc softwareId.",
+          message: ErrorCodes.GRPC_LICENSE_INPUT_MISSING.message,
         });
       }
 

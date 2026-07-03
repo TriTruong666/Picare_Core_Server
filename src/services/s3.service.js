@@ -15,6 +15,7 @@ const S3Asset = require("../models/s3_asset.model");
 const S3Folder = require("../models/s3_folder.model");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 const { BadRequestException } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 const fs = require("fs");
 const path = require("path");
 const { pipeline } = require("stream/promises");
@@ -395,12 +396,12 @@ class S3Service {
 
     if (!mainExists) {
       throw new BadRequestException(
-        `Video chính không tồn tại: ${mainVideoKey}`,
+        ErrorCodes.S3_MAIN_VIDEO_NOT_FOUND(mainVideoKey),
       );
     }
     if (!secondExists) {
       throw new BadRequestException(
-        `Video phụ không tồn tại: ${secondVideoKey}`,
+        ErrorCodes.S3_SECOND_VIDEO_NOT_FOUND(secondVideoKey),
       );
     }
 

@@ -13,6 +13,7 @@ const {
   BadRequestException,
   ForbiddenException,
 } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 class ChatService {
   // =====================================
@@ -71,12 +72,12 @@ class ChatService {
     const { type, name, avatarUrl, memberIds } = dto;
 
     if (!memberIds || !Array.isArray(memberIds) || memberIds.length === 0) {
-      throw new BadRequestException("Phải có ít nhất 1 thành viên khác");
+      throw new BadRequestException(ErrorCodes.CHAT_MEMBER_REQUIRED);
     }
 
     if (type === "private") {
       if (memberIds.length !== 1) {
-        throw new BadRequestException("Chat riêng chỉ được có đúng 2 thành viên");
+        throw new BadRequestException(ErrorCodes.CHAT_PRIVATE_MEMBER_COUNT_INVALID);
       }
       const targetId = memberIds[0];
 
@@ -105,7 +106,7 @@ class ChatService {
     }
 
     if (type === "group" && !name) {
-      throw new BadRequestException("Nhóm chat phải có tên");
+      throw new BadRequestException(ErrorCodes.CHAT_GROUP_NAME_REQUIRED);
     }
 
     const allMemberIds = [...new Set([creatorId, ...memberIds])];
@@ -147,7 +148,7 @@ class ChatService {
       where: { conversationId, userId, leftAt: null },
     });
     if (!membership) {
-      throw new ForbiddenException("Bạn không phải thành viên của cuộc hội thoại này");
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
     const conversation = await Conversation.findByPk(conversationId, {
@@ -166,7 +167,7 @@ class ChatService {
       ],
     });
 
-    if (!conversation) throw new NotFoundException("Không tìm thấy cuộc hội thoại");
+    if (!conversation) throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
 
     return conversation;
   }
@@ -181,15 +182,15 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
     if (!["owner", "admin"].includes(membership.role)) {
-      throw new ForbiddenException("Chỉ owner hoặc admin mới có thể cập nhật nhóm");
+      throw new ForbiddenException(ErrorCodes.CHAT_GROUP_UPDATE_FORBIDDEN);
     }
 
     const conversation = await Conversation.findByPk(conversationId);
-    if (!conversation) throw new NotFoundException("Không tìm thấy cuộc hội thoại");
+    if (!conversation) throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     if (conversation.type !== "group") {
-      throw new BadRequestException("Chỉ có thể cập nhật thông tin nhóm chat");
+      throw new BadRequestException(ErrorCodes.CHAT_ONLY_GROUP_UPDATE);
     }
 
     const { name, avatarUrl } = dto;
@@ -218,14 +219,14 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId: requesterId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
     if (!["owner", "admin"].includes(membership.role)) {
-      throw new ForbiddenException("Chỉ owner/admin mới được thêm thành viên");
+      throw new ForbiddenException(ErrorCodes.CHAT_ADD_MEMBER_FORBIDDEN);
     }
 
     const conversation = await Conversation.findByPk(conversationId);
     if (!conversation || conversation.type !== "group") {
-      throw new BadRequestException("Chỉ có thể thêm thành viên vào nhóm chat");
+      throw new BadRequestException(ErrorCodes.CHAT_ONLY_GROUP_ADD_MEMBER);
     }
 
     const records = newMemberIds.map((uid) => ({
@@ -276,12 +277,12 @@ class ChatService {
     const requesterMembership = await ConversationMember.findOne({
       where: { conversationId, userId: requesterId, leftAt: null },
     });
-    if (!requesterMembership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!requesterMembership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
 
     const isSelfLeave = requesterId === targetUserId;
 
     if (!isSelfLeave && !["owner", "admin"].includes(requesterMembership.role)) {
-      throw new ForbiddenException("Chỉ owner/admin mới có thể xóa thành viên");
+      throw new ForbiddenException(ErrorCodes.CHAT_REMOVE_MEMBER_FORBIDDEN);
     }
 
     await ConversationMember.update(
@@ -321,7 +322,7 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên của cuộc hội thoại này");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
 
     const { before, limit = 30 } = options;
     const parsedLimit = Math.min(parseInt(limit) || 30, 100);
@@ -360,12 +361,12 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId: senderId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên của cuộc hội thoại này");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
 
     const { content, type = "text", replyToId, attachments } = dto;
 
     if (type === "text" && !content) {
-      throw new BadRequestException("Nội dung tin nhắn không được để trống");
+      throw new BadRequestException(ErrorCodes.CHAT_MESSAGE_EMPTY);
     }
 
     const message = await Message.create({
@@ -431,13 +432,13 @@ class ChatService {
   static async editMessage(messageId, userId, newContent) {
     const message = await Message.findByPk(messageId);
     if (!message || message.deletedAt) {
-      throw new NotFoundException("Không tìm thấy tin nhắn");
+      throw new NotFoundException(ErrorCodes.CHAT_MESSAGE_NOT_FOUND);
     }
     if (message.senderId !== userId) {
-      throw new ForbiddenException("Bạn chỉ có thể chỉnh sửa tin nhắn của chính mình");
+      throw new ForbiddenException(ErrorCodes.CHAT_EDIT_OWN_MESSAGE_ONLY);
     }
     if (message.type !== "text") {
-      throw new BadRequestException("Chỉ có thể chỉnh sửa tin nhắn văn bản");
+      throw new BadRequestException(ErrorCodes.CHAT_TEXT_MESSAGE_EDIT_ONLY);
     }
 
     await message.update({ content: newContent, isEdited: true });
@@ -459,10 +460,10 @@ class ChatService {
   static async deleteMessage(messageId, userId) {
     const message = await Message.findByPk(messageId);
     if (!message || message.deletedAt) {
-      throw new NotFoundException("Không tìm thấy tin nhắn");
+      throw new NotFoundException(ErrorCodes.CHAT_MESSAGE_NOT_FOUND);
     }
     if (message.senderId !== userId) {
-      throw new ForbiddenException("Bạn chỉ có thể xóa tin nhắn của chính mình");
+      throw new ForbiddenException(ErrorCodes.CHAT_DELETE_OWN_MESSAGE_ONLY);
     }
 
     await message.update({ deletedAt: new Date() });
@@ -485,7 +486,7 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
 
     await membership.update({ lastReadAt: new Date() });
 
@@ -507,7 +508,7 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
 
     await membership.update({ isPinned: !membership.isPinned });
     return { conversationId, isPinned: membership.isPinned };
@@ -522,7 +523,7 @@ class ChatService {
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException("Bạn không phải thành viên");
+    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
 
     await membership.update({ isMuted: !membership.isMuted });
     return { conversationId, isMuted: membership.isMuted };

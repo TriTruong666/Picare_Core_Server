@@ -188,7 +188,7 @@ class UserService {
 
       if (!normalizedRole) {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, [
-          { path: "role", msg: "Role không được để trống" },
+          { path: "role", msg: ErrorCodes.USER_ROLE_REQUIRED.message },
         ]);
       }
 

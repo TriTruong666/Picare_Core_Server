@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { License, LicenseSoftware, LicenseTicket, sequelize } = require("../models");
 const { LicenseDTO, SoftwareDTO, TicketDTO } = require("../schemas/license.schema");
 const { NotFoundException, ForbiddenException, BadRequestException } = require("../common/exceptions/BaseException");
+const ErrorCodes = require("../common/exceptions/error_codes");
 
 const softwareInclude = { model: LicenseSoftware, as: "software" };
 const ticketInclude = { model: LicenseTicket, as: "tickets" };
@@ -23,7 +24,7 @@ class LicenseService {
 
   static async ensureLicense(licenseId, transaction) {
     const license = await License.findByPk(licenseId, { transaction });
-    if (!license) throw new NotFoundException("Không tìm thấy license");
+    if (!license) throw new NotFoundException(ErrorCodes.LICENSE_NOT_FOUND);
     return license;
   }
 
@@ -65,7 +66,7 @@ class LicenseService {
       include: [softwareInclude, ticketInclude],
       transaction,
     });
-    if (!item) throw new NotFoundException("Không tìm thấy license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_NOT_FOUND);
     return new LicenseDTO(item);
   }
 
@@ -95,20 +96,20 @@ class LicenseService {
 
   static async getSoftware(licenseId, softwareId) {
     const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy phần mềm trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
     return new SoftwareDTO(item);
   }
 
   static async updateSoftware(licenseId, softwareId, payload) {
     const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy phần mềm trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
     await item.update(this.pick(payload, ["name", "price", "status", "domain", "type", "serverConfig", "note"]));
     return new SoftwareDTO(item);
   }
 
   static async deleteSoftware(licenseId, softwareId) {
     const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy phần mềm trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
     await item.destroy();
     return { id: softwareId };
   }
@@ -130,20 +131,20 @@ class LicenseService {
 
   static async getTicket(licenseId, ticketId) {
     const item = await LicenseTicket.findOne({ where: { id: ticketId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy ticket trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_TICKET_NOT_FOUND);
     return new TicketDTO(item);
   }
 
   static async updateTicket(licenseId, ticketId, payload) {
     const item = await LicenseTicket.findOne({ where: { id: ticketId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy ticket trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_TICKET_NOT_FOUND);
     await item.update(this.pick(payload, ["title", "message", "attachments", "status", "cancelReason", "note"]));
     return new TicketDTO(item);
   }
 
   static async deleteTicket(licenseId, ticketId) {
     const item = await LicenseTicket.findOne({ where: { id: ticketId, licenseId } });
-    if (!item) throw new NotFoundException("Không tìm thấy ticket trong license");
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_TICKET_NOT_FOUND);
     await item.destroy();
     return { id: ticketId };
   }
@@ -158,7 +159,7 @@ class LicenseService {
         attributes: ["id", "customerName", "customerEmail"],
       }],
     });
-    if (!software) throw new NotFoundException("License key hoặc software ID không hợp lệ");
+    if (!software) throw new NotFoundException(ErrorCodes.LICENSE_CREDENTIALS_INVALID);
     return software;
   }
 
@@ -179,14 +180,14 @@ class LicenseService {
 
   static async checkSoftwareAccess(params) {
     const software = await this.findSoftwareByKey(params);
-    if (software.status !== "active") throw new ForbiddenException("Phần mềm đã bị khoá hoặc đang có lỗi bản quyền");
+    if (software.status !== "active") throw new ForbiddenException(ErrorCodes.LICENSE_SOFTWARE_INACTIVE);
     return this.formatAccessResult(software);
   }
 
   static async checkServerAccess(params) {
     const software = await this.findSoftwareByKey(params);
-    if (software.type !== "server") throw new BadRequestException("Software không phải loại server");
-    if (software.status !== "active") throw new ForbiddenException("Server đã bị khoá hoặc đang có lỗi bản quyền");
+    if (software.type !== "server") throw new BadRequestException(ErrorCodes.LICENSE_SOFTWARE_NOT_SERVER);
+    if (software.status !== "active") throw new ForbiddenException(ErrorCodes.LICENSE_SERVER_INACTIVE);
     return this.formatAccessResult(software);
   }
 }
