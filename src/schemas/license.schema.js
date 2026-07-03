@@ -35,7 +35,7 @@ class LicenseDTO {
   constructor(item) {
     this.id = item.id;
     this.licenseKey = item.licenseKey;
-    this.licenseContract = item.licenseContract || [];
+    this.licenseContract = item.licenseContract ?? null;
     this.yearlyCost = item.yearlyCost;
     this.customerName = item.customerName;
     this.customerPhone = item.customerPhone;
@@ -85,9 +85,9 @@ const ticketIdSchema = [
 ];
 
 const licenseContractRules = [
-  body("licenseContract").optional({ nullable: true }).isArray(),
-  body("licenseContract.*.name").optional().trim().notEmpty(),
-  body("licenseContract.*.url").optional().isURL({ require_tld: false }),
+  body("licenseContract").optional({ nullable: true }).isArray().withMessage("licenseContract phải là array hoặc null"),
+  body("licenseContract.*.name").trim().notEmpty().withMessage("licenseContract.name là bắt buộc"),
+  body("licenseContract.*.url").isURL({ require_tld: false }).withMessage("licenseContract.url không hợp lệ"),
 ];
 
 const createLicenseSchema = [

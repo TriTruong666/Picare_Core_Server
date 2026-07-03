@@ -28,6 +28,15 @@ const License = sequelize.define(
       defaultValue: 0,
       comment: "Chi phí annual hàng năm của khách hàng",
     },
+    oncePaymentStatus: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "unpaid",
+      comment: "Trạng thái thanh toán",
+      validate: {
+        isIn: [["paid", "partialy_paid", "unpaid"]],
+      },
+    },
     customerName: {
       type: DataTypes.STRING(255),
       allowNull: false,

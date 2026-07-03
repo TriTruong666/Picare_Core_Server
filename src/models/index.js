@@ -38,7 +38,7 @@ try {
 }
 
 try {
-  Object.assign(db, require("./license"));
+  Object.assign(db, require("./licence"));
 } catch (err) {
   console.warn("[MODELS]: Failed to load license models.", err.message);
 }

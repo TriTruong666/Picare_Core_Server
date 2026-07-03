@@ -32,6 +32,12 @@ const router = express.Router();
  *       required: true
  *       schema: { type: string, format: uuid }
  *   schemas:
+ *     LicenseContractInput:
+ *       type: object
+ *       required: [name, url]
+ *       properties:
+ *         name: { type: string, example: Hop dong Happycare 2026 }
+ *         url: { type: string, format: uri, example: https://example.com/contracts/happycare-2026 }
  *     LicenseSoftwareInput:
  *       type: object
  *       required: [name, price, type]
@@ -42,14 +48,19 @@ const router = express.Router();
  *         domain: { type: string, nullable: true }
  *         type: { type: string, enum: [client, server] }
  *         serverConfig:
- *           type: array
  *           nullable: true
- *           items:
- *             type: object
- *             required: [value, active]
- *             properties:
- *               value: { type: string, example: hub-clients }
- *               active: { type: boolean, example: false }
+ *           oneOf:
+ *             - type: object
+ *               additionalProperties: true
+ *               example:
+ *                 hub-clients: false
+ *             - type: array
+ *               items:
+ *                 type: object
+ *                 required: [value, active]
+ *                 properties:
+ *                   value: { type: string, example: hub-clients }
+ *                   active: { type: boolean, example: false }
  *         note: { type: string, nullable: true }
  *     LicenseTicketInput:
  *       type: object
@@ -92,7 +103,11 @@ router.use(protect, restrictTo("admin"));
  *               customerPhone: { type: string }
  *               customerEmail: { type: string, format: email }
  *               yearlyCost: { type: number }
- *               licenseContract: { type: array, items: { type: object } }
+ *               licenseContract:
+ *                 nullable: true
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/LicenseContractInput'
  *               note: { type: string }
  *               software: { type: array, items: { $ref: '#/components/schemas/LicenseSoftwareInput' } }
  *     responses:
@@ -108,10 +123,27 @@ router.route("/").get(listLicenseSchema, LicenseController.getAll).post(createLi
  *     tags: [Licenses]
  *     parameters: [{ in: path, name: licenseId, required: true, schema: { type: string, format: uuid } }]
  *     responses: { 200: { description: Thành công }, 404: { description: Không tìm thấy } }
- *   patch:
+ *   put:
  *     summary: Cập nhật thông tin license
  *     tags: [Licenses]
  *     parameters: [{ in: path, name: licenseId, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               customerName: { type: string }
+ *               customerPhone: { type: string }
+ *               customerEmail: { type: string, format: email }
+ *               yearlyCost: { type: number }
+ *               licenseContract:
+ *                 nullable: true
+ *                 type: array
+ *                 items:
+ *                   $ref: '#/components/schemas/LicenseContractInput'
+ *               note: { type: string }
  *     responses: { 200: { description: Đã cập nhật } }
  *   delete:
  *     summary: Xoá license và toàn bộ software, ticket liên quan
@@ -121,7 +153,7 @@ router.route("/").get(listLicenseSchema, LicenseController.getAll).post(createLi
  */
 router.route("/:licenseId")
   .get(licenseIdSchema, LicenseController.getById)
-  .patch(updateLicenseSchema, LicenseController.update)
+  .put(updateLicenseSchema, LicenseController.update)
   .delete(licenseIdSchema, LicenseController.delete);
 
 /**
@@ -148,10 +180,16 @@ router.post("/:licenseId/software", createSoftwareSchema, LicenseController.crea
  *     summary: Chi tiết phần mềm
  *     tags: [Licenses]
  *     responses: { 200: { description: Thành công } }
- *   patch:
+ *   put:
  *     summary: Cập nhật phần mềm, trạng thái hoặc serverConfig
  *     tags: [Licenses]
  *     responses: { 200: { description: Đã cập nhật } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LicenseSoftwareInput'
  *   delete:
  *     summary: Xoá phần mềm khỏi license
  *     tags: [Licenses]
@@ -159,7 +197,7 @@ router.post("/:licenseId/software", createSoftwareSchema, LicenseController.crea
  */
 router.route("/:licenseId/software/:softwareId")
   .get(softwareIdSchema, LicenseController.getSoftware)
-  .patch(updateSoftwareSchema, LicenseController.updateSoftware)
+  .put(updateSoftwareSchema, LicenseController.updateSoftware)
   .delete(softwareIdSchema, LicenseController.deleteSoftware);
 
 /**
@@ -195,10 +233,16 @@ router.route("/:licenseId/tickets")
  *     summary: Chi tiết ticket
  *     tags: [Licenses]
  *     responses: { 200: { description: Thành công } }
- *   patch:
+ *   put:
  *     summary: Cập nhật ticket hoặc trạng thái xử lý
  *     tags: [Licenses]
  *     responses: { 200: { description: Đã cập nhật } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LicenseTicketInput'
  *   delete:
  *     summary: Xoá ticket
  *     tags: [Licenses]
@@ -206,7 +250,7 @@ router.route("/:licenseId/tickets")
  */
 router.route("/:licenseId/tickets/:ticketId")
   .get(ticketIdSchema, LicenseController.getTicket)
-  .patch(updateTicketSchema, LicenseController.updateTicket)
+  .put(updateTicketSchema, LicenseController.updateTicket)
   .delete(ticketIdSchema, LicenseController.deleteTicket);
 
 module.exports = router;
