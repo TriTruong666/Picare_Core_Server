@@ -16,6 +16,18 @@ const License = sequelize.define(
       field: "license_key",
       comment: "Khoá định danh duy nhất do hệ thống cấp cho khách hàng",
     },
+    licenseContract: {
+      type: DataTypes.ARRAY(DataTypes.JSONB),
+      allowNull: true,
+      comment:
+        "Thông tin hợp đồng license, json bao gồm tên hợp đồng và url hợp đồng",
+    },
+    yearlyCost: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: "Chi phí annual hàng năm của khách hàng",
+    },
     customerName: {
       type: DataTypes.STRING(255),
       allowNull: false,

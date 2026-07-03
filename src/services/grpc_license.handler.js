@@ -1,57 +1,73 @@
-const { LicenseSoftware } = require("../models");
+const LicenseService = require("./license.service");
 
 /**
  * Handler cho các RPC của LicenseService
  */
 const grpcLicenseHandler = {
+  activateLicense: async (call, callback) => {
+    try {
+      const { licenseKey, softwareId } = call.request;
+      if (!licenseKey || !softwareId) {
+        return callback(null, {
+          active: false,
+          status: "inactive",
+          enabledFeatures: [],
+          message: "Thiếu licenseKey hoặc softwareId.",
+        });
+      }
+
+      const result = await LicenseService.activateServer({ licenseKey, softwareId });
+      return callback(null, {
+        active: true,
+        status: result.status,
+        enabledFeatures: result.software.enabledFeatures,
+        message: "Kích hoạt license thành công.",
+        customerName: result.customer.name,
+        softwareName: result.software.name,
+      });
+    } catch (error) {
+      return callback(null, {
+        active: false,
+        status: "invalid",
+        enabledFeatures: [],
+        message: error.message,
+      });
+    }
+  },
   /**
    * RPC: GetLicenseConfig
    */
   getLicenseConfig: async (call, callback) => {
     try {
-      const { clientId } = call.request;
+      const { licenseKey, softwareId } = call.request;
 
-      if (!clientId) {
+      if (!licenseKey || !softwareId) {
         return callback(null, {
           active: false,
           status: "inactive",
           enabledFeatures: [],
-          message: "Thiếu Client ID.",
+          message: "Thiếu licenseKey hoặc softwareId.",
         });
       }
 
-      // Tìm LicenseSoftware theo ID (chính là CLIENT_ID cấu hình bên Client)
-      const software = await LicenseSoftware.findByPk(clientId);
-
-      if (!software) {
-        return callback(null, {
-          active: false,
-          status: "not_found",
-          enabledFeatures: [],
-          message: "Không tìm thấy bản quyền phần mềm này trên Hub.",
-        });
-      }
-
-      const isActive = software.status === "active";
-      
-      // Lấy danh sách tính năng được bật/tắt từ cột serverConfig (JSONB)
-      let enabledFeatures = [];
-      if (isActive && software.serverConfig) {
-        // Lọc các key có giá trị là true trong serverConfig (ví dụ: { "s3": true, "mail": false })
-        enabledFeatures = Object.keys(software.serverConfig).filter(
-          (key) => software.serverConfig[key] === true
-        );
-      }
+      const result = await LicenseService.checkServerAccess({ licenseKey, softwareId });
 
       return callback(null, {
-        active: isActive,
-        status: software.status,
-        enabledFeatures: enabledFeatures,
-        message: isActive ? "Bản quyền phần mềm hợp lệ." : "Bản quyền phần mềm đã bị khóa.",
+        active: result.active,
+        status: result.status,
+        enabledFeatures: result.software.enabledFeatures,
+        message: "Bản quyền server hợp lệ.",
+        customerName: result.customer.name,
+        softwareName: result.software.name,
       });
     } catch (error) {
-      console.error("[gRPC License]: Lỗi khi kiểm tra bản quyền:", error.message);
-      return callback(error);
+      console.warn("[gRPC License]: Từ chối bản quyền:", error.message);
+      return callback(null, {
+        active: false,
+        status: error.statusCode === 403 ? "error" : "not_found",
+        enabledFeatures: [],
+        message: error.message,
+      });
     }
   },
 };
