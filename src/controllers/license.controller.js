@@ -9,7 +9,6 @@ const validate = (req) => {
 };
 
 class LicenseController {
-  static async check(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.checkSoftwareAccess(req.body), "License hợp lệ"); } catch (e) { next(e); } }
   static async create(req, res, next) { try { validate(req); return ResponseHandler.created(res, await LicenseService.createLicense(req.body), "Tạo license thành công"); } catch (e) { next(e); } }
   static async getAll(req, res, next) { try { validate(req); const result = await LicenseService.getLicenses(req.query); return ResponseHandler.paginate(res, result.rows, result.count, result.page, result.limit, "Lấy danh sách license thành công"); } catch (e) { next(e); } }
   static async getById(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.getLicenseById(req.params.licenseId)); } catch (e) { next(e); } }

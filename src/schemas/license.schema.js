@@ -59,7 +59,17 @@ const softwareBodyRules = ({ optional = false, prefix = "" } = {}) => {
     body(field("status")).optional().isIn(["active", "error"]),
     body(field("domain")).optional({ nullable: true }).isString(),
     base("type").isIn(["client", "server"]).withMessage("Loại phần mềm không hợp lệ"),
-    body(field("serverConfig")).optional({ nullable: true }).isObject(),
+    body(field("serverConfig")).optional({ nullable: true }).custom((value) => {
+      if (!Array.isArray(value) && (typeof value !== "object" || value === null)) {
+        throw new Error("serverConfig phải là object hoặc array");
+      }
+      if (Array.isArray(value) && value.some((item) =>
+        !item || typeof item.value !== "string" ||
+        ![true, false, "true", "false"].includes(item.active))) {
+        throw new Error("Mỗi feature cần value và active boolean");
+      }
+      return true;
+    }),
     body(field("note")).optional({ nullable: true }).isString(),
   ];
 };
@@ -107,11 +117,6 @@ const listLicenseSchema = [
   query("search").optional().trim(),
 ];
 
-const checkLicenseSchema = [
-  body("licenseKey").isUUID(4).withMessage("License key không hợp lệ"),
-  body("softwareId").isUUID(4).withMessage("Software ID không hợp lệ"),
-];
-
 const createSoftwareSchema = [...licenseIdSchema, ...softwareBodyRules()];
 const updateSoftwareSchema = [...softwareIdSchema, ...softwareBodyRules({ optional: true })];
 
@@ -151,7 +156,6 @@ module.exports = {
   createLicenseSchema,
   updateLicenseSchema,
   listLicenseSchema,
-  checkLicenseSchema,
   licenseIdSchema,
   softwareIdSchema,
   createSoftwareSchema,

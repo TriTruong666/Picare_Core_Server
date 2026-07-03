@@ -42,7 +42,7 @@ const LicenseSoftware = sequelize.define(
       type: DataTypes.JSONB,
       allowNull: true,
       field: "server_config",
-      comment: "Cấu hình bật/tắt các dịch vụ con; chỉ dùng khi type là server",
+      comment: "Danh sách feature [{ value: 'hub-clients', active: false }]; chỉ dùng khi type là server",
     },
     note: {
       type: DataTypes.TEXT,

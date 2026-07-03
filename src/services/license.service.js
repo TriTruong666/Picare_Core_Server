@@ -7,6 +7,19 @@ const softwareInclude = { model: LicenseSoftware, as: "software" };
 const ticketInclude = { model: LicenseTicket, as: "tickets" };
 
 class LicenseService {
+  static getEnabledFeatures(serverConfig) {
+    if (Array.isArray(serverConfig)) {
+      return serverConfig
+        .filter((item) => item && String(item.active).toLowerCase() === "true")
+        .map((item) => item.value)
+        .filter(Boolean);
+    }
+
+    return Object.entries(serverConfig || {})
+      .filter(([, active]) => String(active).toLowerCase() === "true")
+      .map(([value]) => value);
+  }
+
   static pick(payload, fields) {
     return Object.fromEntries(fields
       .filter((key) => Object.prototype.hasOwnProperty.call(payload, key))
@@ -164,9 +177,7 @@ class LicenseService {
         name: software.name,
         type: software.type,
         domain: software.domain,
-        enabledFeatures: Object.entries(software.serverConfig || {})
-          .filter(([, enabled]) => enabled === true)
-          .map(([feature]) => feature),
+        enabledFeatures: this.getEnabledFeatures(software.serverConfig),
       },
     };
   }

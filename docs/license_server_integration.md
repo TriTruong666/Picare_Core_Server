@@ -39,13 +39,51 @@ Content-Type: application/json
 
 `localStorage` chỉ dùng để giữ cấu hình UX. Quyết định hợp lệ luôn đến từ Hub; client không tự coi có key là hợp lệ.
 
-## Những thành phần không bị chặn
+## Feature gate trên API
+
+Sau khi lưu `licenseKey` và `softwareId` vào localStorage, HTTP client/interceptor phải gửi chúng trên các request dịch vụ:
+
+```http
+X-License-Key: <licenseKey>
+X-Software-Id: <softwareId của OMS server>
+```
+
+Các route có feature gate:
+
+```text
+chat, hub-clients, s3, s3-folders, contracts, mail, product-qrs
+```
+
+`auth`, `users` và `license/check` không bị feature gate để người dùng luôn đăng nhập và nhập/check key được.
+
+`serverConfig` khuyến nghị lưu dạng:
+
+```json
+[
+  { "value": "hub-clients", "active": false },
+  { "value": "s3", "active": true },
+  { "value": "mail", "active": true }
+]
+```
+
+Format object cũ `{ "s3": true, "mail": false }` vẫn được hỗ trợ. Nếu Hub online và feature có `active=false`, API trả:
+
+```json
+{
+  "success": false,
+  "code": "FEATURE_NOT_ENABLED",
+  "feature": "hub-clients",
+  "message": "Hiện tại dịch vụ này chưa được mở. Vui lòng liên hệ Picare để được hỗ trợ."
+}
+```
+
+## Những thành phần không bị dừng
 
 - Core Server chạy ngầm vẫn chạy S3, mail, worker, cron và queue bình thường.
 - OMS Server vẫn chạy bình thường và tiếp tục dùng middleware `protect`/RBAC hiện có.
-- Không gắn license middleware toàn cục vào `/api/v1`.
+- Không gắn license middleware toàn cục vào `/api/v1`; chỉ gắn vào từng nhóm route thương mại.
 - Không gắn license middleware vào background job, socket hoặc server bootstrap.
-- Chỉ UI hoặc chức năng cụ thể chủ động gọi `/api/v1/license/check` trước khi tiếp tục.
+- Core process, worker và job không bị feature middleware can thiệp.
 
 ## Khi Picare Core Hub bị gián đoạn
 
@@ -70,7 +108,7 @@ Server thương mại không được phụ thuộc khả năng sống của Hub
 
 Đây là đánh đổi có chủ đích: trong lúc Hub offline không thể thu hồi license ngay, nhưng hệ thống khách hàng không bị downtime theo Hub.
 
-## Hub API
+## Hub API quản trị
 
 ### Tạo License cùng nhiều software
 
@@ -111,19 +149,9 @@ Cookie: token=<admin-session>
 
 Hub trả một `licenseKey` và ba `software.id`. Picare cấp cho khách đúng cặp key/ID mà UI cần kiểm tra.
 
-### Kiểm tra trực tiếp
-
-```http
-POST /api/v1/licenses/check
-Content-Type: application/json
-
-{
-  "licenseKey": "<license-key>",
-  "softwareId": "<software-id>"
-}
-```
-
-Endpoint chấp nhận cả software `client` và `server`. Với software server, response có thể kèm `enabledFeatures` lấy từ `serverConfig`.
+Hub không public HTTP endpoint check license cho browser. Browser chỉ gọi
+`POST /api/v1/license/check` trên OMS Server; OMS Server chuyển request qua gRPC
+`CheckLicense` tới Hub. HTTP API `/api/v1/licenses/*` trên Hub chỉ dành cho admin quản trị.
 
 ## Quy tắc dữ liệu
 

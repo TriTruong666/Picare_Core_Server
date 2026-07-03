@@ -2,7 +2,7 @@ const express = require("express");
 const LicenseController = require("../controllers/license.controller");
 const { protect, restrictTo } = require("../middlewares/auth.middleware");
 const {
-  createLicenseSchema, updateLicenseSchema, listLicenseSchema, checkLicenseSchema,
+  createLicenseSchema, updateLicenseSchema, listLicenseSchema,
   licenseIdSchema, softwareIdSchema, createSoftwareSchema, updateSoftwareSchema,
   ticketIdSchema, createTicketSchema, updateTicketSchema, listTicketSchema,
 } = require("../schemas/license.schema");
@@ -41,7 +41,15 @@ const router = express.Router();
  *         status: { type: string, enum: [active, error] }
  *         domain: { type: string, nullable: true }
  *         type: { type: string, enum: [client, server] }
- *         serverConfig: { type: object, nullable: true }
+ *         serverConfig:
+ *           type: array
+ *           nullable: true
+ *           items:
+ *             type: object
+ *             required: [value, active]
+ *             properties:
+ *               value: { type: string, example: hub-clients }
+ *               active: { type: boolean, example: false }
  *         note: { type: string, nullable: true }
  *     LicenseTicketInput:
  *       type: object
@@ -54,28 +62,6 @@ const router = express.Router();
  *         cancelReason: { type: string, nullable: true }
  *         note: { type: string, nullable: true }
  */
-
-/**
- * @swagger
- * /api/v1/licenses/check:
- *   post:
- *     summary: Kiểm tra licenseKey và softwareId
- *     tags: [Licenses]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [licenseKey, softwareId]
- *             properties:
- *               licenseKey: { type: string, format: uuid }
- *               softwareId: { type: string, format: uuid }
- *     responses:
- *       200: { description: License hợp lệ }
- *       403: { description: Phần mềm bị khoá }
- */
-router.post("/check", checkLicenseSchema, LicenseController.check);
 
 router.use(protect, restrictTo("admin"));
 
