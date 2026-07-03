@@ -35,7 +35,7 @@ class LicenseService {
   static async createLicense(payload) {
     return sequelize.transaction(async (transaction) => {
       const license = await License.create(this.pick(payload, [
-        "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "note",
+        "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "oncePaymentStatus", "note",
       ]), { transaction });
 
       if (payload.software?.length) {
@@ -77,7 +77,7 @@ class LicenseService {
   static async updateLicense(licenseId, payload) {
     const license = await this.ensureLicense(licenseId);
     await license.update(this.pick(payload, [
-      "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "note",
+      "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "oncePaymentStatus", "note",
     ]));
     return this.getLicenseById(licenseId);
   }

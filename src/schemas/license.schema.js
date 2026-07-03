@@ -37,44 +37,64 @@ class LicenseDTO {
     this.licenseKey = item.licenseKey;
     this.licenseContract = item.licenseContract ?? null;
     this.yearlyCost = item.yearlyCost;
+    this.oncePaymentStatus = item.oncePaymentStatus;
     this.customerName = item.customerName;
     this.customerPhone = item.customerPhone;
     this.customerEmail = item.customerEmail;
     this.note = item.note;
-    this.software = (item.software || []).map((value) => new SoftwareDTO(value));
+    this.software = (item.software || []).map(
+      (value) => new SoftwareDTO(value),
+    );
     this.tickets = (item.tickets || []).map((value) => new TicketDTO(value));
     this.createdAt = item.createdAt;
     this.updatedAt = item.updatedAt;
   }
 }
 
-const nullableString = (field) => body(field).optional({ nullable: true }).isString();
+const nullableString = (field) =>
+  body(field).optional({ nullable: true }).isString();
 
 const softwareBodyRules = ({ optional = false, prefix = "" } = {}) => {
-  const field = (name) => prefix ? `${prefix}.${name}` : name;
-  const base = (name) => optional ? body(field(name)).optional() : body(field(name));
+  const field = (name) => (prefix ? `${prefix}.${name}` : name);
+  const base = (name) =>
+    optional ? body(field(name)).optional() : body(field(name));
   return [
     base("name").trim().notEmpty().withMessage("Tên phần mềm là bắt buộc"),
     base("price").isFloat({ min: 0 }).withMessage("Giá phần mềm không hợp lệ"),
     body(field("status")).optional().isIn(["active", "error"]),
     body(field("domain")).optional({ nullable: true }).isString(),
-    base("type").isIn(["client", "server"]).withMessage("Loại phần mềm không hợp lệ"),
-    body(field("serverConfig")).optional({ nullable: true }).custom((value) => {
-      if (!Array.isArray(value) && (typeof value !== "object" || value === null)) {
-        throw new Error("serverConfig phải là object hoặc array");
-      }
-      if (Array.isArray(value) && value.some((item) =>
-        !item || typeof item.value !== "string" ||
-        ![true, false, "true", "false"].includes(item.active))) {
-        throw new Error("Mỗi feature cần value và active boolean");
-      }
-      return true;
-    }),
+    base("type")
+      .isIn(["client", "server"])
+      .withMessage("Loại phần mềm không hợp lệ"),
+    body(field("serverConfig"))
+      .optional({ nullable: true })
+      .custom((value) => {
+        if (
+          !Array.isArray(value) &&
+          (typeof value !== "object" || value === null)
+        ) {
+          throw new Error("serverConfig phải là object hoặc array");
+        }
+        if (
+          Array.isArray(value) &&
+          value.some(
+            (item) =>
+              !item ||
+              typeof item.value !== "string" ||
+              ![true, false, "true", "false"].includes(item.active),
+          )
+        ) {
+          throw new Error("Mỗi feature cần value và active boolean");
+        }
+        return true;
+      }),
     body(field("note")).optional({ nullable: true }).isString(),
   ];
 };
 
-const licenseIdSchema = [param("licenseId").isUUID(4).withMessage("License ID không hợp lệ")];
+const licenseIdSchema = [
+  param("licenseId").isUUID(4).withMessage("License ID không hợp lệ"),
+];
 const softwareIdSchema = [
   ...licenseIdSchema,
   param("softwareId").isUUID(4).withMessage("Software ID không hợp lệ"),
@@ -85,19 +105,41 @@ const ticketIdSchema = [
 ];
 
 const licenseContractRules = [
-  body("licenseContract").optional({ nullable: true }).isArray().withMessage("licenseContract phải là array hoặc null"),
-  body("licenseContract.*.name").trim().notEmpty().withMessage("licenseContract.name là bắt buộc"),
-  body("licenseContract.*.url").isURL({ require_tld: false }).withMessage("licenseContract.url không hợp lệ"),
+  body("licenseContract")
+    .optional({ nullable: true })
+    .isArray()
+    .withMessage("licenseContract phải là array hoặc null"),
+  body("licenseContract.*.name")
+    .trim()
+    .notEmpty()
+    .withMessage("licenseContract.name là bắt buộc"),
+  body("licenseContract.*.url")
+    .isURL({ require_tld: false })
+    .withMessage("licenseContract.url không hợp lệ"),
 ];
 
 const createLicenseSchema = [
-  body("customerName").trim().notEmpty().withMessage("Tên khách hàng là bắt buộc"),
-  body("customerPhone").trim().notEmpty().withMessage("SĐT khách hàng là bắt buộc"),
-  body("customerEmail").isEmail().normalizeEmail().withMessage("Email không hợp lệ"),
+  body("customerName")
+    .trim()
+    .notEmpty()
+    .withMessage("Tên khách hàng là bắt buộc"),
+  body("customerPhone")
+    .trim()
+    .notEmpty()
+    .withMessage("SĐT khách hàng là bắt buộc"),
+  body("customerEmail")
+    .isEmail()
+    .normalizeEmail()
+    .withMessage("Email không hợp lệ"),
   body("yearlyCost").optional().isFloat({ min: 0 }),
+  body("oncePaymentStatus")
+    .optional()
+    .isIn(["paid", "partialy_paid", "unpaid"]),
   nullableString("note"),
   ...licenseContractRules,
-  body("software").isArray({ min: 1 }).withMessage("Phải có ít nhất một phần mềm"),
+  body("software")
+    .isArray({ min: 1 })
+    .withMessage("Phải có ít nhất một phần mềm"),
   ...softwareBodyRules({ prefix: "software.*" }),
 ];
 
@@ -107,6 +149,9 @@ const updateLicenseSchema = [
   body("customerPhone").optional().trim().notEmpty(),
   body("customerEmail").optional().isEmail().normalizeEmail(),
   body("yearlyCost").optional().isFloat({ min: 0 }),
+  body("oncePaymentStatus")
+    .optional()
+    .isIn(["paid", "partialy_paid", "unpaid"]),
   nullableString("note"),
   ...licenseContractRules,
 ];
@@ -118,7 +163,10 @@ const listLicenseSchema = [
 ];
 
 const createSoftwareSchema = [...licenseIdSchema, ...softwareBodyRules()];
-const updateSoftwareSchema = [...softwareIdSchema, ...softwareBodyRules({ optional: true })];
+const updateSoftwareSchema = [
+  ...softwareIdSchema,
+  ...softwareBodyRules({ optional: true }),
+];
 
 const createTicketSchema = [
   ...licenseIdSchema,

@@ -38,6 +38,9 @@ const router = express.Router();
  *       properties:
  *         name: { type: string, example: Hop dong Happycare 2026 }
  *         url: { type: string, format: uri, example: https://example.com/contracts/happycare-2026 }
+ *     LicenseStatusInput:
+ *       type: string
+ *       enum: [paid, partialy_paid, unpaid]
  *     LicenseSoftwareInput:
  *       type: object
  *       required: [name, price, type]
@@ -103,6 +106,7 @@ router.use(protect, restrictTo("admin"));
  *               customerPhone: { type: string }
  *               customerEmail: { type: string, format: email }
  *               yearlyCost: { type: number }
+ *               oncePaymentStatus: { $ref: '#/components/schemas/LicenseStatusInput' }
  *               licenseContract:
  *                 nullable: true
  *                 type: array
@@ -138,6 +142,7 @@ router.route("/").get(listLicenseSchema, LicenseController.getAll).post(createLi
  *               customerPhone: { type: string }
  *               customerEmail: { type: string, format: email }
  *               yearlyCost: { type: number }
+ *               oncePaymentStatus: { $ref: '#/components/schemas/LicenseStatusInput' }
  *               licenseContract:
  *                 nullable: true
  *                 type: array
