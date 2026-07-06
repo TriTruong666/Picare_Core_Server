@@ -29,6 +29,14 @@ class TicketDTO {
     this.note = item.note;
     this.createdAt = item.createdAt;
     this.updatedAt = item.updatedAt;
+    if (item.license) {
+      this.license = {
+        licenseId: item.license.licenseId,
+        customerName: item.license.customerName,
+        customerPhone: item.license.customerPhone,
+        customerEmail: item.license.customerEmail,
+      };
+    }
   }
 }
 
@@ -198,7 +206,10 @@ const updateTicketSchema = [
 ];
 
 const listTicketSchema = [
-  ...licenseIdSchema,
+  query("page").optional().isInt({ min: 1 }).toInt(),
+  query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
+  query("search").optional().trim(),
+  query("licenseId").optional().isUUID(4).withMessage("License ID không hợp lệ"),
   query("status").optional().isIn(["pending", "completed", "cancelled"]),
 ];
 

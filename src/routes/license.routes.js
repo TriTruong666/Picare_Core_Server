@@ -117,6 +117,23 @@ router.route("/").get(listLicenseSchema, LicenseController.getAll).post(createLi
 
 /**
  * @swagger
+ * /api/v1/licenses/tickets:
+ *   get:
+ *     summary: Danh sách tất cả ticket có phân trang và bộ lọc
+ *     tags: [Licenses]
+ *     parameters:
+ *       - { in: query, name: page, schema: { type: integer, default: 1 } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 100 } }
+ *       - { in: query, name: search, description: Tìm theo tiêu đề hoặc nội dung ticket, schema: { type: string } }
+ *       - { in: query, name: licenseId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: status, schema: { type: string, enum: [pending, completed, cancelled] } }
+ *     responses:
+ *       200: { description: Thành công }
+ */
+router.get("/tickets", listTicketSchema, LicenseController.getTickets);
+
+/**
+ * @swagger
  * /api/v1/licenses/{licenseId}:
  *   get:
  *     summary: Chi tiết license kèm software và ticket
@@ -206,12 +223,6 @@ router.route("/:licenseId/software/:softwareId")
  * /api/v1/licenses/{licenseId}/tickets:
  *   parameters:
  *     - { $ref: '#/components/parameters/LicenseId' }
- *   get:
- *     summary: Danh sách ticket của license, có thể lọc status
- *     tags: [Licenses]
- *     parameters:
- *       - { in: query, name: status, schema: { type: string, enum: [pending, completed, cancelled] } }
- *     responses: { 200: { description: Thành công } }
  *   post:
  *     summary: Tạo ticket hỗ trợ
  *     tags: [Licenses]
@@ -220,9 +231,7 @@ router.route("/:licenseId/software/:softwareId")
  *       content: { application/json: { schema: { $ref: '#/components/schemas/LicenseTicketInput' } } }
  *     responses: { 201: { description: Đã tạo } }
  */
-router.route("/:licenseId/tickets")
-  .get(listTicketSchema, LicenseController.getTickets)
-  .post(createTicketSchema, LicenseController.createTicket);
+router.post("/:licenseId/tickets", createTicketSchema, LicenseController.createTicket);
 
 /**
  * @swagger

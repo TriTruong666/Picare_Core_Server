@@ -121,13 +121,29 @@ class LicenseService {
     return new TicketDTO(item);
   }
 
-  static async getTickets(licenseId, status) {
-    await this.ensureLicense(licenseId);
-    const rows = await LicenseTicket.findAll({
-      where: { licenseId, ...(status ? { status } : {}) },
+  static async getTickets({ page = 1, limit = 20, search = "", status, licenseId } = {}) {
+    const where = {
+      ...(status ? { status } : {}),
+      ...(licenseId ? { licenseId } : {}),
+      ...(search ? {
+        [Op.or]: ["title", "message"].map((field) => ({
+          [field]: { [Op.iLike]: `%${search}%` },
+        })),
+      } : {}),
+    };
+    const { count, rows } = await LicenseTicket.findAndCountAll({
+      where,
+      include: [{
+        model: License,
+        as: "license",
+        attributes: ["licenseId", "customerName", "customerPhone", "customerEmail"],
+      }],
+      distinct: true,
+      limit,
+      offset: (page - 1) * limit,
       order: [["createdAt", "DESC"]],
     });
-    return rows.map((item) => new TicketDTO(item));
+    return { count, rows: rows.map((item) => new TicketDTO(item)), page, limit };
   }
 
   static async getTicket(licenseId, ticketId) {
