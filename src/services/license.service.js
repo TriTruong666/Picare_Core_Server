@@ -22,6 +22,22 @@ class LicenseService {
       .map((key) => [key, payload[key]]));
   }
 
+  static normalizeSoftwarePayload(payload, currentType) {
+    const normalized = { ...payload };
+    const type = payload.type || currentType;
+
+    if (type !== "server") {
+      if (Array.isArray(payload.serverConfig) && payload.serverConfig.length > 0) {
+        throw new BadRequestException("serverConfig chỉ được sử dụng cho phần mềm loại server");
+      }
+      if (Object.prototype.hasOwnProperty.call(payload, "serverConfig") || payload.type === "client") {
+        normalized.serverConfig = null;
+      }
+    }
+
+    return normalized;
+  }
+
   static async ensureLicense(licenseId, transaction) {
     const license = await License.findOne({ where: { licenseId }, transaction });
     if (!license) throw new NotFoundException(ErrorCodes.LICENSE_NOT_FOUND);
@@ -36,7 +52,10 @@ class LicenseService {
 
       if (payload.software?.length) {
         await LicenseSoftware.bulkCreate(
-          payload.software.map((item) => ({ ...item, licenseId: license.licenseId })),
+          payload.software.map((item) => ({
+            ...this.normalizeSoftwarePayload(item),
+            licenseId: license.licenseId,
+          })),
           { transaction, validate: true },
         );
       }
@@ -79,21 +98,22 @@ class LicenseService {
       ]), { transaction });
 
       for (const softwarePayload of payload.software || []) {
+        const normalizedPayload = this.normalizeSoftwarePayload(softwarePayload);
         const software = await LicenseSoftware.findOne({
-          where: { softwareId: softwarePayload.softwareId },
+          where: { softwareId: normalizedPayload.softwareId },
           transaction,
         });
 
         if (software && software.licenseId !== licenseId) {
-          throw new BadRequestException(`Software ID ${softwarePayload.softwareId} đã thuộc license khác`);
+          throw new BadRequestException(`Software ID ${normalizedPayload.softwareId} đã thuộc license khác`);
         }
 
         if (software) {
-          await software.update(this.pick(softwarePayload, [
+          await software.update(this.pick(normalizedPayload, [
             "name", "price", "status", "domain", "type", "serverConfig", "note",
           ]), { transaction });
         } else {
-          await LicenseSoftware.create({ ...softwarePayload, licenseId }, { transaction });
+          await LicenseSoftware.create({ ...normalizedPayload, licenseId }, { transaction });
         }
       }
 
@@ -113,7 +133,10 @@ class LicenseService {
 
   static async createSoftware(licenseId, payload) {
     await this.ensureLicense(licenseId);
-    const item = await LicenseSoftware.create({ ...payload, licenseId });
+    const item = await LicenseSoftware.create({
+      ...this.normalizeSoftwarePayload(payload),
+      licenseId,
+    });
     return new SoftwareDTO(item);
   }
 
@@ -126,7 +149,8 @@ class LicenseService {
   static async updateSoftware(licenseId, softwareId, payload) {
     const item = await LicenseSoftware.findOne({ where: { softwareId, licenseId } });
     if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
-    await item.update(this.pick(payload, ["softwareId", "name", "price", "status", "domain", "type", "serverConfig", "note"]));
+    const normalizedPayload = this.normalizeSoftwarePayload(payload, item.type);
+    await item.update(this.pick(normalizedPayload, ["softwareId", "name", "price", "status", "domain", "type", "serverConfig", "note"]));
     return new SoftwareDTO(item);
   }
 
