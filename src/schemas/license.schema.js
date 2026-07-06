@@ -167,6 +167,13 @@ const updateLicenseSchema = [
     .isIn(["paid", "partialy_paid", "unpaid"]),
   nullableString("note"),
   ...licenseContractRules,
+  body("software")
+    .optional()
+    .isArray({ min: 1 })
+    .withMessage("software phải là array có ít nhất một phần tử")
+    .custom((items) => new Set(items.map((item) => item?.softwareId)).size === items.length)
+    .withMessage("softwareId không được trùng lặp"),
+  ...softwareBodyRules({ prefix: "software.*" }),
 ];
 
 const listLicenseSchema = [

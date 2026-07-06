@@ -141,7 +141,7 @@ router.get("/tickets", listTicketSchema, LicenseController.getTickets);
  *     parameters: [{ in: path, name: licenseId, required: true, schema: { type: string, format: uuid } }]
  *     responses: { 200: { description: Thành công }, 404: { description: Không tìm thấy } }
  *   put:
- *     summary: Cập nhật thông tin license
+ *     summary: Cập nhật license và danh sách software trong một transaction
  *     tags: [Licenses]
  *     parameters: [{ in: path, name: licenseId, required: true, schema: { type: string, format: uuid } }]
  *     requestBody:
@@ -162,6 +162,11 @@ router.get("/tickets", listTicketSchema, LicenseController.getTickets);
  *                 items:
  *                   $ref: '#/components/schemas/LicenseContractInput'
  *               note: { type: string }
+ *               software:
+ *                 type: array
+ *                 description: Software có softwareId sẽ được cập nhật, chưa có sẽ được tạo
+ *                 items:
+ *                   $ref: '#/components/schemas/LicenseSoftwareInput'
  *     responses: { 200: { description: Đã cập nhật } }
  *   delete:
  *     summary: Xoá license và toàn bộ software, ticket liên quan

@@ -72,11 +72,33 @@ class LicenseService {
   }
 
   static async updateLicense(licenseId, payload) {
-    const license = await this.ensureLicense(licenseId);
-    await license.update(this.pick(payload, [
-      "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "oncePaymentStatus", "note",
-    ]));
-    return this.getLicenseById(licenseId);
+    return sequelize.transaction(async (transaction) => {
+      const license = await this.ensureLicense(licenseId, transaction);
+      await license.update(this.pick(payload, [
+        "customerName", "customerPhone", "customerEmail", "licenseContract", "yearlyCost", "oncePaymentStatus", "note",
+      ]), { transaction });
+
+      for (const softwarePayload of payload.software || []) {
+        const software = await LicenseSoftware.findOne({
+          where: { softwareId: softwarePayload.softwareId },
+          transaction,
+        });
+
+        if (software && software.licenseId !== licenseId) {
+          throw new BadRequestException(`Software ID ${softwarePayload.softwareId} đã thuộc license khác`);
+        }
+
+        if (software) {
+          await software.update(this.pick(softwarePayload, [
+            "name", "price", "status", "domain", "type", "serverConfig", "note",
+          ]), { transaction });
+        } else {
+          await LicenseSoftware.create({ ...softwarePayload, licenseId }, { transaction });
+        }
+      }
+
+      return this.getLicenseById(licenseId, transaction);
+    });
   }
 
   static async deleteLicense(licenseId) {

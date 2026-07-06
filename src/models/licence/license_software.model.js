@@ -18,7 +18,6 @@ const LicenseSoftware = sequelize.define(
     softwareId: {
       type: DataTypes.STRING(100),
       allowNull: false,
-      unique: true,
       field: "software_id",
       validate: { notEmpty: true },
       comment: "Mã phần mềm do quản trị viên tự nhập",
