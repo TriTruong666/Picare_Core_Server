@@ -4,6 +4,7 @@ class SoftwareDTO {
   constructor(item) {
     this.id = item.id;
     this.licenseId = item.licenseId;
+    this.softwareId = item.softwareId;
     this.name = item.name;
     this.price = item.price;
     this.status = item.status;
@@ -34,6 +35,7 @@ class TicketDTO {
 class LicenseDTO {
   constructor(item) {
     this.id = item.id;
+    this.licenseId = item.licenseId;
     this.licenseKey = item.licenseKey;
     this.licenseContract = item.licenseContract ?? null;
     this.yearlyCost = item.yearlyCost;
@@ -59,6 +61,11 @@ const softwareBodyRules = ({ optional = false, prefix = "" } = {}) => {
   const base = (name) =>
     optional ? body(field(name)).optional() : body(field(name));
   return [
+    base("softwareId")
+      .trim()
+      .notEmpty()
+      .isLength({ max: 100 })
+      .withMessage("Software ID là bắt buộc và tối đa 100 ký tự"),
     base("name").trim().notEmpty().withMessage("Tên phần mềm là bắt buộc"),
     base("price").isFloat({ min: 0 }).withMessage("Giá phần mềm không hợp lệ"),
     body(field("status")).optional().isIn(["active", "error"]),
@@ -91,7 +98,11 @@ const licenseIdSchema = [
 ];
 const softwareIdSchema = [
   ...licenseIdSchema,
-  param("softwareId").isUUID(4).withMessage("Software ID không hợp lệ"),
+  param("softwareId")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 })
+    .withMessage("Software ID không hợp lệ"),
 ];
 const ticketIdSchema = [
   ...licenseIdSchema,

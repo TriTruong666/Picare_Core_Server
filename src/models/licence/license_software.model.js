@@ -13,7 +13,15 @@ const LicenseSoftware = sequelize.define(
       type: DataTypes.UUID,
       allowNull: false,
       field: "license_id",
-      references: { model: "licenses", key: "id" },
+      references: { model: "licenses", key: "license_id" },
+    },
+    softwareId: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+      unique: true,
+      field: "software_id",
+      validate: { notEmpty: true },
+      comment: "Mã phần mềm do quản trị viên tự nhập",
     },
     name: {
       type: DataTypes.STRING(255),
@@ -53,6 +61,7 @@ const LicenseSoftware = sequelize.define(
     tableName: "license_software",
     timestamps: true,
     indexes: [
+      { name: "license_software_software_id_unique", unique: true, fields: ["software_id"] },
       { fields: ["license_id"] },
       { fields: ["domain"] },
       { fields: ["status"] },

@@ -13,7 +13,7 @@ const LicenseTicket = sequelize.define(
       type: DataTypes.UUID,
       allowNull: false,
       field: "license_id",
-      references: { model: "licenses", key: "id" },
+      references: { model: "licenses", key: "license_id" },
     },
     title: {
       type: DataTypes.STRING(255),

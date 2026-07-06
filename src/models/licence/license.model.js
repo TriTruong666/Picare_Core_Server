@@ -1,20 +1,56 @@
 const { DataTypes } = require("sequelize");
+const crypto = require("crypto");
 const sequelize = require("../../config/postgres.config");
+
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+const NUMBERS = "0123456789";
+const SPECIALS = "!@#$%^&*_-+=";
+const LICENSE_KEY_LENGTH = 36;
+
+const randomCharacter = (characters) =>
+  characters[crypto.randomInt(0, characters.length)];
+
+const generateLicenseKey = () => {
+  const characters = [
+    randomCharacter(LETTERS),
+    randomCharacter(NUMBERS),
+    randomCharacter(SPECIALS),
+  ];
+  const alphabet = `${LETTERS}${NUMBERS}${SPECIALS}`;
+  while (characters.length < LICENSE_KEY_LENGTH) {
+    characters.push(randomCharacter(alphabet));
+  }
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = crypto.randomInt(0, index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+  return characters.join("");
+};
 
 const License = sequelize.define(
   "License",
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
-    licenseKey: {
+    licenseId: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
+      unique: true,
+      field: "license_id",
+      comment: "Mã UUIDV4 public của license",
+    },
+    licenseKey: {
+      type: DataTypes.STRING(36),
+      defaultValue: generateLicenseKey,
+      allowNull: false,
+      unique: true,
       field: "license_key",
-      comment: "Khoá định danh duy nhất do hệ thống cấp cho khách hàng",
+      validate: { len: [36, 36] },
+      comment: "Khoá ngẫu nhiên 36 ký tự gồm chữ, số và ký tự đặc biệt",
     },
     licenseContract: {
       type: DataTypes.ARRAY(DataTypes.JSONB),
@@ -63,6 +99,11 @@ const License = sequelize.define(
     timestamps: true,
     indexes: [
       {
+        name: "licenses_license_id_unique",
+        unique: true,
+        fields: ["license_id"],
+      },
+      {
         name: "licenses_license_key_unique",
         unique: true,
         fields: ["license_key"],
@@ -72,5 +113,7 @@ const License = sequelize.define(
     ],
   },
 );
+
+License.generateLicenseKey = generateLicenseKey;
 
 module.exports = License;

@@ -25,7 +25,7 @@ const router = express.Router();
  *       in: path
  *       name: softwareId
  *       required: true
- *       schema: { type: string, format: uuid }
+ *       schema: { type: string, example: OMS-SERVER }
  *     TicketId:
  *       in: path
  *       name: ticketId
@@ -43,8 +43,9 @@ const router = express.Router();
  *       enum: [paid, partialy_paid, unpaid]
  *     LicenseSoftwareInput:
  *       type: object
- *       required: [name, price, type]
+ *       required: [softwareId, name, price, type]
  *       properties:
+ *         softwareId: { type: string, example: OMS-SERVER }
  *         name: { type: string }
  *         price: { type: number }
  *         status: { type: string, enum: [active, error] }

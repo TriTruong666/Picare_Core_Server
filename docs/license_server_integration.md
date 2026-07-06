@@ -125,6 +125,7 @@ Cookie: token=<admin-session>
   "software": [
     {
       "name": "Company A Core Server",
+      "softwareId": "CORE-SERVER",
       "price": 10000000,
       "status": "active",
       "type": "server",
@@ -135,6 +136,7 @@ Cookie: token=<admin-session>
     },
     {
       "name": "Company A OMS Server",
+      "softwareId": "OMS-SERVER",
       "price": 5000000,
       "status": "active",
       "type": "server",
@@ -142,6 +144,7 @@ Cookie: token=<admin-session>
     },
     {
       "name": "Company A OMS Client",
+      "softwareId": "OMS-CLIENT",
       "price": 3000000,
       "status": "active",
       "type": "client"
@@ -158,7 +161,9 @@ Hub không public HTTP endpoint check license cho browser. Browser chỉ gọi
 
 ## Quy tắc dữ liệu
 
-- `licenseKey` unique và được Hub tự sinh.
+- `licenseId` là UUIDV4 unique do Hub tự sinh.
+- `softwareId` là chuỗi do quản trị viên tự nhập, bắt buộc và unique.
+- `licenseKey` unique, được Hub tự sinh ngẫu nhiên đúng 36 ký tự gồm chữ, số và ký tự đặc biệt.
 - `softwareId` phải thuộc đúng License của key được gửi lên.
 - Software `status=error` hoặc không tồn tại bị từ chối.
 - Key của Công ty A kết hợp software ID của Công ty B bị từ chối.

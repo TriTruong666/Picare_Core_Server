@@ -23,7 +23,7 @@ class LicenseService {
   }
 
   static async ensureLicense(licenseId, transaction) {
-    const license = await License.findByPk(licenseId, { transaction });
+    const license = await License.findOne({ where: { licenseId }, transaction });
     if (!license) throw new NotFoundException(ErrorCodes.LICENSE_NOT_FOUND);
     return license;
   }
@@ -36,17 +36,17 @@ class LicenseService {
 
       if (payload.software?.length) {
         await LicenseSoftware.bulkCreate(
-          payload.software.map((item) => ({ ...item, licenseId: license.id })),
+          payload.software.map((item) => ({ ...item, licenseId: license.licenseId })),
           { transaction, validate: true },
         );
       }
-      return this.getLicenseById(license.id, transaction);
+      return this.getLicenseById(license.licenseId, transaction);
     });
   }
 
   static async getLicenses({ page = 1, limit = 20, search = "" } = {}) {
     const where = search ? {
-      [Op.or]: ["customerName", "customerPhone", "customerEmail"].map((field) => ({
+      [Op.or]: ["licenseId", "customerName", "customerPhone", "customerEmail"].map((field) => ({
         [field]: { [Op.iLike]: `%${search}%` },
       })),
     } : {};
@@ -62,7 +62,8 @@ class LicenseService {
   }
 
   static async getLicenseById(licenseId, transaction) {
-    const item = await License.findByPk(licenseId, {
+    const item = await License.findOne({
+      where: { licenseId },
       include: [softwareInclude, ticketInclude],
       transaction,
     });
@@ -81,10 +82,10 @@ class LicenseService {
   static async deleteLicense(licenseId) {
     return sequelize.transaction(async (transaction) => {
       const license = await this.ensureLicense(licenseId, transaction);
-      await LicenseTicket.destroy({ where: { licenseId }, transaction });
-      await LicenseSoftware.destroy({ where: { licenseId }, transaction });
+      await LicenseTicket.destroy({ where: { licenseId: license.licenseId }, transaction });
+      await LicenseSoftware.destroy({ where: { licenseId: license.licenseId }, transaction });
       await license.destroy({ transaction });
-      return { id: licenseId };
+      return { licenseId };
     });
   }
 
@@ -95,23 +96,23 @@ class LicenseService {
   }
 
   static async getSoftware(licenseId, softwareId) {
-    const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
+    const item = await LicenseSoftware.findOne({ where: { softwareId, licenseId } });
     if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
     return new SoftwareDTO(item);
   }
 
   static async updateSoftware(licenseId, softwareId, payload) {
-    const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
+    const item = await LicenseSoftware.findOne({ where: { softwareId, licenseId } });
     if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
-    await item.update(this.pick(payload, ["name", "price", "status", "domain", "type", "serverConfig", "note"]));
+    await item.update(this.pick(payload, ["softwareId", "name", "price", "status", "domain", "type", "serverConfig", "note"]));
     return new SoftwareDTO(item);
   }
 
   static async deleteSoftware(licenseId, softwareId) {
-    const item = await LicenseSoftware.findOne({ where: { id: softwareId, licenseId } });
+    const item = await LicenseSoftware.findOne({ where: { softwareId, licenseId } });
     if (!item) throw new NotFoundException(ErrorCodes.LICENSE_SOFTWARE_NOT_FOUND);
     await item.destroy();
-    return { id: softwareId };
+    return { softwareId };
   }
 
   static async createTicket(licenseId, payload) {
@@ -151,12 +152,12 @@ class LicenseService {
 
   static async findSoftwareByKey({ licenseKey, softwareId }) {
     const software = await LicenseSoftware.findOne({
-      where: { id: softwareId },
+      where: { softwareId },
       include: [{
         model: License,
         as: "license",
         where: { licenseKey },
-        attributes: ["id", "customerName", "customerEmail"],
+        attributes: ["id", "licenseId", "customerName", "customerEmail"],
       }],
     });
     if (!software) throw new NotFoundException(ErrorCodes.LICENSE_CREDENTIALS_INVALID);
@@ -167,9 +168,9 @@ class LicenseService {
     return {
       active: true,
       status: software.status,
-      customer: { id: software.license.id, name: software.license.customerName, email: software.license.customerEmail },
+      customer: { id: software.license.licenseId, name: software.license.customerName, email: software.license.customerEmail },
       software: {
-        id: software.id,
+        id: software.softwareId,
         name: software.name,
         type: software.type,
         domain: software.domain,

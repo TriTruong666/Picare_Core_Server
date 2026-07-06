@@ -4,23 +4,27 @@ const LicenseTicket = require("./license_ticket.model");
 
 License.hasMany(LicenseSoftware, {
   foreignKey: "licenseId",
+  sourceKey: "licenseId",
   as: "software",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 LicenseSoftware.belongsTo(License, {
   foreignKey: "licenseId",
+  targetKey: "licenseId",
   as: "license",
 });
 
 License.hasMany(LicenseTicket, {
   foreignKey: "licenseId",
+  sourceKey: "licenseId",
   as: "tickets",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 LicenseTicket.belongsTo(License, {
   foreignKey: "licenseId",
+  targetKey: "licenseId",
   as: "license",
 });
 

@@ -67,9 +67,9 @@ const appConfig = {
       "contract_document",
       "contract_signature",
       "product_qr",
-      "license_software",
-      "license_tickets",
-      "licenses",
+      // "license_software",
+      // "license_tickets",
+      // "licenses",
     ],
   },
 
