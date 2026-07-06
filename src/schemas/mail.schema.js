@@ -46,7 +46,20 @@ const sendMailSchema = [
   }),
 ];
 
-const sendTemplateMailSchema = [
+const templateBaseSchema = () => [
+  body("smtpUser")
+    .optional()
+    .isEmail()
+    .withMessage("smtpUser phải là email hợp lệ"),
+  body("mailFrom")
+    .optional()
+    .isEmail()
+    .withMessage("mailFrom phải là email hợp lệ"),
+  body("mailFromName")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("mailFromName không được để trống"),
   body("to")
     .custom((value) => isEmailTarget(value))
     .withMessage("to là bắt buộc và phải là email hoặc danh sách email"),
@@ -74,14 +87,6 @@ const sendTemplateMailSchema = [
     .optional()
     .isString()
     .withMessage("bodyLines chỉ được chứa chuỗi"),
-  body("actionLabel")
-    .optional()
-    .isString()
-    .withMessage("actionLabel phải là chuỗi"),
-  body("actionUrl")
-    .optional()
-    .isURL({ require_protocol: true, require_tld: false })
-    .withMessage("actionUrl phải là URL hợp lệ"),
   body("footer")
     .optional()
     .isString()
@@ -92,7 +97,36 @@ const sendTemplateMailSchema = [
     .withMessage("replyTo không hợp lệ"),
 ];
 
+const sendEcontractTemplateMailSchema = [
+  ...templateBaseSchema(),
+  body("actionLabel")
+    .optional()
+    .isString()
+    .withMessage("actionLabel phải là chuỗi"),
+  body("actionUrl")
+    .optional()
+    .isURL({ require_protocol: true, require_tld: false })
+    .withMessage("actionUrl phải là URL hợp lệ"),
+];
+
+const sendLicenseActivationMailSchema = [
+  ...templateBaseSchema(),
+  body("clientUrl")
+    .isURL({ require_protocol: true, require_tld: false })
+    .withMessage("clientUrl phải là URL hợp lệ"),
+  body("softwareId")
+    .trim()
+    .notEmpty()
+    .isLength({ max: 100 })
+    .withMessage("softwareId là bắt buộc và tối đa 100 ký tự"),
+  body("licenseKey")
+    .trim()
+    .notEmpty()
+    .withMessage("licenseKey là bắt buộc"),
+];
+
 module.exports = {
   sendMailSchema,
-  sendTemplateMailSchema,
+  sendEcontractTemplateMailSchema,
+  sendLicenseActivationMailSchema,
 };

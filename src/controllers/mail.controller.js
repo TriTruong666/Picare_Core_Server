@@ -28,14 +28,17 @@ class MailController {
     }
   }
 
-  static async sendTemplateMail(req, res, next) {
+  static async sendEcontractTemplateMail(req, res, next) {
     try {
       const errors = validationResult(req);
       if (!errors.isEmpty()) {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const result = await MailService.sendTemplateMail({
+      const result = await MailService.sendEcontractTemplateMail({
+        smtpUser: req.body.smtpUser,
+        mailFrom: req.body.mailFrom,
+        mailFromName: req.body.mailFromName,
         to: req.body.to,
         cc: req.body.cc,
         bcc: req.body.bcc,
@@ -50,6 +53,24 @@ class MailController {
       });
 
       return ResponseHandler.success(res, result, "Gửi mail template thành công");
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async sendLicenseActivationMail(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const result = await MailService.sendLicenseActivationMail(req.body);
+      return ResponseHandler.success(
+        res,
+        result,
+        "Gửi mail kích hoạt license thành công",
+      );
     } catch (error) {
       next(error);
     }

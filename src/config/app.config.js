@@ -127,10 +127,19 @@ const appConfig = {
     host: process.env.SMTP_HOST || "",
     port: parseInt(process.env.SMTP_PORT, 10) || 587,
     secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
-    user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
-    from: process.env.MAIL_FROM || "",
-    name: process.env.MAIL_FROM_NAME || "Picare Core Hub",
+    senders: {
+      econtract: {
+        user: process.env.ECONTRACT_SMTP_USER || "",
+        from: process.env.ECONTRACT_MAIL_FROM || "",
+        name: process.env.ECONTRACT_MAIL_FROM_NAME || "Picare E-Contract",
+      },
+      license: {
+        user: process.env.LICENSE_SMTP_USER || "",
+        from: process.env.LICENSE_MAIL_FROM || "",
+        name: process.env.LICENSE_MAIL_FROM_NAME || "Picare License",
+      },
+    },
     rejectUnauthorized:
       String(process.env.SMTP_REJECT_UNAUTHORIZED || "true").toLowerCase() ===
       "true",

@@ -4,7 +4,8 @@ const MailController = require("../controllers/mail.controller");
 const { protect } = require("../middlewares/auth.middleware");
 const {
   sendMailSchema,
-  sendTemplateMailSchema,
+  sendEcontractTemplateMailSchema,
+  sendLicenseActivationMailSchema,
 } = require("../schemas/mail.schema");
 
 /**
@@ -126,7 +127,7 @@ router.post("/send", protect, sendMailSchema, MailController.sendMail);
 
 /**
  * @swagger
- * /api/v1/mail/send-template:
+ * /api/v1/mail/econtract-template:
  *   post:
  *     summary: Gửi email theo template có tiêu đề, nội dung và nút hành động
  *     tags: [Mail]
@@ -142,6 +143,9 @@ router.post("/send", protect, sendMailSchema, MailController.sendMail);
  *               - to
  *               - subject
  *             properties:
+ *               smtpUser: { type: string, format: email, example: econtract@picare.vn }
+ *               mailFrom: { type: string, format: email, example: econtract@picare.vn }
+ *               mailFromName: { type: string, example: Picare E-Contract }
  *               to:
  *                 oneOf:
  *                   - type: string
@@ -200,10 +204,53 @@ router.post("/send", protect, sendMailSchema, MailController.sendMail);
  *         description: Chưa xác thực
  */
 router.post(
-  "/send-template",
+  "/econtract-template",
   protect,
-  sendTemplateMailSchema,
-  MailController.sendTemplateMail,
+  sendEcontractTemplateMailSchema,
+  MailController.sendEcontractTemplateMail,
+);
+
+/**
+ * @swagger
+ * /api/v1/mail/license-active-template:
+ *   post:
+ *     summary: Gửi email kích hoạt và hướng dẫn sử dụng license
+ *     tags: [Mail]
+ *     security:
+ *       - cookieAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [to, subject, clientUrl, softwareId, licenseKey]
+ *             properties:
+ *               smtpUser: { type: string, format: email, example: license@picare.vn }
+ *               mailFrom: { type: string, format: email, example: license@picare.vn }
+ *               mailFromName: { type: string, example: Picare License }
+ *               to: { type: string, format: email, example: partner@example.com }
+ *               cc: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
+ *               bcc: { oneOf: [{ type: string }, { type: array, items: { type: string } }] }
+ *               subject: { type: string, example: Thông tin kích hoạt phần mềm }
+ *               title: { type: string, example: Kích hoạt bản quyền phần mềm }
+ *               intro: { type: string }
+ *               bodyLines: { type: array, items: { type: string } }
+ *               clientUrl: { type: string, format: uri, example: https://client.picare.vn }
+ *               softwareId: { type: string, example: OMS-SERVER }
+ *               licenseKey: { type: string, example: abc123-license-key }
+ *               footer: { type: string }
+ *               replyTo: { type: string, format: email }
+ *     responses:
+ *       200: { description: Gửi mail thành công }
+ *       400: { description: Dữ liệu không hợp lệ }
+ *       401: { description: Chưa xác thực }
+ */
+router.post(
+  "/license-active-template",
+  protect,
+  sendLicenseActivationMailSchema,
+  MailController.sendLicenseActivationMail,
 );
 
 module.exports = router;
