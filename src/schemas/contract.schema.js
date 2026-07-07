@@ -160,6 +160,10 @@ const createContractTemplateSchema = [
     .optional({ nullable: true })
     .isObject()
     .withMessage("partnerCompanyInfo phải là object"),
+  body("personalInfo")
+    .optional({ nullable: true })
+    .isObject()
+    .withMessage("personalInfo phải là object"),
   body("contractDueDate")
     .optional({ nullable: true, checkFalsy: true })
     .isISO8601()

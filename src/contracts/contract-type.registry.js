@@ -1,5 +1,6 @@
 const principleContractType = require("./types/principle.contract-type");
 const appendixContractType = require("./types/appendix.contract-type");
+const livestreamResponsibilityCommitmentContractType = require("./types/livestream-responsibility-commitment.contract-type");
 const { createGenericContractType } = require("./types/generic.contract-type");
 const {
   normalizeContractDataForResponse,
@@ -42,6 +43,7 @@ function register(definition) {
 
 register(principleContractType);
 register(appendixContractType);
+register(livestreamResponsibilityCommitmentContractType);
 
 function normalizeType(contractType) {
   const rawType = normalizeRawType(contractType);

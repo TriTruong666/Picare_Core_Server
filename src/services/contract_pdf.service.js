@@ -197,7 +197,6 @@ function formatMoney(value) {
   }).format(numberValue)} VND`;
 }
 
-
 function buildContractFilePrefix(contract) {
   return ContractTypeRegistry.getFilePrefix(contract?.contractType);
 }
@@ -399,7 +398,9 @@ async function getWatermarkLogoDataUri(logoPath) {
         })
         .catch((error) => {
           if (error?.code === "ENOENT") {
-            throw new Error(ErrorCodes.PDF_WATERMARK_LOGO_NOT_FOUND(logoPath).message);
+            throw new Error(
+              ErrorCodes.PDF_WATERMARK_LOGO_NOT_FOUND(logoPath).message,
+            );
           }
 
           throw error;
@@ -770,9 +771,7 @@ async function findFontPath() {
     return discoveredFontPath;
   }
 
-  throw new Error(
-    ErrorCodes.PDF_UNICODE_FONT_NOT_FOUND.message,
-  );
+  throw new Error(ErrorCodes.PDF_UNICODE_FONT_NOT_FOUND.message);
 }
 
 async function findBoldFontPath() {
@@ -1157,7 +1156,7 @@ class ContractPdfBuilder {
     doc.x = doc.page.margins.left;
   }
 
-  signatureArea(ownerCompanyInfo = {}, partnerCompanyInfo = {}) {
+  signatureArea(ownerCompanyInfo = {}, partnerCompanyInfo = {}, options = {}) {
     const doc = this.doc;
 
     if (doc.y > doc.page.height - 210) {
@@ -1170,30 +1169,51 @@ class ContractPdfBuilder {
     const rightX = doc.page.width - doc.page.margins.right - 170;
 
     doc.font(this.boldFontPath).fontSize(10);
-    doc.text("ĐẠI DIỆN BÊN A", leftX, y, { width: 160, align: "center" });
-    doc.text("ĐẠI DIỆN BÊN B", rightX, y, { width: 160, align: "center" });
+    const ownerOnRight = options.ownerSide === "right";
+    const leftInfo = ownerOnRight ? partnerCompanyInfo : ownerCompanyInfo;
+    const rightInfo = ownerOnRight ? ownerCompanyInfo : partnerCompanyInfo;
+    const leftSignerType = ownerOnRight ? "partner" : "owner";
+    const rightSignerType = ownerOnRight ? "owner" : "partner";
+    doc.text(options.leftTitle || "ĐẠI DIỆN BÊN A", leftX, y, {
+      width: 160,
+      align: "center",
+    });
+    doc.text(options.rightTitle || "ĐẠI DIỆN BÊN B", rightX, y, {
+      width: 160,
+      align: "center",
+    });
     doc.font(this.fontPath).fontSize(9);
-    doc.text("(Ký, đóng dấu, ghi rõ họ và tên)", leftX - 8, y + 18, {
-      width: 180,
-      align: "center",
-    });
-    doc.text("(Ký, đóng dấu, ghi rõ họ và tên)", rightX - 8, y + 18, {
-      width: 180,
-      align: "center",
-    });
+    doc.text(
+      options.leftHint || "(Ký, đóng dấu, ghi rõ họ và tên)",
+      leftX - 8,
+      y + 18,
+      {
+        width: 180,
+        align: "center",
+      },
+    );
+    doc.text(
+      options.rightHint || "(Ký, đóng dấu, ghi rõ họ và tên)",
+      rightX - 8,
+      y + 18,
+      {
+        width: 180,
+        align: "center",
+      },
+    );
 
     const signatureBoxY = y + 44;
     const signatureBoxWidth = 180;
     const signatureBoxHeight = 74;
     this.drawSignatureBox(
-      "owner",
+      leftSignerType,
       leftX - 10,
       signatureBoxY,
       signatureBoxWidth,
       signatureBoxHeight,
     );
     this.drawSignatureBox(
-      "partner",
+      rightSignerType,
       rightX - 10,
       signatureBoxY,
       signatureBoxWidth,
@@ -1202,7 +1222,7 @@ class ContractPdfBuilder {
 
     doc.font(this.boldFontPath).fontSize(10);
     doc.text(
-      normalizeVietnameseText(getOwnerName(ownerCompanyInfo)).toLocaleUpperCase(
+      normalizeVietnameseText(getOwnerName(leftInfo)).toLocaleUpperCase(
         "vi-VN",
       ),
       leftX,
@@ -1213,9 +1233,9 @@ class ContractPdfBuilder {
       },
     );
     doc.text(
-      normalizeVietnameseText(
-        getOwnerName(partnerCompanyInfo),
-      ).toLocaleUpperCase("vi-VN"),
+      normalizeVietnameseText(getOwnerName(rightInfo)).toLocaleUpperCase(
+        "vi-VN",
+      ),
       rightX,
       y + 128,
       {
@@ -1224,6 +1244,141 @@ class ContractPdfBuilder {
       },
     );
     doc.y = y + 150;
+  }
+
+  renderLivestreamResponsibilityCommitment(contract) {
+    const owner = contract.ownerCompanyInfo || {};
+    const person = contract.contractData?.personalInfo || {};
+    const renderedAt = new Date();
+
+    this.text(owner.companyName || "CTY TNHH PICARE VIỆT NAM", {
+      width: 245,
+      bold: true,
+    });
+    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
+    this.doc.y = 56;
+    this.doc.x = 300;
+    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
+      size: 11,
+      bold: true,
+      gap: 0.1,
+    });
+    this.doc.x = 300;
+    this.rightBlock("Độc lập – Tự do – Hạnh phúc", {
+      size: 10,
+      bold: true,
+      gap: 0.8,
+    });
+    this.doc.x = 300;
+    this.rightBlock(`TPHCM, ${formatLongVietnameseDate(renderedAt)}`, {
+      size: 10,
+      gap: 0.8,
+    });
+    this.doc.x = this.doc.page.margins.left;
+    this.centered(
+      "BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN TUÂN THỦ",
+      14,
+      0.1,
+      true,
+    );
+    this.centered("QUY ĐỊNH HOẠT ĐỘNG LIVESTREAM", 14, 0.7, true);
+
+    [
+      "Căn cứ Bộ luật Lao động số 45/2019/QH14 và các văn bản hướng dẫn thi hành;",
+      "Căn cứ Luật Thương mại điện tử có hiệu lực từ ngày 01/07/2026;",
+      "Căn cứ Luật Quảng cáo và các văn bản hướng dẫn thi hành;",
+      "Căn cứ quy định của pháp luật về quản lý mỹ phẩm;",
+      "Căn cứ Nội quy lao động và các quy định nội bộ của Công ty TNHH PICARE VIỆT NAM.",
+    ].forEach((line) => this.bullet(line));
+
+    this.text(
+      `Hôm nay, ${formatLongVietnameseDate(renderedAt)}, tại văn phòng Công ty, chúng tôi gồm:`,
+      { gap: 0.3 },
+    );
+    this.text(
+      `BÊN A: ${(owner.companyName || "CTY TNHH PICARE VIỆT NAM").toUpperCase()} (Sau đây gọi là “Công ty”)`,
+      { bold: true },
+    );
+    this.labelValue("Tên công ty: ", owner.companyName);
+    this.labelValue("Mã số thuế: ", owner.mst);
+    this.labelValue("Địa chỉ: ", owner.address);
+    this.labelValue(
+      "Người đại diện: ",
+      `${getOwnerName(owner)}${owner.role ? ` – ${owner.role}` : ""}`,
+    );
+    this.text("BÊN B: NGƯỜI LAO ĐỘNG/NHÂN VIÊN LIVESTREAM (Người cam kết)", {
+      bold: true,
+    });
+    this.labelValue("Họ tên: ", person.fullName);
+    this.labelValue("Sinh ngày: ", person.dateOfBirth);
+    this.labelValue(
+      "Chức vụ: ",
+      `${person.position}    Phòng ban: ${person.department}`,
+    );
+    this.labelValue("Thường trú: ", person.permanentAddress);
+    this.labelValue(
+      "Số CCCD: ",
+      `${person.citizenId}    cấp ngày: ${person.citizenIdIssuedDate}    tại: ${person.citizenIdIssuedPlace}`,
+      { gap: 0.3 },
+    );
+    this.text(
+      "Bên B tự nguyện lập và ký bản cam kết này với Bên A nhằm đảm bảo tính tuân thủ pháp luật và bảo vệ hình ảnh thương hiệu của Công ty TNHH Picare Việt Nam trong quá trình thực hiện Livestream bán hàng, cụ thể như sau:",
+      { gap: 0.25 },
+    );
+
+    const sections = [
+      [
+        "ĐIỀU 1: PHẠM VI VÀ NỘI DUNG PHÁT NGÔN VỀ SẢN PHẨM",
+        [
+          "Tuân thủ đúng hồ sơ công bố: Bên B cam kết chỉ giới thiệu, tư vấn và mô tả công dụng của mỹ phẩm đúng 100% theo tài liệu, kịch bản, và phiếu công bố sản phẩm do Bên A cung cấp.",
+          'Không sử dụng ngôn từ cấm: Tuyệt đối KHÔNG sử dụng bất kỳ từ ngữ, hình ảnh, âm thanh, ký hiệu hoặc cách diễn đạt nào có thể làm cho khách hàng hiểu hoặc có khả năng hiểu mỹ phẩm là thuốc hoặc có tác dụng điều trị bệnh. Cụ thể, không dùng các từ: "Đặc trị", "Trị dứt điểm", "Cam kết khỏi bệnh 100%", "Thuốc", "Chữa bệnh", "Thần dược" hoặc các từ ngữ có tính chất thổi phồng công dụng thực tế của sản phẩm.',
+          "Không tự ý sáng tạo công dụng: Không tự ý thêm thắt các công dụng, thành phần, hoặc tính năng của sản phẩm mà chưa được sự phê duyệt bằng văn bản từ Bộ phận Chuyên môn/Quản lý của Bên A.",
+        ],
+      ],
+      [
+        "ĐIỀU 2: CHUẨN MỰC NGÔN TỪ VÀ HÀNH VI TRÊN NỀN TẢNG",
+        [
+          "Văn hóa ứng xử: Sử dụng ngôn từ lịch sự, văn minh. Tuyệt đối không chửi thề, nói bậy, dùng từ ngữ thô tục, mang tính nhục mạ, phân biệt vùng miền, giới tính, tôn giáo hoặc vi phạm thuần phong mỹ tục của Việt Nam.",
+          "Tuân thủ tiêu chuẩn cộng đồng: Đảm bảo tuân thủ tuyệt đối các chính sách, quy định của các nền tảng Livestream (TikTok, Shopee, Facebook...). Không có các hành vi hở hang, bạo lực, hoặc xúi giục vi phạm pháp luật.",
+          "Cạnh tranh lành mạnh: Không nhắc tên, không bôi nhọ, chê bai, hoặc so sánh trực tiếp mang tính dìm hàng các thương hiệu, sản phẩm, và công ty đối thủ cạnh tranh dưới mọi hình thức. Không tự ý thay đổi giá bán, voucher, chương trình khuyến mại, xuất xứ, nguồn gốc, chính sách đổi trả, chính sách bảo hành khi chưa được Công ty phê duyệt.",
+        ],
+      ],
+      [
+        "ĐIỀU 3: XỬ LÝ VI PHẠM VÀ TRÁCH NHIỆM BỒI THƯỜNG",
+        [
+          "Bên B hiểu rõ và đồng ý rằng, mọi phát ngôn của Bên B trên Livestream đều đại diện cho hình ảnh của Bên A. Nếu Bên B vi phạm các cam kết tại Điều 1 và Điều 2 dẫn đến hậu quả, Bên B sẽ phải chịu các hình thức xử lý sau:",
+          "Chịu trách nhiệm trước Pháp luật và Nền tảng: Bên B phải chịu trách nhiệm cá nhân đối với các án phạt hành chính từ Cơ quan quản lý Nhà nước (Quản lý thị trường, Sở Y tế, Bộ TT&TT) hoặc các hình phạt từ Nền tảng.",
+          "Đền bù thiệt hại cho Bên A: Nếu sự vi phạm của Bên B dẫn đến việc Kênh Livestream/Tài khoản mạng xã hội của Bên A bị khóa, bóp tương tác, đánh gậy vi phạm hoặc khóa vĩnh viễn, Bên B có trách nhiệm bồi thường toàn bộ thiệt hại về doanh thu và chi phí xây dựng kênh (Mức bồi thường sẽ được tính toán thực tế tại thời điểm xảy ra sự việc).",
+          "Bồi thường 100% các khoản tiền phạt mà Bên A phải nộp cho Cơ quan nhà nước do lỗi phát ngôn sai sự thật của Bên B gây ra.",
+          "Trong trường hợp vi phạm, dù Công ty có xác định được thiệt hại hay vì lý do khách quan Công ty chưa đánh giá được mức độ thiệt hại và sự ảnh hưởng đến quyền lợi hợp pháp của Công ty thì tùy theo mức độ vi phạm, Nhân viên sẽ bị xử lý kỷ luật lao động đến mức cao nhất là sa thải theo quy định của Bộ luật Lao động và Nội quy lao động của Công ty và phải có trách nhiệm bồi thường toàn bộ thiệt hại do mình gây ra cho công ty theo quy định của pháp luật.",
+        ],
+      ],
+      [
+        "ĐIỀU 4: ĐIỀU KHOẢN CHUNG",
+        [
+          "Bên B đã đọc và hiểu rõ những nội dung trong cam kết này, sẽ không thắc mắc, khiếu nại về sau.",
+          "Cam kết này thay thế cho tất cả những trao đổi, đồng ý bằng miệng và những thông báo bằng văn bản trước đây liên quan đến chủ đề này.",
+          "Cam kết này có hiệu lực kể từ ngày ký và trong suốt quá trình làm việc của Nhân viên tại Công ty. Các nghĩa vụ về bảo mật thông tin, bí mật kinh doanh, bí mật công nghệ và trách nhiệm bồi thường thiệt hại (nếu có) vẫn được thực hiện theo quy định của pháp luật và các thỏa thuận giữa hai bên sau khi chấm dứt hợp đồng lao động.",
+          "Cam kết được lập thành 2 (hai) bản có giá trị pháp lý như nhau. Mỗi bên giữ 1 (một) bản.",
+        ],
+      ],
+    ];
+    sections.forEach(([title, paragraphs]) => {
+      this.heading(title);
+      paragraphs.forEach((paragraph) => this.bullet(paragraph));
+    });
+
+    this.signatureArea(
+      owner,
+      { ownerName: person.fullName },
+      {
+        ownerSide: "right",
+        leftTitle: "NGƯỜI CAM KẾT",
+        rightTitle: "ĐẠI DIỆN CÔNG TY",
+        leftHint: "(Ký, ghi rõ họ và tên)",
+        rightHint: "(Ký, đóng dấu, ghi rõ họ và tên)",
+      },
+    );
   }
 
   renderPrincipleContract(contract, details) {
@@ -2137,9 +2292,7 @@ class ContractPdfService {
     const acroFormMatch = /\/AcroForm\s+(\d+)\s+0\s+R/.exec(sourceText);
 
     if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
-      throw new Error(
-        ErrorCodes.PDF_INCREMENTAL_STRUCTURE_UNSUPPORTED.message,
-      );
+      throw new Error(ErrorCodes.PDF_INCREMENTAL_STRUCTURE_UNSUPPORTED.message);
     }
 
     if (!widgetMatches.length || !acroFormMatch) {
@@ -2443,7 +2596,10 @@ ${xrefOffset}
 
     if (cleanSignatureHex.length > placeholderLength) {
       throw new Error(
-        ErrorCodes.PDF_SIGNATURE_HEX_TOO_LONG(cleanSignatureHex.length, placeholderLength).message,
+        ErrorCodes.PDF_SIGNATURE_HEX_TOO_LONG(
+          cleanSignatureHex.length,
+          placeholderLength,
+        ).message,
       );
     }
 
@@ -2492,9 +2648,7 @@ ${xrefOffset}
     ];
 
     if (!rootMatch || !startXrefMatch || objectMatches.length === 0) {
-      throw new Error(
-        ErrorCodes.PDF_HANDWRITTEN_STRUCTURE_UNSUPPORTED.message,
-      );
+      throw new Error(ErrorCodes.PDF_HANDWRITTEN_STRUCTURE_UNSUPPORTED.message);
     }
 
     if (!widgetMatches.length) {

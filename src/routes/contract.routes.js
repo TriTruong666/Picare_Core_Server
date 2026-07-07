@@ -63,6 +63,9 @@ const credentialUpload = multer({
  *               partnerCompanyInfo:
  *                 type: object
  *                 description: Thông tin đối tác. Bắt buộc với contractType=principle.
+ *               personalInfo:
+ *                 type: object
+ *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -123,6 +126,26 @@ const credentialUpload = multer({
  *                     detailData:
  *                       name: Phí triển khai
  *                       fee: 5000000
+ *             livestreamResponsibilityCommitment:
+ *               summary: Cam kết trách nhiệm livestream
+ *               value:
+ *                 contractType: livestream_responsibility_commitment
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   address: 38/11 Nguyễn Giản Thanh, P.15, Quận 10, TP.HCM
+ *                   mst: "0315127257"
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   dateOfBirth: 1995-05-20
+ *                   position: Nhân viên Livestream
+ *                   department: Kinh doanh
+ *                   permanentAddress: 123 Nguyễn Trãi, TP.HCM
+ *                   citizenId: "079095001234"
+ *                   citizenIdIssuedDate: 2021-06-15
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
  *             appendix:
  *               summary: Phụ lục hợp đồng
  *               value:
@@ -371,6 +394,9 @@ router.delete(
  *                 type: object
  *               partnerCompanyInfo:
  *                 type: object
+ *               personalInfo:
+ *                 type: object
+ *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
  *               contractDueDate:
  *                 type: string
  *                 format: date
