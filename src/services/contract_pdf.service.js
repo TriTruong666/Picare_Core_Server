@@ -1381,6 +1381,148 @@ class ContractPdfBuilder {
     );
   }
 
+  renderLivestreamResponsibilityCommitmentAppendix(contract) {
+    const owner = contract.ownerCompanyInfo || {};
+    const renderedAt = new Date();
+    const items = (values) =>
+      values.forEach((value) => this.text(`• ${value}`, { indent: 12 }));
+    const paragraphs = (values) =>
+      values.forEach((value) => this.text(value, { gap: 0.15 }));
+
+    this.text(owner.companyName || "CÔNG TY TNHH PICARE VIỆT NAM", {
+      width: 245,
+      bold: true,
+    });
+    this.text(`Số: ${contract.contractNumber}`, {
+      width: 245,
+      bold: true,
+    });
+    this.doc.y = 56;
+    this.doc.x = 300;
+    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
+      size: 11,
+      bold: true,
+      gap: 0.1,
+    });
+    this.doc.x = 300;
+    this.rightBlock("Độc lập – Tự do – Hạnh phúc", {
+      size: 10,
+      bold: true,
+      gap: 0.8,
+    });
+    this.doc.x = 300;
+    this.rightBlock(`Tp.HCM, ${formatLongVietnameseDate(renderedAt)}`, {
+      size: 10,
+      gap: 0.8,
+    });
+    this.doc.x = this.doc.page.margins.left;
+    this.centered("PHỤ LỤC BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN", 14, 0.1, true);
+    this.centered("TUÂN THỦ QUY ĐỊNH HOẠT ĐỘNG LIVESTREAM", 14, 0.2, true);
+    this.centered(
+      "(Phụ lục này là văn bản không thể tách rời của Bản cam kết trách nhiệm và xác nhận tuân thủ quy định hoạt động Livestream)",
+      9,
+      0.6,
+    );
+
+    this.heading("I. Nguyên tắc áp dụng");
+    paragraphs([
+      "Danh mục này quy định các từ khóa, cụm từ và nội dung không được sử dụng khi Livestream, quay video, đăng bài viết, trả lời bình luận, nhắn tin với khách hàng hoặc thực hiện bất kỳ hoạt động truyền thông nào dưới danh nghĩa Công ty.",
+      "Danh mục này được xây dựng trên cơ sở quy định của pháp luật Việt Nam, các quy định chuyên ngành về quảng cáo, mỹ phẩm, thương mại điện tử, chính sách của các nền tảng mạng xã hội và quy định nội bộ của Công ty.",
+      "Danh mục này mang tính chất hướng dẫn tuân thủ và không giới hạn trách nhiệm của Nhân viên đối với các hành vi vi phạm pháp luật hoặc vi phạm quy định nội bộ chưa được liệt kê trong Phụ lục này.",
+      "Danh mục dưới đây bao gồm nhưng không giới hạn các từ khóa được liệt kê. Mọi cách diễn đạt khác có ý nghĩa tương tự hoặc làm khách hàng hiểu theo nội dung bị cấm đều được xem là hành vi vi phạm.",
+    ]);
+
+    this.heading("II. Nhóm từ cấm về điều trị bệnh");
+    this.text("Không được sử dụng các từ sau:");
+    items([
+      "Đặc trị", "Điều trị", "Trị tận gốc", "Trị dứt điểm", "Chữa bệnh",
+      "Chữa khỏi", "Khỏi hoàn toàn", "Khỏi 100%", "Cam kết khỏi",
+      "Điều trị tận gốc", "Hết bệnh", "Hết hoàn toàn", "Tiêu diệt bệnh",
+      "Thuốc", "Thần dược", "Thần kỳ", "Điều trị y khoa",
+      "Điều trị chuyên sâu", "Hiệu quả tức thì", "Hiệu quả vĩnh viễn",
+    ]);
+
+    this.heading("III. Nhóm từ cấm về cam kết hiệu quả");
+    this.text("Không được phát ngôn:");
+    items([
+      "Cam kết 100%", "Hiệu quả 100%", "Đảm bảo khỏi", "Đảm bảo hết",
+      "Chắc chắn khỏi", "Bao khỏi", "Bao đẹp", "Không hiệu quả hoàn tiền",
+      "Không đẹp hoàn tiền", "Cam kết tuyệt đối", "Bảo đảm tuyệt đối",
+      "Tốt nhất Việt Nam", "Số 1 Việt Nam", "Số 1 thế giới", "Duy nhất",
+      "Không có đối thủ",
+    ]);
+
+    this.heading("IV. Nhóm từ cấm về công dụng mỹ phẩm");
+    this.text("Không được phát biểu:");
+    items([
+      "Thay thế thuốc", "Thay thế điều trị", "Chữa nám", "Trị nám", "Trị mụn",
+      "Trị viêm", "Trị sẹo", "Trị dị ứng", "Trị chàm", "Trị vảy nến",
+      "Trị nấm", "Trị thâm vĩnh viễn", "Xóa nám hoàn toàn",
+      "Xóa sẹo hoàn toàn", "Kích thích mọc tóc", "Điều trị rụng tóc",
+    ]);
+
+    this.heading("V. Nhóm từ cấm về thời gian");
+    this.text("Không được nói:");
+    items([
+      "Sau 1 lần", "Sau 1 ngày", "Sau 3 ngày", "Sau 7 ngày khỏi",
+      "Sau 14 ngày hết", "Sau 30 ngày hết hoàn toàn", "Nhanh nhất",
+      "Nhanh thần tốc", "Tức thì", "Ngay lập tức", "Hiệu quả ngay",
+    ]);
+
+    this.heading("VI. Nhóm từ cấm về nguồn gốc");
+    this.text("Không được:");
+    items([
+      "Hàng xách tay", "Hàng nội bộ",
+      "Hàng độc quyền (khi chưa có căn cứ chứng minh)",
+      "Nhập khẩu chính ngạch (khi chưa được xác nhận)", "Chuẩn Châu Âu",
+      "Được Bộ Y tế cấp phép (nếu không có tài liệu chứng minh)",
+      "Được Bộ Y tế chứng nhận (nếu không đúng)",
+      "Được bác sĩ khuyên dùng (nếu không có tài liệu chứng minh)",
+    ]);
+
+    this.heading("VII. Nhóm từ cấm về giá bán");
+    this.text("Không được tự ý công bố, thay đổi hoặc cam kết với khách hàng các nội dung sau khi chưa được Công ty phê duyệt:");
+    items([
+      "Giá rẻ nhất", "Rẻ nhất thị trường", "Rẻ nhất Việt Nam",
+      "Không nơi nào rẻ hơn", "Giá gốc", "Giá vốn", "Giá nội bộ",
+      "Giá nhân viên", "Xả kho", "Thanh lý", "Lỗ vốn",
+    ]);
+
+    this.heading("VIII. Nhóm từ cấm về đối thủ cạnh tranh");
+    this.text("Không được tự ý nói:");
+    items([
+      "Nhắc tên đối thủ", "So sánh trực tiếp", "Chê bai thương hiệu khác",
+      "Chê bai sản phẩm khác", "Đưa thông tin chưa được kiểm chứng",
+      "Gây hiểu lầm về đối thủ",
+    ]);
+
+    this.heading("IX. Nhóm nội dung cấm khác");
+    this.text("Không được:");
+    items([
+      "Tiết lộ doanh thu", "Tiết lộ KPI", "Tiết lộ giá vốn",
+      "Tiết lộ chính sách chiết khấu", "Tiết lộ dữ liệu khách hàng",
+      "Tiết lộ dữ liệu Affiliate", "Tiết lộ dữ liệu KOC",
+      "Tiết lộ kế hoạch Marketing", "Tiết lộ thông tin nội bộ",
+      "Công bố thông tin chưa được phép",
+    ]);
+
+    this.heading("X. Quy định áp dụng");
+    paragraphs([
+      "Nhân viên xác nhận đã được Công ty phổ biến và hướng dẫn đầy đủ Danh mục từ khóa cấm (Blacklist Keywords) này.",
+      "Nhân viên cam kết tuân thủ tuyệt đối trong toàn bộ quá trình thực hiện Livestream, quay video, đăng bài, trả lời bình luận, tin nhắn và các hoạt động truyền thông khác dưới danh nghĩa Công ty.",
+      "Danh mục này là Phụ lục không tách rời của Bản cam kết trách nhiệm và có giá trị áp dụng như Bản cam kết.",
+      "Trong trường hợp pháp luật, chính sách của nền tảng thương mại điện tử, mạng xã hội hoặc quy định nội bộ của Công ty có sự thay đổi, Công ty có quyền sửa đổi, bổ sung Danh mục Blacklist Keywords mà không phải ký lại Bản cam kết này. Việc cập nhật sẽ được thông báo cho Nhân viên bằng văn bản, email, hệ thống quản lý nội bộ hoặc hình thức phù hợp khác. Kể từ thời điểm thông báo, Nhân viên có trách nhiệm nghiên cứu và tuân thủ đầy đủ các nội dung được cập nhật.",
+    ]);
+
+    this.signatureArea(owner, {}, {
+      ownerSide: "right",
+      leftTitle: "NGƯỜI CAM KẾT",
+      rightTitle: "ĐẠI DIỆN CÔNG TY",
+      leftHint: " ",
+      rightHint: " ",
+    });
+  }
+
   renderPrincipleContract(contract, details) {
     const owner = contract.ownerCompanyInfo || {};
     const partner = contract.partnerCompanyInfo || {};

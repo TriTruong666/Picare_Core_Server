@@ -66,6 +66,13 @@ const credentialUpload = multer({
  *               personalInfo:
  *                 type: object
  *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
+ *               parentContractId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID cam kết chính được client chọn; chỉ lưu trong record phụ lục.
+ *               parentContractNumber:
+ *                 type: string
+ *                 description: Số cam kết chính; chỉ lưu trong record phụ lục.
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -172,6 +179,27 @@ const credentialUpload = multer({
  *                   - rawContent: "<ol><li><p><strong>Tên sản phẩm: </strong>Mocelux Collagen</p></li><li><p><strong>Số công bố:</strong> 1234/2026/ĐKSP</p></li><li><p><strong>Thành phần:</strong> Collagen peptide, Vitamin C</p></li><li><p><strong>Quy cách đóng gói:</strong> Hộp 30 gói x 10ml</p></li><li><p><strong>Nước sản xuất:</strong> Việt Nam</p></li><li><p><strong>Đơn giá(+VAT):</strong> 350000</p></li><li><p><strong>Phân loại:</strong> Thực phẩm bảo vệ sức khỏe</p></li></ol>"
  *                   - rawContent: "- Tên sản phẩm: Sản phẩm plain text- Số công bố: 12345/PCB- Thành phần chính: Thành phần A- Quy cách: Hộp 10 đơn vị- Xuất xứ: Việt Nam- Đơn giá: 250000"
  *                     html: "<ol><li><p><strong>Tên sản phẩm: </strong>Sản phẩm plain text</p></li><li><p><strong>Số công bố:</strong> 12345/PCB</p></li><li><p><strong>Thành phần chính:</strong> Thành phần A</p></li><li><p><strong>Quy cách:</strong> Hộp 10 đơn vị</p></li><li><p><strong>Xuất xứ:</strong> Việt Nam</p></li><li><p><strong>Đơn giá:</strong> 250000</p></li></ol>"
+ *             livestreamResponsibilityCommitmentAppendix:
+ *               summary: Phụ lục cam kết trách nhiệm livestream
+ *               value:
+ *                 contractType: livestream_responsibility_commitment_appendix
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   address: 38/11 Nguyễn Giản Thanh, P. Hòa Hưng, TP.HCM
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 parentContractId: 550e8400-e29b-41d4-a716-446655440000
+ *                 parentContractNumber: 001/07/2026/HDNT/PIC
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   dateOfBirth: 1995-05-20
+ *                   position: Nhân viên Livestream
+ *                   department: Kinh doanh
+ *                   permanentAddress: 123 Nguyễn Trãi, TP.HCM
+ *                   citizenId: "079095001234"
+ *                   citizenIdIssuedDate: 2021-06-15
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
  *     responses:
  *       201:
  *         description: Tạo hợp đồng thành công
