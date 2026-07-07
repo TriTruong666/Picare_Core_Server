@@ -69,10 +69,7 @@ const credentialUpload = multer({
  *               parentContractId:
  *                 type: string
  *                 format: uuid
- *                 description: ID cam kết chính được client chọn; chỉ lưu trong record phụ lục.
- *               parentContractNumber:
- *                 type: string
- *                 description: Số cam kết chính; chỉ lưu trong record phụ lục.
+ *                 description: ID hợp đồng chính. Dùng cho contractType=livestream_responsibility_commitment_appendix để liên kết phụ lục với hợp đồng gốc.
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -190,7 +187,6 @@ const credentialUpload = multer({
  *                   ownerName: Nguyễn Thành Trung
  *                   role: Giám đốc
  *                 parentContractId: 550e8400-e29b-41d4-a716-446655440000
- *                 parentContractNumber: 001/07/2026/HDNT/PIC
  *                 personalInfo:
  *                   fullName: Nguyễn Văn A
  *                   dateOfBirth: 1995-05-20

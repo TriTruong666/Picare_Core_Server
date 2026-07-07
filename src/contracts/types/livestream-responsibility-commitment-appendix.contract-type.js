@@ -21,10 +21,6 @@ module.exports = {
         ...normalized.contractData,
         partnerCompanyInfo: null,
         personalInfo: input.personalInfo ?? sourceData.personalInfo ?? null,
-        parentContractId:
-          input.parentContractId ?? sourceData.parentContractId ?? null,
-        parentContractNumber:
-          input.parentContractNumber ?? sourceData.parentContractNumber ?? null,
       },
     };
   },
