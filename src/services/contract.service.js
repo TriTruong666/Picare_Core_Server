@@ -18,7 +18,6 @@ const {
 } = require("../common/exceptions/BaseException");
 const ContractPdfService = require("./contract_pdf.service");
 const S3Service = require("./s3.service");
-const FptAiService = require("./fpt_ai.service");
 const appConfig = require("../config/app.config");
 const JWTService = require("./jwt.service");
 const { ContractTypeRegistry } = require("../contracts");
@@ -318,67 +317,50 @@ async function uploadPdfBufferToS3({
     clientId: null,
     description,
     visibility,
+    allowExisting: true,
   });
 
   return s3Result;
 }
 
-function extractFptIdData(response) {
-  return Array.isArray(response?.data) && response.data.length > 0
-    ? response.data[0]
-    : {};
-}
-
-function isBackSideIdData(data = {}) {
-  const type = String(data.type_new || data.type || "").toLowerCase();
-  return (
-    type.includes("back") || Boolean(data.issue_date) || Boolean(data.features)
-  );
-}
-
-function normalizeFptValue(value) {
-  if (value === undefined || value === null || value === "N/A") {
-    return null;
-  }
-
-  return value;
-}
-
-function buildIndividualCredentialFromOcr({
-  firstImage,
-  secondImage,
-  firstOcr,
-  secondOcr,
-}) {
-  const firstData = extractFptIdData(firstOcr);
-  const secondData = extractFptIdData(secondOcr);
-  const frontData = isBackSideIdData(firstData) ? secondData : firstData;
-  const backData = isBackSideIdData(firstData) ? firstData : secondData;
-
+function buildIndividualCredentialFromImages({ firstImage, secondImage }) {
   return {
-    credentialId: normalizeFptValue(frontData.id),
-    name: normalizeFptValue(frontData.name),
-    dob: normalizeFptValue(frontData.dob),
-    home: normalizeFptValue(frontData.home),
-    address: normalizeFptValue(frontData.address),
-    address_entities: normalizeFptValue(frontData.address_entities),
-    sex: normalizeFptValue(frontData.sex),
-    nationality: normalizeFptValue(frontData.nationality),
-    ethnicity: normalizeFptValue(backData.ethnicity || frontData.ethnicity),
-    religion: normalizeFptValue(backData.religion),
-    doe: normalizeFptValue(frontData.doe),
-    features: normalizeFptValue(backData.features),
-    issue_date: normalizeFptValue(backData.issue_date),
-    issue_loc: normalizeFptValue(backData.issue_loc),
-    type: normalizeFptValue(frontData.type),
-    type_new: normalizeFptValue(frontData.type_new),
     first_identification_image: firstImage.url,
     second_identification_image: secondImage.url,
     first_identification_image_key: firstImage.key,
     second_identification_image_key: secondImage.key,
-    ocr: {
-      first: firstOcr,
-      second: secondOcr,
+  };
+}
+
+async function attachParentContractData(input = {}, options = {}) {
+  const contractType = ContractTypeRegistry.normalizeType(input.contractType);
+  if (contractType !== "livestream_responsibility_commitment_appendix") {
+    return input;
+  }
+
+  const sourceData =
+    input.contractData && typeof input.contractData === "object"
+      ? input.contractData
+      : {};
+  const parentContractId = input.parentContractId ?? sourceData.parentContractId;
+  if (!parentContractId) return input;
+
+  const parentContract = await Contract.findOne({
+    where: { contractId: parentContractId },
+    attributes: ["contractId", "contractNumber"],
+    transaction: options.transaction,
+  });
+  if (!parentContract) {
+    throw new NotFoundException(ErrorCodes.NOT_FOUND);
+  }
+
+  return {
+    ...input,
+    parentContractId: parentContract.contractId,
+    contractData: {
+      ...sourceData,
+      parentContractId: parentContract.contractId,
+      parentContractCode: parentContract.contractNumber,
     },
   };
 }
@@ -620,9 +602,14 @@ class ContractService {
 
   static async createContractTemplate(input = {}) {
     validateContractTypeInput(input);
-    const normalizedContract = ContractTypeRegistry.normalizeInput(input);
 
     return Contract.sequelize.transaction(async (transaction) => {
+      const inputWithParent = await attachParentContractData(input, {
+        transaction,
+      });
+      const normalizedContract =
+        ContractTypeRegistry.normalizeInput(inputWithParent);
+      validateContractTypeInput(normalizedContract);
       const contract = await Contract.create(
         {
           ownerCompanyInfo: normalizedContract.ownerCompanyInfo,
@@ -1054,7 +1041,7 @@ class ContractService {
       const hasDetailsUpdate =
         Object.prototype.hasOwnProperty.call(updateData, "details") ||
         Object.prototype.hasOwnProperty.call(sourceData, "details");
-      const normalizedContract = ContractTypeRegistry.normalizeInput({
+      const inputWithParent = await attachParentContractData({
         ...updateData,
         ownerCompanyInfo:
           updateData.ownerCompanyInfo ?? contract.ownerCompanyInfo,
@@ -1070,7 +1057,11 @@ class ContractService {
         details: hasDetailsUpdate
           ? (updateData.details ?? sourceData.details ?? [])
           : currentDetails,
+      }, {
+        transaction,
       });
+      const normalizedContract =
+        ContractTypeRegistry.normalizeInput(inputWithParent);
       validateContractTypeInput(normalizedContract);
 
       const contractUpdateData = {
@@ -1465,16 +1456,9 @@ class ContractService {
       }),
     ]);
 
-    const [firstOcr, secondOcr] = await Promise.all([
-      FptAiService.recognizeVietnamIdCard(firstIdentificationImage),
-      FptAiService.recognizeVietnamIdCard(secondIdentificationImage),
-    ]);
-
-    const individualCredential = buildIndividualCredentialFromOcr({
+    const individualCredential = buildIndividualCredentialFromImages({
       firstImage: firstUpload,
       secondImage: secondUpload,
-      firstOcr,
-      secondOcr,
     });
 
     await contract.update({

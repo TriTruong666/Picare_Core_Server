@@ -34,11 +34,11 @@ const SIGNATURE_APPEARANCE_THEMES = {
     watermarkOpacity: 0.16,
   },
   default: {
-    logoPath: PICARE_WATERMARK_LOGO_PATH,
+    logoPath: null,
     watermarkWidthInset: 6,
     watermarkHeightScale: 2.2,
     watermarkYOffset: 8,
-    watermarkOpacity: 0.2,
+    watermarkOpacity: 0,
   },
 };
 
@@ -237,7 +237,9 @@ function getDigitalSignatureAppearanceData({
   const identityLine = getSignatureIdentityLine(companyInfo);
   const addressLine = `\u0110\u1ecba ch\u1ec9: ${formatOptionalText(companyInfo.address)}`;
   const timeLine = `Th\u1eddi gian: ${formatVietnameseDateTime(signingTime)}`;
-  const signatureTheme = getSignatureAppearanceTheme(companyInfo);
+  const signatureTheme = getSignatureAppearanceTheme(
+    signerType === "partner" ? contract?.ownerCompanyInfo : companyInfo,
+  );
 
   return {
     companyName,
@@ -452,9 +454,9 @@ async function createDigitalSignatureAppearanceImage({
     contentWidth,
   );
   const timeLine = fitTextForImage(data.timeLine, fontPath, 7.4, contentWidth);
-  const logoDataUri = await getWatermarkLogoDataUri(
-    data.signatureTheme.logoPath,
-  );
+  const logoDataUri = data.signatureTheme.logoPath
+    ? await getWatermarkLogoDataUri(data.signatureTheme.logoPath)
+    : null;
   const watermarkWidth = Math.max(
     24,
     width - data.signatureTheme.watermarkWidthInset,
@@ -466,10 +468,13 @@ async function createDigitalSignatureAppearanceImage({
   const watermarkX = (width - watermarkWidth) / 2;
   const watermarkY =
     (height - watermarkHeight) / 2 + data.signatureTheme.watermarkYOffset;
+  const watermarkMarkup = logoDataUri
+    ? `<image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="${data.signatureTheme.watermarkOpacity}" preserveAspectRatio="none"/>`
+    : "";
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
-  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="${data.signatureTheme.watermarkOpacity}" preserveAspectRatio="none"/>
+  ${watermarkMarkup}
   <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
   <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.2" fill="#111111">${escapeXml(identityLine)}</text>
   <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
@@ -1383,6 +1388,8 @@ class ContractPdfBuilder {
 
   renderLivestreamResponsibilityCommitmentAppendix(contract) {
     const owner = contract.ownerCompanyInfo || {};
+    const parentContractCode =
+      contract.contractData?.parentContractCode || "N/A";
     const renderedAt = new Date();
     const items = (values) =>
       values.forEach((value) => this.text(`• ${value}`, { indent: 12 }));
@@ -1419,7 +1426,7 @@ class ContractPdfBuilder {
     this.centered("PHỤ LỤC BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN", 14, 0.1, true);
     this.centered("TUÂN THỦ QUY ĐỊNH HOẠT ĐỘNG LIVESTREAM", 14, 0.2, true);
     this.centered(
-      "(Phụ lục này là văn bản không thể tách rời của Bản cam kết trách nhiệm và xác nhận tuân thủ quy định hoạt động Livestream)",
+      `(Phụ lục này là văn bản không thể tách rời của Bản cam kết trách nhiệm (${parentContractCode}) và xác nhận tuân thủ quy định hoạt động Livestream)`,
       9,
       0.6,
     );

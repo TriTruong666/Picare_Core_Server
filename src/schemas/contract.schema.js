@@ -164,6 +164,10 @@ const createContractTemplateSchema = [
     .optional({ nullable: true })
     .isObject()
     .withMessage("personalInfo phải là object"),
+  body("personalInfo.email")
+    .optional({ nullable: true, checkFalsy: true })
+    .isEmail()
+    .withMessage("personalInfo.email phải là email hợp lệ"),
   body("parentContractId")
     .optional({ nullable: true, checkFalsy: true })
     .isUUID()

@@ -21,6 +21,9 @@ module.exports = {
         ...normalized.contractData,
         partnerCompanyInfo: null,
         personalInfo: input.personalInfo ?? sourceData.personalInfo ?? null,
+        parentContractId:
+          input.parentContractId ?? sourceData.parentContractId ?? null,
+        parentContractCode: sourceData.parentContractCode ?? null,
       },
     };
   },
@@ -41,6 +44,16 @@ module.exports = {
     if (!personalInfo || typeof personalInfo !== "object") {
       throw new Error(
         "personalInfo là bắt buộc để lưu record phụ lục cam kết trách nhiệm livestream",
+      );
+    }
+    if (!personalInfo.email) {
+      throw new Error(
+        "personalInfo.email là bắt buộc với phụ lục cam kết trách nhiệm livestream",
+      );
+    }
+    if (!(input.parentContractId ?? input.contractData?.parentContractId)) {
+      throw new Error(
+        "parentContractId là bắt buộc với phụ lục cam kết trách nhiệm livestream",
       );
     }
 

@@ -189,6 +189,7 @@ const credentialUpload = multer({
  *                 parentContractId: 550e8400-e29b-41d4-a716-446655440000
  *                 personalInfo:
  *                   fullName: Nguyễn Văn A
+ *                   email: nguyenvana@example.com
  *                   dateOfBirth: 1995-05-20
  *                   position: Nhân viên Livestream
  *                   department: Kinh doanh
@@ -421,6 +422,10 @@ router.delete(
  *               personalInfo:
  *                 type: object
  *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
+ *               parentContractId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: ID hợp đồng chính. Dùng cho contractType=livestream_responsibility_commitment_appendix; thông tin cá nhân được lấy từ record hợp đồng chính.
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -552,6 +557,44 @@ router.delete(
  *                     origin: Việt Nam
  *                     unitPriceVat: "250000"
  *                     classification: Thực phẩm bảo vệ sức khỏe
+ *             livestreamResponsibilityCommitment:
+ *               summary: Cập nhật cam kết trách nhiệm livestream
+ *               value:
+ *                 contractType: livestream_responsibility_commitment
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   dateOfBirth: 1995-05-20
+ *                   position: Nhân viên Livestream
+ *                   department: Kinh doanh
+ *                   permanentAddress: 123 Nguyễn Trãi, TP.HCM
+ *                   citizenId: "079095001234"
+ *                   citizenIdIssuedDate: 2021-06-15
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
+ *             livestreamResponsibilityCommitmentAppendix:
+ *               summary: Cập nhật phụ lục cam kết trách nhiệm livestream
+ *               value:
+ *                 contractType: livestream_responsibility_commitment_appendix
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 parentContractId: 550e8400-e29b-41d4-a716-446655440000
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   email: nguyenvana@example.com
+ *                   dateOfBirth: 1995-05-20
+ *                   position: Nhân viên Livestream
+ *                   department: Kinh doanh
+ *                   permanentAddress: 123 Nguyễn Trãi, TP.HCM
+ *                   citizenId: "079095001234"
+ *                   citizenIdIssuedDate: 2021-06-15
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
  *             custom:
  *               summary: Cập nhật loại hợp đồng động
  *               value:
@@ -830,8 +873,8 @@ router.patch(
  * @swagger
  * /api/v1/contracts/{contractId}/individual-credential:
  *   post:
- *     summary: Upload 2 mặt CMND/CCCD và trích xuất thông tin cá nhân
- *     description: Chỉ dùng khi signerType = individual. API upload ảnh lên S3, gọi FPT.AI ID Recognition và lưu kết quả OCR vào individualCredential.
+ *     summary: Upload 2 mặt CMND/CCCD
+ *     description: Chỉ dùng khi signerType = individual. API lưu hai ảnh lên S3 và lưu đường dẫn vào individualCredential; hiện không thực hiện OCR.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -862,7 +905,7 @@ router.patch(
  *                 description: Ảnh mặt sau CMND/CCCD, tối đa 5MB
  *     responses:
  *       200:
- *         description: Upload và trích xuất thông tin CMND/CCCD thành công
+ *         description: Upload ảnh CMND/CCCD thành công
  */
 router.post(
   "/:contractId/individual-credential",

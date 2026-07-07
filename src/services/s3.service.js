@@ -132,7 +132,24 @@ class S3Service {
     description = null,
     visibility = AssetVisibility.PRIVATE,
     s3Metadata = {},
+    allowExisting = false,
   }) {
+    if (allowExisting) {
+      const existingAsset = await S3Asset.findOne({
+        where: { s3Key: key, s3Bucket: BUCKET },
+      });
+
+      if (existingAsset) {
+        return {
+          key: existingAsset.s3Key,
+          url: existingAsset.s3Url,
+          etag: existingAsset.etag,
+          record: existingAsset,
+          reused: true,
+        };
+      }
+    }
+
     // 1. Upload lên S3 (không dùng ACL)
     const uploadParams = {
       Bucket: BUCKET,
@@ -158,30 +175,50 @@ class S3Service {
       folderId = folderRecord.folderId;
     }
 
-    // 3. Tạo record trong DB
-    const record = await S3Asset.create({
-      clientId,
-      userId,
-      s3Key: key,
-      s3Url: url,
-      s3Bucket: BUCKET,
-      s3Region: REGION,
-      etag: result.ETag,
-      originalName,
-      mimeType,
-      fileSize: fileSize || 0,
-      visibility,
-      folderId,
-      uploadedBy,
-      description,
-    });
+    try {
+      // 3. Tạo record trong DB
+      const record = await S3Asset.create({
+        clientId,
+        userId,
+        s3Key: key,
+        s3Url: url,
+        s3Bucket: BUCKET,
+        s3Region: REGION,
+        etag: result.ETag,
+        originalName,
+        mimeType,
+        fileSize: fileSize || 0,
+        visibility,
+        folderId,
+        uploadedBy,
+        description,
+      });
 
-    return {
-      key,
-      url,
-      etag: result.ETag,
-      record,
-    };
+      return {
+        key,
+        url,
+        etag: result.ETag,
+        record,
+      };
+    } catch (error) {
+      if (allowExisting && error?.name === "SequelizeUniqueConstraintError") {
+        const existingAsset = await S3Asset.findOne({
+          where: { s3Key: key, s3Bucket: BUCKET },
+        });
+
+        if (existingAsset) {
+          return {
+            key: existingAsset.s3Key,
+            url: existingAsset.s3Url,
+            etag: existingAsset.etag,
+            record: existingAsset,
+            reused: true,
+          };
+        }
+      }
+
+      throw error;
+    }
   }
 
   // ─── PRESIGNED URL ───────────────────────────────────────────────────────────
