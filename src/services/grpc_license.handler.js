@@ -23,6 +23,7 @@ const grpcLicenseHandler = {
         status: result.status,
         enabledFeatures: result.software.enabledFeatures,
         message: "License hợp lệ.",
+        licenseId: result.customer.id,
         customerName: result.customer.name,
         softwareName: result.software.name,
       });
@@ -58,6 +59,7 @@ const grpcLicenseHandler = {
         status: result.status,
         enabledFeatures: result.software.enabledFeatures,
         message: "Bản quyền server hợp lệ.",
+        licenseId: result.customer.id,
         customerName: result.customer.name,
         softwareName: result.software.name,
       });

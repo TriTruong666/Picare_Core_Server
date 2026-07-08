@@ -25,6 +25,9 @@ class LicenseController {
   static async getTicket(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.getTicket(req.params.licenseId, req.params.ticketId)); } catch (e) { next(e); } }
   static async updateTicket(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.updateTicket(req.params.licenseId, req.params.ticketId, req.body), "Cập nhật ticket thành công"); } catch (e) { next(e); } }
   static async deleteTicket(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.deleteTicket(req.params.licenseId, req.params.ticketId), "Xoá ticket thành công"); } catch (e) { next(e); } }
+  static async createPublicTicket(req, res, next) { try { validate(req); return ResponseHandler.created(res, await LicenseService.createPublicTicket({ licenseId: req.params.licenseId, licenseKey: req.headers["x-license-key"], payload: req.body }), "Tạo ticket thành công"); } catch (e) { next(e); } }
+  static async getPublicTickets(req, res, next) { try { validate(req); const result = await LicenseService.getPublicTickets({ licenseId: req.params.licenseId, licenseKey: req.headers["x-license-key"], ...req.query }); return ResponseHandler.paginate(res, result.rows, result.count, result.page, result.limit, "Lấy danh sách ticket thành công"); } catch (e) { next(e); } }
+  static async getPublicTicket(req, res, next) { try { validate(req); return ResponseHandler.success(res, await LicenseService.getPublicTicket({ licenseId: req.params.licenseId, licenseKey: req.headers["x-license-key"], ticketId: req.params.ticketId })); } catch (e) { next(e); } }
 }
 
 module.exports = LicenseController;

@@ -226,6 +226,16 @@ class LicenseService {
     return software;
   }
 
+  static async ensureLicenseAccess({ licenseId, licenseKey }) {
+    const license = await License.findOne({
+      where: { licenseId, licenseKey },
+    });
+    if (!license) {
+      throw new NotFoundException(ErrorCodes.LICENSE_ACCESS_INVALID);
+    }
+    return license;
+  }
+
   static formatAccessResult(software) {
     return {
       active: true,
@@ -252,6 +262,57 @@ class LicenseService {
     if (software.type !== "server") throw new BadRequestException(ErrorCodes.LICENSE_SOFTWARE_NOT_SERVER);
     if (software.status !== "active") throw new ForbiddenException(ErrorCodes.LICENSE_SERVER_INACTIVE);
     return this.formatAccessResult(software);
+  }
+
+  static async createPublicTicket({ licenseId, licenseKey, payload }) {
+    await this.ensureLicenseAccess({ licenseId, licenseKey });
+    const item = await LicenseTicket.create({ ...payload, licenseId });
+    return new TicketDTO(item);
+  }
+
+  static async getPublicTickets({
+    licenseId,
+    licenseKey,
+    page = 1,
+    limit = 20,
+    search = "",
+    status,
+  } = {}) {
+    await this.ensureLicenseAccess({ licenseId, licenseKey });
+
+    const where = {
+      licenseId,
+      ...(status ? { status } : {}),
+      ...(search
+        ? {
+            [Op.or]: ["title", "message"].map((field) => ({
+              [field]: { [Op.iLike]: `%${search}%` },
+            })),
+          }
+        : {}),
+    };
+
+    const { count, rows } = await LicenseTicket.findAndCountAll({
+      where,
+      distinct: true,
+      limit,
+      offset: (page - 1) * limit,
+      order: [["createdAt", "DESC"]],
+    });
+
+    return {
+      count,
+      rows: rows.map((item) => new TicketDTO(item)),
+      page,
+      limit,
+    };
+  }
+
+  static async getPublicTicket({ licenseId, licenseKey, ticketId }) {
+    await this.ensureLicenseAccess({ licenseId, licenseKey });
+    const item = await LicenseTicket.findOne({ where: { id: ticketId, licenseId } });
+    if (!item) throw new NotFoundException(ErrorCodes.LICENSE_TICKET_NOT_FOUND);
+    return new TicketDTO(item);
   }
 }
 

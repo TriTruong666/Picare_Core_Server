@@ -48,4 +48,5 @@ message LicenseConfigResponse {
   string message = 4;
   string customerName = 5;
   string softwareName = 6;
+  string licenseId = 7;
 }

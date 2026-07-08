@@ -1,4 +1,4 @@
-const { body, param, query } = require("express-validator");
+const { body, header, param, query } = require("express-validator");
 
 class SoftwareDTO {
   constructor(item) {
@@ -220,6 +220,42 @@ const listTicketSchema = [
   query("status").optional().isIn(["pending", "completed", "cancelled"]),
 ];
 
+const licenseKeyHeaderSchema = [
+  header("x-license-key")
+    .isString()
+    .trim()
+    .notEmpty()
+    .isLength({ max: 255 })
+    .withMessage("X-License-Key là bắt buộc"),
+];
+
+const createPublicTicketSchema = [
+  ...licenseIdSchema,
+  ...licenseKeyHeaderSchema,
+  body("title").trim().notEmpty(),
+  body("message").isString().notEmpty(),
+  body("attachments").optional().isArray(),
+  body("attachments.*").optional().isURL({ require_tld: false }),
+  body("status").optional().isIn(["pending", "completed", "cancelled"]),
+  nullableString("cancelReason"),
+  nullableString("note"),
+  body("cancelReason").if(body("status").equals("cancelled")).notEmpty(),
+];
+
+const listPublicTicketSchema = [
+  ...licenseIdSchema,
+  ...licenseKeyHeaderSchema,
+  query("page").optional().isInt({ min: 1 }).toInt(),
+  query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
+  query("search").optional().trim(),
+  query("status").optional().isIn(["pending", "completed", "cancelled"]),
+];
+
+const publicTicketIdSchema = [
+  ...ticketIdSchema,
+  ...licenseKeyHeaderSchema,
+];
+
 module.exports = {
   LicenseDTO,
   SoftwareDTO,
@@ -235,4 +271,7 @@ module.exports = {
   createTicketSchema,
   updateTicketSchema,
   listTicketSchema,
+  createPublicTicketSchema,
+  listPublicTicketSchema,
+  publicTicketIdSchema,
 };

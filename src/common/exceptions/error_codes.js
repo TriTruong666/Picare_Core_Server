@@ -167,6 +167,11 @@ const ErrorCodes = {
     message: "Server đã bị khóa hoặc đang có lỗi bản quyền",
     statusCode: 403,
   },
+  LICENSE_ACCESS_INVALID: {
+    code: "ERR_LICENSE_008",
+    message: "License ID hoặc license key không hợp lệ",
+    statusCode: 404,
+  },
 
   QR_PRODUCT_NOT_FOUND: {
     code: "ERR_QR_001",
