@@ -157,8 +157,8 @@ const startServer = async () => {
 
     // await logDatabaseSchema(queryInterface);
 
-    await seedingRBAC();
-    await seedingUsers();
+    // await seedingRBAC();
+    // await seedingUsers();
     // await seedingHubClients();
     await seedAppConfig();
     await loadDynamicConfig();

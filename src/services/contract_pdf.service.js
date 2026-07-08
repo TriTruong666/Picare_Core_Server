@@ -84,6 +84,7 @@ const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
 const BYTE_RANGE_PLACEHOLDER = "**********";
+const DEFAULT_TEXT_LINE_GAP = 2;
 const SIGNATURE_WIDGET_RECTS = {
   owner: [75, 141, 255, 215],
   partner: [340, 141, 520, 215],
@@ -874,6 +875,9 @@ class ContractPdfBuilder {
   }
 
   text(value, options = {}) {
+    const lineGap =
+      options.lineGap !== undefined ? options.lineGap : DEFAULT_TEXT_LINE_GAP;
+
     this.doc
       .font(options.bold ? this.boldFontPath : this.fontPath)
       .fontSize(options.size || 10)
@@ -882,6 +886,7 @@ class ContractPdfBuilder {
         width: options.width,
         continued: options.continued,
         indent: options.indent || 0,
+        lineGap,
       });
 
     if (options.gap) {
@@ -890,6 +895,8 @@ class ContractPdfBuilder {
   }
 
   richText(parts = [], options = {}) {
+    const lineGap =
+      options.lineGap !== undefined ? options.lineGap : DEFAULT_TEXT_LINE_GAP;
     const filteredParts = parts.filter(
       (part) => part && part.text !== undefined && part.text !== null,
     );
@@ -902,6 +909,7 @@ class ContractPdfBuilder {
           align: options.align || "left",
           width: options.width,
           continued: index < filteredParts.length - 1,
+          lineGap,
         });
     });
 
