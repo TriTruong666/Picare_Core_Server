@@ -34,6 +34,9 @@ function startGrpcServer(port = 50051) {
   server.addService(authProto.LicenseService.service, {
     GetLicenseConfig: grpcLicenseHandler.getLicenseConfig,
     CheckLicense: grpcLicenseHandler.checkLicense,
+    CreateTicket: grpcLicenseHandler.createTicket,
+    ListTickets: grpcLicenseHandler.listTickets,
+    GetTicket: grpcLicenseHandler.getTicket,
   });
 
 

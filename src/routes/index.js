@@ -11,7 +11,6 @@ const contractRoutes = require("./contract.routes");
 const mailRoutes = require("./mail.routes");
 const productQRRoutes = require("./product_qr.routes");
 const licenseRoutes = require("./license.routes");
-const licensePublicRoutes = require("./license_public.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -22,7 +21,6 @@ router.use("/s3-folders", s3FolderRoutes);
 router.use("/contracts", contractRoutes);
 router.use("/mail", mailRoutes);
 router.use("/product-qrs", productQRRoutes);
-router.use("/public-licenses", licensePublicRoutes);
 router.use("/licenses", licenseRoutes);
 
 module.exports = router;

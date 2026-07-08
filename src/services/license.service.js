@@ -264,13 +264,13 @@ class LicenseService {
     return this.formatAccessResult(software);
   }
 
-  static async createPublicTicket({ licenseId, licenseKey, payload }) {
+  static async createTicketByLicenseCredentials({ licenseId, licenseKey, payload }) {
     await this.ensureLicenseAccess({ licenseId, licenseKey });
     const item = await LicenseTicket.create({ ...payload, licenseId });
     return new TicketDTO(item);
   }
 
-  static async getPublicTickets({
+  static async getTicketsByLicenseCredentials({
     licenseId,
     licenseKey,
     page = 1,
@@ -308,7 +308,7 @@ class LicenseService {
     };
   }
 
-  static async getPublicTicket({ licenseId, licenseKey, ticketId }) {
+  static async getTicketByLicenseCredentials({ licenseId, licenseKey, ticketId }) {
     await this.ensureLicenseAccess({ licenseId, licenseKey });
     const item = await LicenseTicket.findOne({ where: { id: ticketId, licenseId } });
     if (!item) throw new NotFoundException(ErrorCodes.LICENSE_TICKET_NOT_FOUND);

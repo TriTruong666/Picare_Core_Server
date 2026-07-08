@@ -34,6 +34,9 @@ service LicenseService {
   // Lấy trạng thái kích hoạt của client và danh sách các tính năng được mở khóa
   rpc GetLicenseConfig (LicenseConfigRequest) returns (LicenseConfigResponse) {}
   rpc CheckLicense (LicenseConfigRequest) returns (LicenseConfigResponse) {}
+  rpc CreateTicket (CreateTicketRequest) returns (TicketResponse) {}
+  rpc ListTickets (ListTicketsRequest) returns (ListTicketsResponse) {}
+  rpc GetTicket (GetTicketRequest) returns (TicketResponse) {}
 }
 
 message LicenseConfigRequest {
@@ -49,4 +52,59 @@ message LicenseConfigResponse {
   string customerName = 5;
   string softwareName = 6;
   string licenseId = 7;
+}
+
+message CreateTicketRequest {
+  string licenseId = 1;
+  string licenseKey = 2;
+  string title = 3;
+  string message = 4;
+  repeated string attachments = 5;
+  string status = 6;
+  string cancelReason = 7;
+  string note = 8;
+}
+
+message ListTicketsRequest {
+  string licenseId = 1;
+  string licenseKey = 2;
+  int32 page = 3;
+  int32 limit = 4;
+  string search = 5;
+  string status = 6;
+}
+
+message GetTicketRequest {
+  string licenseId = 1;
+  string licenseKey = 2;
+  string ticketId = 3;
+}
+
+message Ticket {
+  string id = 1;
+  string licenseId = 2;
+  string title = 3;
+  string message = 4;
+  repeated string attachments = 5;
+  string status = 6;
+  string cancelReason = 7;
+  string note = 8;
+  string createdAt = 9;
+  string updatedAt = 10;
+}
+
+message TicketResponse {
+  bool success = 1;
+  string message = 2;
+  Ticket ticket = 3;
+}
+
+message ListTicketsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated Ticket tickets = 3;
+  int32 totalRecords = 4;
+  int32 totalPages = 5;
+  int32 currentPage = 6;
+  int32 pageSize = 7;
 }
