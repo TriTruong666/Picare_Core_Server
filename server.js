@@ -155,11 +155,11 @@ const startServer = async () => {
       console.log("[DATABASE]: Database đã sẵn sàng.");
     }
 
-    await logDatabaseSchema(queryInterface);
+    // await logDatabaseSchema(queryInterface);
 
     await seedingRBAC();
     await seedingUsers();
-    await seedingHubClients();
+    // await seedingHubClients();
     await seedAppConfig();
     await loadDynamicConfig();
 
