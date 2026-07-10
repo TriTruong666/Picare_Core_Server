@@ -490,13 +490,26 @@ async function createDigitalSignatureAppearanceImage({
   };
 }
 
+async function prepareHandwrittenSignatureImage(signatureImageBuffer) {
+  // Uploaded signature canvases commonly keep a large transparent/white margin.
+  // Crop it before scaling so the ink, rather than the original canvas, is centred.
+  return sharp(signatureImageBuffer)
+    .ensureAlpha()
+    .trim({ background: "#ffffff", threshold: 10 })
+    .png()
+    .toBuffer();
+}
+
 async function createHandwrittenSignatureAppearanceImage({
   width,
   height,
   signatureImageBuffer,
   signingTime,
 }) {
-  const signaturePngBuffer = await sharp(signatureImageBuffer)
+  const trimmedSignatureBuffer = await prepareHandwrittenSignatureImage(
+    signatureImageBuffer,
+  );
+  const signaturePngBuffer = await sharp(trimmedSignatureBuffer)
     .resize({
       width: Math.round((width - 16) * 3),
       height: Math.round((height - 20) * 3),
@@ -2498,12 +2511,29 @@ class ContractPdfService {
     return body.replace(/>>\s*$/, `/${key} [${item}]\n>>`);
   }
 
+  static getPageObjectNumberAtIndex(sourceBytes, objectMatches, pageIndex) {
+    if (!Number.isInteger(pageIndex) || pageIndex < 0) {
+      return null;
+    }
+
+    const objectNumbers = [
+      ...new Set(objectMatches.map((match) => Number(match[1]))),
+    ];
+    const pageObjectNumbers = objectNumbers.filter((objectNumber) => {
+      const body = this.getPdfObjectBody(sourceBytes, objectNumber);
+      return /\/Type\s*\/Page\b/.test(body || "");
+    });
+
+    return pageObjectNumbers[pageIndex] || null;
+  }
+
   static async appendIncrementalSignaturePlaceholder({
     sourceBytes,
     contract,
     signerName,
     signerType,
     widgetRect,
+    pageIndex,
     signatureLength,
     signingTime,
   }) {
@@ -2532,7 +2562,9 @@ class ContractPdfService {
     const rootObjectNumber = Number(rootMatch[1]);
     const prevStartXref = Number(startXrefMatch[1]);
     const acroFormObjectNumber = Number(acroFormMatch[1]);
-    const pageObjectNumber = Number(widgetMatches[widgetMatches.length - 1][2]);
+    const pageObjectNumber =
+      this.getPageObjectNumberAtIndex(sourceBytes, objectMatches, pageIndex) ||
+      Number(widgetMatches[widgetMatches.length - 1][2]);
     const signatureObjectNumber = maxObjectNumber + 1;
     const widgetObjectNumber = maxObjectNumber + 2;
     const appearanceObjectNumber = maxObjectNumber + 3;
@@ -2712,6 +2744,7 @@ ${xrefOffset}
           signerName,
           signerType,
           widgetRect: signatureWidget?.rect,
+          pageIndex: signatureWidget?.pageIndex,
           signatureLength,
           signingTime,
         },
@@ -2858,6 +2891,7 @@ ${xrefOffset}
     signerName,
     signerType,
     widgetRect,
+    pageIndex,
     signatureImageBuffer,
     signingTime,
   }) {
@@ -2887,7 +2921,9 @@ ${xrefOffset}
     );
     const rootObjectNumber = Number(rootMatch[1]);
     const prevStartXref = Number(startXrefMatch[1]);
-    const pageObjectNumber = Number(widgetMatches[widgetMatches.length - 1][2]);
+    const pageObjectNumber =
+      this.getPageObjectNumberAtIndex(sourceBuffer, objectMatches, pageIndex) ||
+      Number(widgetMatches[widgetMatches.length - 1][2]);
     const annotationObjectNumber = maxObjectNumber + 1;
     const appearanceObjectNumber = maxObjectNumber + 2;
     const imageObjectNumber = maxObjectNumber + 3;
@@ -3036,6 +3072,7 @@ ${xrefOffset}
         signerName,
         signerType,
         widgetRect: signatureWidget?.rect,
+        pageIndex: signatureWidget?.pageIndex,
         signatureImageBuffer,
         signingTime,
       });
@@ -3081,10 +3118,8 @@ ${xrefOffset}
       await Promise.all([
         pdfDoc.embedFont(fontBytes, { subset: true }),
         pdfDoc.embedFont(boldFontBytes, { subset: true }),
-        embedImageByMimeType(
-          pdfDoc,
-          signatureImageBuffer,
-          signatureImageMimeType,
+        prepareHandwrittenSignatureImage(signatureImageBuffer).then((image) =>
+          embedImageByMimeType(pdfDoc, image, "image/png"),
         ),
       ]);
 
