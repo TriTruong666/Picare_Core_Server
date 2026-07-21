@@ -84,7 +84,7 @@ const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
 const BYTE_RANGE_PLACEHOLDER = "**********";
-const DEFAULT_TEXT_LINE_GAP = 2;
+const DEFAULT_TEXT_LINE_GAP = 1.5;
 const SIGNATURE_WIDGET_RECTS = {
   owner: [75, 141, 255, 215],
   partner: [340, 141, 520, 215],
@@ -968,7 +968,14 @@ class ContractPdfBuilder {
 
   labelValue(label, value, options = {}) {
     this.richText(
-      [{ text: label }, { text: formatOptionalText(value), bold: true }],
+      [{ text: label, bold: true }, { text: formatOptionalText(value) }],
+      options,
+    );
+  }
+
+  boldLabelValue(label, value, options = {}) {
+    this.richText(
+      [{ text: label, bold: true }, { text: formatOptionalText(value) }],
       options,
     );
   }
@@ -989,7 +996,7 @@ class ContractPdfBuilder {
 
   heading(value) {
     this.doc.moveDown(0.4);
-    this.text(value, { size: 11, bold: true, gap: 0.3 });
+    this.text(value, { size: 11, bold: true, gap: 0.25, lineGap: 1.5 });
   }
 
   bullet(value) {
@@ -1026,35 +1033,31 @@ class ContractPdfBuilder {
   }
 
   companyBlock(title, companyInfo, shortName) {
-    this.text(`${title}: ${asText(companyInfo.companyName).toUpperCase()}`, {
-      bold: true,
-    });
-    this.text(`Địa chỉ : ${formatOptionalText(companyInfo.address)}`, {
-      bold: true,
-    });
-    this.text(`Điện thoại : ${formatOptionalText(companyInfo.phone)}`, {
-      bold: true,
-    });
+    return this.customCompanyBlock(title, companyInfo, shortName);
+  }
 
+  customCompanyBlock(title, companyInfo, shortName) {
+    this.boldLabelValue(`${title}: `, asText(companyInfo.companyName).toUpperCase());
+    this.boldLabelValue("Địa chỉ: ", companyInfo.address);
+    this.boldLabelValue("Điện thoại: ", companyInfo.phone);
     if (companyInfo.email) {
-      this.text(`Email : ${formatOptionalText(companyInfo.email)}`, {
-        bold: true,
-      });
+      this.boldLabelValue("Email: ", companyInfo.email);
     }
-
-    this.text(`Tài khoản số : ${formatOptionalText(companyInfo.bankInfo)}`, {
-      bold: true,
-    });
-    this.text(`Mã số thuế : ${formatOptionalText(companyInfo.mst)}`, {
-      bold: true,
-    });
-    this.text(
-      `Đại diện là Ông/Bà : ${formatOptionalText(
-        getOwnerName(companyInfo),
-      )}    Chức vụ: ${formatOptionalText(companyInfo.role)}`,
-      { bold: true },
+    this.boldLabelValue("Tài khoản số: ", companyInfo.bankInfo);
+    this.boldLabelValue("Mã số thuế: ", companyInfo.mst);
+    this.richText(
+      [
+        { text: "Đại diện là Ông/Bà: ", bold: true },
+        { text: getOwnerName(companyInfo) },
+        ...(companyInfo.role
+          ? [
+              { text: "    Chức vụ: ", bold: true },
+              { text: companyInfo.role },
+            ]
+          : []),
+      ],
     );
-    this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35, bold: true });
+    this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35 });
   }
 
   table(details = []) {
@@ -1087,7 +1090,7 @@ class ContractPdfBuilder {
         doc.rect(x, y, widths[cellIndex], rowHeight).stroke();
         doc
           .font(rowIndex === 0 ? this.boldFontPath : this.fontPath)
-          .fontSize(9)
+          .fontSize(10)
           .text(asText(cell), x + 5, y + 7, {
             width: widths[cellIndex] - 10,
             height: rowHeight - 8,
@@ -1142,10 +1145,10 @@ class ContractPdfBuilder {
     ];
     const padding = 4;
     const minRowHeight = 30;
-    const lineGap = 2;
+    const lineGap = DEFAULT_TEXT_LINE_GAP;
 
     const cellHeight = (text, width, bold = false) => {
-      doc.font(bold ? this.boldFontPath : this.fontPath).fontSize(7.2);
+      doc.font(bold ? this.boldFontPath : this.fontPath).fontSize(10);
       return (
         doc.heightOfString(formatOptionalText(text, ""), {
           width: width - padding * 2,
@@ -1162,7 +1165,7 @@ class ContractPdfBuilder {
         doc.rect(x, y, widths[cellIndex], rowHeight).stroke();
         doc
           .font(bold ? this.boldFontPath : this.fontPath)
-          .fontSize(7.2)
+          .fontSize(10)
           .text(formatOptionalText(cell, ""), x + padding, y + padding, {
             width: widths[cellIndex] - padding * 2,
             height: rowHeight - padding * 2,
@@ -1243,7 +1246,7 @@ class ContractPdfBuilder {
       width: 160,
       align: "center",
     });
-    doc.font(this.fontPath).fontSize(9);
+    doc.font(this.fontPath).fontSize(10);
     doc.text(
       options.leftHint || "(Ký, đóng dấu, ghi rõ họ và tên)",
       leftX - 8,
@@ -1341,30 +1344,31 @@ class ContractPdfBuilder {
       `Hôm nay, ngày ${formatShortDate(renderedAt)} tại văn phòng công ty, chúng tôi gồm có:`,
       { gap: 0.35 },
     );
-    this.companyBlock("BÊN A", owner, "Bên A");
+    this.customCompanyBlock("BÊN A", owner, "Bên A");
 
     if (isPersonal) {
-      this.text("BÊN B", { bold: true });
-      this.labelValue("Họ tên: ", partner.fullName);
-      this.labelValue("Sinh ngày: ", partner.dateOfBirth);
-      this.labelValue("Chức vụ: ", `${partner.position}    Phòng ban: ${partner.department}`);
-      this.labelValue("Thường trú: ", partner.permanentAddress);
-      this.labelValue(
-        "Số CCCD: ",
-        `${partner.citizenId}    cấp ngày: ${partner.citizenIdIssuedDate}    tại: ${partner.citizenIdIssuedPlace}`,
+      this.boldLabelValue("BÊN B: ", partner.fullName);
+      this.boldLabelValue("Sinh ngày: ", partner.dateOfBirth);
+      this.boldLabelValue("Chức vụ: ", partner.position);
+      this.boldLabelValue("Phòng ban: ", partner.department);
+      this.boldLabelValue("Thường trú: ", partner.permanentAddress);
+      this.boldLabelValue("Số CCCD: ", partner.citizenId);
+      this.boldLabelValue(
+        "Cấp ngày: ",
+        `${partner.citizenIdIssuedDate} tại ${partner.citizenIdIssuedPlace}`,
         { gap: 0.35 },
       );
     } else {
-      this.companyBlock("BÊN B", partner, "Bên B");
+      this.customCompanyBlock("BÊN B", partner, "Bên B");
     }
 
     htmlToPdfBlocks(data.rawContent).forEach((block) => {
       const parts = block.listItem ? [{ text: "• " }, ...block.parts] : block.parts;
       this.richText(parts, {
         // Nội dung thường nhỏ hơn heading và luôn dùng regular font, trừ thẻ <strong>/<b>.
-        size: block.heading ? 10 : 9,
-        lineGap: 2,
-        gap: block.heading ? 0.18 : 0.1,
+        size: block.heading ? 11 : 10,
+        lineGap: 1.5,
+        gap: block.heading ? 0.2 : 0.12,
       });
     });
 
