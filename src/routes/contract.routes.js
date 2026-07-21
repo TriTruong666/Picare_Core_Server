@@ -65,7 +65,16 @@ const credentialUpload = multer({
  *                 description: Thông tin đối tác. Bắt buộc với contractType=principle.
  *               personalInfo:
  *                 type: object
- *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
+ *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment hoặc custom_personal thay cho partnerCompanyInfo.
+ *               title:
+ *                 type: string
+ *                 description: Tiêu đề bắt buộc của custom_organization và custom_personal.
+ *               subTitle:
+ *                 type: string
+ *                 description: Tiêu đề phụ bắt buộc của custom_organization và custom_personal.
+ *               rawContent:
+ *                 type: string
+ *                 description: Nội dung rich-text HTML gốc, được lưu nguyên trạng và render vào PDF cho hai loại hợp đồng tuỳ chỉnh.
  *               parentContractId:
  *                 type: string
  *                 format: uuid
@@ -150,6 +159,49 @@ const credentialUpload = multer({
  *                   citizenId: "079095001234"
  *                   citizenIdIssuedDate: 2021-06-15
  *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
+ *             customOrganization:
+ *               summary: Hợp đồng tuỳ chỉnh tổ chức
+ *               value:
+ *                 contractType: custom_organization
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   address: 38/11 Nguyễn Giản Thanh, P.15, Quận 10, TP.HCM
+ *                   mst: "0315127257"
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 partnerCompanyInfo:
+ *                   companyName: CÔNG TY TNHH ĐỐI TÁC
+ *                   address: TP.HCM
+ *                   mst: "0312345678"
+ *                   ownerName: Nguyễn Văn B
+ *                   role: Giám đốc
+ *                 title: HỢP ĐỒNG HỢP TÁC
+ *                 subTitle: (Về việc hợp tác kinh doanh)
+ *                 rawContent: "<p>Điều khoản <strong>quan trọng</strong> của hợp đồng.</p>"
+ *             customPersonal:
+ *               summary: Hợp đồng tuỳ chỉnh cá nhân
+ *               value:
+ *                 contractType: custom_personal
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   address: 38/11 Nguyễn Giản Thanh, P.15, Quận 10, TP.HCM
+ *                   mst: "0315127257"
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   dateOfBirth: 1995-05-20
+ *                   position: Nhân viên Livestream
+ *                   department: Kinh doanh
+ *                   permanentAddress: 123 Nguyễn Trãi, TP.HCM
+ *                   citizenId: "079095001234"
+ *                   citizenIdIssuedDate: 2021-06-15
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
+ *                 title: THỎA THUẬN CÔNG VIỆC
+ *                 subTitle: (Áp dụng cho nhân sự)
+ *                 rawContent: "<p>Nội dung thỏa thuận.</p>"
  *             appendix:
  *               summary: Phụ lục hợp đồng
  *               value:

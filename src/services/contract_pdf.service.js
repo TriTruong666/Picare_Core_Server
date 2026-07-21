@@ -95,6 +95,41 @@ function asText(value, fallback = "") {
   return value === null || value === undefined ? fallback : String(value);
 }
 
+function decodeHtmlEntities(value) {
+  const entities = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  return asText(value).replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (match, entity) => {
+    if (entity[0] !== "#") return entities[entity.toLowerCase()] || match;
+    const isHex = entity[1].toLowerCase() === "x";
+    const codePoint = Number.parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
+    return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+  });
+}
+
+function htmlToPdfBlocks(rawContent) {
+  const content = asText(rawContent)
+    .replace(/<\s*(script|style)[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi, "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\s*\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n");
+
+  return content.split(/\n+/).map((line) => {
+    const heading = /<\s*h[1-6][^>]*>/i.test(line);
+    const listItem = /<\s*li[^>]*>/i.test(line);
+    let bold = heading;
+    const parts = [];
+    for (const token of line.split(/(<\s*\/?\s*(?:strong|b)\b[^>]*>)/gi)) {
+      if (/^<\s*(strong|b)\b/i.test(token)) {
+        bold = true;
+      } else if (/^<\s*\/\s*(strong|b)\s*>/i.test(token)) {
+        bold = heading;
+      } else {
+        const text = decodeHtmlEntities(token.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ");
+        if (text) parts.push({ text, bold });
+      }
+    }
+    return { parts, heading, listItem };
+  }).filter((block) => block.parts.length);
+}
+
 function normalizeVietnameseText(value, fallback = "") {
   return asText(value, fallback).normalize("NFC");
 }
@@ -1270,6 +1305,82 @@ class ContractPdfBuilder {
       },
     );
     doc.y = y + 150;
+  }
+
+  renderCustomContract(contract, { partyType }) {
+    const owner = contract.ownerCompanyInfo || {};
+    const data = contract.contractData || {};
+    const isPersonal = partyType === "personal";
+    const partner = isPersonal ? data.personalInfo || {} : contract.partnerCompanyInfo || {};
+    const renderedAt = new Date();
+
+    this.text(owner.companyName || "CÔNG TY TNHH PICARE VIỆT NAM", {
+      width: 245,
+      bold: true,
+    });
+    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
+    this.doc.y = 56;
+    this.doc.x = 300;
+    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
+      size: 11,
+      bold: true,
+      gap: 0.1,
+    });
+    this.doc.x = 300;
+    this.rightBlock("Độc lập - Tự do - Hạnh phúc", { size: 10, bold: true, gap: 1.2 });
+    this.doc.x = 300;
+    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
+      size: 10,
+      gap: 0.8,
+    });
+    this.doc.x = this.doc.page.margins.left;
+    this.centered(data.title, 14, 0.1, true);
+    this.centered(data.subTitle, 10, 0.8);
+
+    this.text(
+      `Hôm nay, ngày ${formatShortDate(renderedAt)} tại văn phòng công ty, chúng tôi gồm có:`,
+      { gap: 0.35 },
+    );
+    this.companyBlock("BÊN A", owner, "Bên A");
+
+    if (isPersonal) {
+      this.text("BÊN B", { bold: true });
+      this.labelValue("Họ tên: ", partner.fullName);
+      this.labelValue("Sinh ngày: ", partner.dateOfBirth);
+      this.labelValue("Chức vụ: ", `${partner.position}    Phòng ban: ${partner.department}`);
+      this.labelValue("Thường trú: ", partner.permanentAddress);
+      this.labelValue(
+        "Số CCCD: ",
+        `${partner.citizenId}    cấp ngày: ${partner.citizenIdIssuedDate}    tại: ${partner.citizenIdIssuedPlace}`,
+        { gap: 0.35 },
+      );
+    } else {
+      this.companyBlock("BÊN B", partner, "Bên B");
+    }
+
+    htmlToPdfBlocks(data.rawContent).forEach((block) => {
+      const parts = block.listItem ? [{ text: "• " }, ...block.parts] : block.parts;
+      this.richText(parts, {
+        // Nội dung thường nhỏ hơn heading và luôn dùng regular font, trừ thẻ <strong>/<b>.
+        size: block.heading ? 10 : 9,
+        lineGap: 2,
+        gap: block.heading ? 0.18 : 0.1,
+      });
+    });
+
+    this.signatureArea(
+      owner,
+      isPersonal ? { ownerName: partner.fullName } : partner,
+      isPersonal
+        ? {
+            ownerSide: "right",
+            leftTitle: "NGƯỜI KÝ",
+            rightTitle: "ĐẠI DIỆN BÊN A",
+            leftHint: "(Ký, ghi rõ họ và tên)",
+            rightHint: "(Ký, đóng dấu, ghi rõ họ và tên)",
+          }
+        : {},
+    );
   }
 
   renderLivestreamResponsibilityCommitment(contract) {
