@@ -1,5 +1,16 @@
 const JWTService = require("./jwt.service");
+const { Op } = require("sequelize");
 const { User, Role, Permission } = require("../models");
+
+const toHubUser = (user) => ({
+  userId: user.userId,
+  name: user.name,
+  email: user.email,
+  phone: user.phone || "",
+  role: user.role,
+  isOnline: Boolean(user.isOnline),
+  note: user.note || "",
+});
 
 /**
  * Handler cho các RPC của AuthService
@@ -77,6 +88,62 @@ const grpcAuthHandler = {
       return callback(null, { allowed: isAllowed });
     } catch (error) {
       console.error("[gRPC Auth]: Lỗi khi kiểm tra quyền:", error.message);
+      return callback(error);
+    }
+  },
+
+  /**
+   * RPC: ListUsers
+   * Chỉ trả dữ liệu an toàn để service khác tham chiếu userId, không lộ password.
+   */
+  listUsers: async (call, callback) => {
+    try {
+      const page = Math.max(Number(call.request.page) || 1, 1);
+      const limit = Math.min(Math.max(Number(call.request.limit) || 20, 1), 100);
+      const search = String(call.request.search || "").trim();
+      const role = String(call.request.role || "").trim();
+      const where = {};
+
+      if (role) where.role = role;
+      if (search) {
+        where[Op.or] = [
+          { name: { [Op.iLike]: `%${search}%` } },
+          { email: { [Op.iLike]: `%${search}%` } },
+          { phone: { [Op.iLike]: `%${search}%` } },
+        ];
+      }
+
+      const { count, rows } = await User.findAndCountAll({
+        where,
+        order: [["createdAt", "DESC"]],
+        limit,
+        offset: (page - 1) * limit,
+      });
+
+      return callback(null, {
+        users: rows.map(toHubUser),
+        totalRecords: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: page,
+        pageSize: limit,
+      });
+    } catch (error) {
+      return callback(error);
+    }
+  },
+
+  /** RPC: GetUser */
+  getUser: async (call, callback) => {
+    try {
+      const userId = String(call.request.userId || "").trim();
+      if (!userId) return callback(null, { found: false });
+
+      const user = await User.findOne({ where: { userId } });
+      return callback(null, {
+        found: Boolean(user),
+        user: user ? toHubUser(user) : undefined,
+      });
+    } catch (error) {
       return callback(error);
     }
   },

@@ -28,6 +28,8 @@ function startGrpcServer(port = 50051) {
   server.addService(authProto.AuthService.service, {
     VerifyToken: grpcAuthHandler.verifyToken,
     CheckPermission: grpcAuthHandler.checkPermission,
+    ListUsers: grpcAuthHandler.listUsers,
+    GetUser: grpcAuthHandler.getUser,
   });
 
   // Đăng ký service License
