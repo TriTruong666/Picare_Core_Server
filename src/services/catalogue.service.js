@@ -11,9 +11,9 @@ const {
 } = require("../common/exceptions/BaseException");
 const { CatalogueDTO, CatalogueListDTO } = require("../schemas/catalogue.schema");
 
-// Catalogue assets are intentionally kept in the shared public S3 folder.
+// Catalogue assets are intentionally kept in their own S3 folder.
 // This value is server-owned; clients cannot override it in the request payload.
-const CATALOGUE_FOLDER = "public";
+const CATALOGUE_FOLDER = "catalogue";
 const S3_UPLOAD_CONCURRENCY = 5;
 
 class CatalogueService {

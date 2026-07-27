@@ -309,6 +309,7 @@ class S3Controller {
         userId,
         folder,
         assetType,
+        search,
         limit = 20,
         offset,
         cursor,
@@ -346,6 +347,7 @@ class S3Controller {
         includeTotal: includeTotal === true || includeTotal === "true",
         includeUrl: includeUrl === true || includeUrl === "true",
         expiresIn: Number(expiresIn),
+        search,
       });
 
       if (offset !== undefined) {

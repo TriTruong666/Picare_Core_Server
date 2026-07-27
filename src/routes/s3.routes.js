@@ -292,6 +292,13 @@ router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
  *       - cookieAuth: []
  *     parameters:
  *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *           maxLength: 512
+ *         description: Tìm kiếm tên file gốc (không phân biệt chữ hoa, chữ thường)
+ *         example: report.pdf
+ *       - in: query
  *         name: folder
  *         schema:
  *           type: string

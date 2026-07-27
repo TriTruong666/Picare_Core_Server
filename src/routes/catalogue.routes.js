@@ -80,7 +80,7 @@ router.get("/:catalogueId", catalogueIdSchema, CatalogueController.get);
  * /api/v1/catalogues:
  *   post:
  *     summary: Tạo catalogue và upload nhiều ảnh lên S3
- *     description: Ảnh luôn được lưu trong folder S3 public; client không truyền hoặc thay đổi folder.
+ *     description: Ảnh luôn được lưu trong folder S3 catalogue; client không truyền hoặc thay đổi folder.
  *     tags: [Catalogues]
  *     security: [{ cookieAuth: [] }]
  *     requestBody:
@@ -110,7 +110,7 @@ router.post("/", protect, upload.array("images", MAX_CATALOGUE_IMAGES), createCa
  * /api/v1/catalogues/{catalogueId}:
  *   put:
  *     summary: Cập nhật catalogue, thêm hoặc xóa ảnh
- *     description: details nhận mảng JSON để đổi sortOrder của ảnh hiện có. removeDetailIds nhận mảng JSON các catalogueDetailId cần xóa. Ảnh mới luôn được upload vào folder S3 public.
+ *     description: details nhận mảng JSON để đổi sortOrder của ảnh hiện có. removeDetailIds nhận mảng JSON các catalogueDetailId cần xóa. Ảnh mới luôn được upload vào folder S3 catalogue.
  *     tags: [Catalogues]
  *     security: [{ cookieAuth: [] }]
  *     parameters:

@@ -358,10 +358,16 @@ class S3Service {
       includeTotal = false,
       includeUrl = false,
       expiresIn = 3600,
+      search,
     } = options;
 
+    const where = { ...filter };
+    if (search) {
+      where.originalName = { [Op.iLike]: `%${search}%` };
+    }
+
     const query = {
-      where: filter,
+      where,
       limit,
       order: [["createdAt", "DESC"], ["id", "DESC"]],
       include: [
@@ -391,7 +397,7 @@ class S3Service {
     if (cursor) {
       const cursorData = this.decodeAssetsCursor(cursor);
       query.where = {
-        ...filter,
+        ...where,
         [Op.or]: [
           { createdAt: { [Op.lt]: cursorData.createdAt } },
           { createdAt: cursorData.createdAt, id: { [Op.lt]: cursorData.id } },
@@ -409,7 +415,7 @@ class S3Service {
       ? this.encodeAssetsCursor(lastRow.createdAt, lastRow.id)
       : null;
     const count = includeTotal
-      ? await S3Asset.count({ where: filter, include: query.include })
+      ? await S3Asset.count({ where, include: query.include })
       : undefined;
 
     return { rows: pageRows, hasNext, nextCursor, count };

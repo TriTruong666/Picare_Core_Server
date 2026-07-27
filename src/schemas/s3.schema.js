@@ -97,6 +97,11 @@ const keyParamSchema = [
 ];
 
 const getAssetsSchema = [
+  query("search")
+    .optional({ checkFalsy: true })
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 512 }),
   query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
   query("offset").optional().isInt({ min: 0 }).toInt(),
   query("cursor").optional({ checkFalsy: true }).isString().isLength({ min: 1, max: 512 }),
