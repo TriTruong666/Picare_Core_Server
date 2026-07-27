@@ -11,6 +11,7 @@ const contractRoutes = require("./contract.routes");
 const mailRoutes = require("./mail.routes");
 const productQRRoutes = require("./product_qr.routes");
 const licenseRoutes = require("./license.routes");
+const catalogueRoutes = require("./catalogue.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -22,5 +23,6 @@ router.use("/contracts", contractRoutes);
 router.use("/mail", mailRoutes);
 router.use("/product-qrs", productQRRoutes);
 router.use("/licenses", licenseRoutes);
+router.use("/catalogues", catalogueRoutes);
 
 module.exports = router;

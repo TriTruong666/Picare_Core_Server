@@ -70,6 +70,8 @@ const appConfig = {
       "license_software",
       "license_tickets",
       "licenses",
+      "catalogue",
+      "catalogue_detail",
     ],
   },
 

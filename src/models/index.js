@@ -43,6 +43,12 @@ try {
   console.warn("[MODELS]: Failed to load license models.", err.message);
 }
 
+try {
+  Object.assign(db, require("./catalogue"));
+} catch (err) {
+  console.warn("[MODELS]: Failed to load catalogue models.", err.message);
+}
+
 Object.keys(db).forEach((modelName) => {
   if (db[modelName].associate) {
     db[modelName].associate(db);
