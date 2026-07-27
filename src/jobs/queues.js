@@ -6,4 +6,9 @@ const packageVideoQueue = new Queue("package-video-queue", {
   defaultJobOptions: bullMQConfig.defaultJobOptions,
 });
 
-module.exports = { packageVideoQueue };
+const s3UploadQueue = new Queue("s3-upload-queue", {
+  connection: bullMQConfig.connection,
+  defaultJobOptions: bullMQConfig.defaultJobOptions,
+});
+
+module.exports = { packageVideoQueue, s3UploadQueue };

@@ -20,7 +20,7 @@ const upload = multer({
  * @swagger
  * /api/v1/s3/upload:
  *   post:
- *     summary: Upload file lên AWS S3 và lưu record vào DB
+ *     summary: Đưa yêu cầu upload file lên background queue
  *     tags: [S3]
  *     security:
  *       - cookieAuth: []
@@ -55,7 +55,7 @@ const upload = multer({
  *                 description: Quyền truy cập file
  *     responses:
  *       201:
- *         description: Upload thành công, record đã được lưu vào DB
+ *         description: Yêu cầu upload đã được nhận; dùng jobId để kiểm tra kết quả
  *         content:
  *           application/json:
  *             schema:
@@ -78,6 +78,7 @@ const upload = multer({
  *         description: Chưa xác thực
  */
 router.post("/upload", protect, upload.single("file"), S3Controller.uploadFile);
+router.get("/upload/jobs/:jobId", protect, S3Controller.getUploadJobStatus);
 
 // ─── PRESIGNED URLs ──────────────────────────────────────────────────────────
 

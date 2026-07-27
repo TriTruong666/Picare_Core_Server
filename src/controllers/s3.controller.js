@@ -3,7 +3,7 @@ const { randomUUID } = require("crypto");
 const mime = require("mime-types");
 const ResponseHandler = require("../common/response.handler");
 const S3Service = require("../services/s3.service");
-const { packageVideoQueue } = require("../jobs/queues");
+const { packageVideoQueue, s3UploadQueue } = require("../jobs/queues");
 const {
   BadRequestException,
   NotFoundException,
@@ -14,7 +14,6 @@ const S3Asset = require("../models/s3_asset.model");
 const S3Folder = require("../models/s3_folder.model");
 const { validate: isUuid } = require("uuid");
 const {
-  S3UploadResultDTO,
   S3PresignedUrlDTO,
   S3ObjectMetaDTO,
 } = require("../schemas/s3.schema");
@@ -94,7 +93,8 @@ class S3Controller {
 
       const key = S3Service.buildKey(folder, originalName);
 
-      const result = await S3Service.upload({
+      const jobId = `s3-upload-${Date.now()}-${randomUUID()}`;
+      const job = await s3UploadQueue.add("upload-file", {
         key,
         body: fileBuffer,
         mimeType,
@@ -105,13 +105,49 @@ class S3Controller {
         uploadedBy,
         description,
         visibility,
-      });
+        requestedAt: new Date().toISOString(),
+      }, { jobId });
 
       return ResponseHandler.created(
         res,
-        S3UploadResultDTO.from(result),
-        "Upload file thành công",
+        {
+          jobId: job.id,
+          key,
+          status: "queued",
+        },
+        "Yêu cầu upload đã được tiếp nhận và đang xử lý trong nền",
       );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/s3/upload/jobs/:jobId
+   * Get the status and result of a background upload.
+   */
+  static async getUploadJobStatus(req, res, next) {
+    try {
+      const job = await s3UploadQueue.getJob(req.params.jobId);
+      if (!job) {
+        throw new NotFoundException("Không tìm thấy job upload");
+      }
+
+      const status = await job.getState();
+      const isTerminal = status === "completed" || status === "failed";
+
+      return ResponseHandler.success(res, {
+        jobId: job.id,
+        status,
+        shouldPoll: !isTerminal,
+        progress: job.progress,
+        result: job.returnvalue || null,
+        failedReason: job.failedReason || null,
+        requestedAt: job.data?.requestedAt || null,
+        createdAt: job.timestamp ? new Date(job.timestamp).toISOString() : null,
+        processedAt: job.processedOn ? new Date(job.processedOn).toISOString() : null,
+        finishedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
+      }, "Lấy trạng thái job upload thành công");
     } catch (error) {
       next(error);
     }

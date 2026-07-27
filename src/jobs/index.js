@@ -4,6 +4,7 @@ const S3Service = require("../services/s3.service");
 const socketService = require("../services/socket.service");
 
 let packageVideoWorker;
+let s3UploadWorker;
 
 function startJobs() {
   if (packageVideoWorker) {
@@ -82,14 +83,59 @@ function startJobs() {
     console.error("[JOBS]: package-video worker error", error.message);
   });
 
-  console.log("[JOBS]: package-video worker started");
-  return { packageVideoWorker };
+  s3UploadWorker = new Worker(
+    "s3-upload-queue",
+    async (job) => {
+      if (job.name !== "upload-file") {
+        throw new Error(`Unsupported S3 upload job: ${job.name}`);
+      }
+
+      await job.updateProgress(10);
+      const result = await S3Service.upload({
+        ...job.data,
+        // BullMQ serializes Buffer as { type: "Buffer", data: [...] }.
+        body: Buffer.from(job.data.body.data),
+      });
+      await job.updateProgress(100);
+
+      return {
+        key: result.key,
+        url: result.url,
+        etag: result.etag,
+        recordId: result.record?.assetId || result.record?.id || null,
+        reused: Boolean(result.reused),
+      };
+    },
+    {
+      connection: bullMQConfig.connection,
+      concurrency: 2,
+    },
+  );
+
+  s3UploadWorker.on("completed", (job, result) => {
+    console.log("[S3]: upload completed", { jobId: job.id, key: result?.key });
+  });
+
+  s3UploadWorker.on("failed", (job, error) => {
+    console.error("[S3]: upload failed", { jobId: job?.id, message: error.message });
+  });
+
+  s3UploadWorker.on("error", (error) => {
+    console.error("[JOBS]: s3-upload worker error", error.message);
+  });
+
+  console.log("[JOBS]: package-video and s3-upload workers started");
+  return { packageVideoWorker, s3UploadWorker };
 }
 
 async function stopJobs() {
   if (packageVideoWorker) {
     await packageVideoWorker.close();
     packageVideoWorker = null;
+  }
+  if (s3UploadWorker) {
+    await s3UploadWorker.close();
+    s3UploadWorker = null;
   }
 }
 
