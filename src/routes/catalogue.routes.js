@@ -10,9 +10,10 @@ const {
 } = require("../schemas/catalogue.schema");
 
 const router = express.Router();
+const MAX_CATALOGUE_IMAGES = 100;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: 30 },
+  limits: { fileSize: 10 * 1024 * 1024, files: MAX_CATALOGUE_IMAGES },
   fileFilter: (req, file, callback) => {
     callback(null, file.mimetype.startsWith("image/"));
   },
@@ -95,14 +96,14 @@ router.get("/:catalogueId", catalogueIdSchema, CatalogueController.get);
  *               note: { type: string, nullable: true }
  *               images:
  *                 type: array
- *                 maxItems: 30
+ *                 maxItems: 100
  *                 items: { type: string, format: binary }
  *     responses:
  *       201: { description: Tạo catalogue thành công }
  *       400: { description: Dữ liệu hoặc file không hợp lệ }
  *       401: { description: Chưa xác thực }
  */
-router.post("/", protect, upload.array("images", 30), createCatalogueSchema, CatalogueController.create);
+router.post("/", protect, upload.array("images", MAX_CATALOGUE_IMAGES), createCatalogueSchema, CatalogueController.create);
 
 /**
  * @swagger
@@ -131,14 +132,14 @@ router.post("/", protect, upload.array("images", 30), createCatalogueSchema, Cat
  *                 example: '["c1b1f2ad-5fe8-4e07-906a-e454f14a1eaf"]'
  *               images:
  *                 type: array
- *                 maxItems: 30
+ *                 maxItems: 100
  *                 items: { type: string, format: binary }
  *     responses:
  *       200: { description: Cập nhật thành công }
  *       401: { description: Chưa xác thực }
  *       404: { description: Không tìm thấy catalogue }
  */
-router.put("/:catalogueId", protect, upload.array("images", 30), updateCatalogueSchema, CatalogueController.update);
+router.put("/:catalogueId", protect, upload.array("images", MAX_CATALOGUE_IMAGES), updateCatalogueSchema, CatalogueController.update);
 
 /**
  * @swagger

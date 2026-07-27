@@ -32,6 +32,19 @@ const globalErrorHandler = (err, req, res, next) => {
     errorCode = "ERR_BAD_REQUEST_001";
     details = err.errors;
   }
+  // D. Lỗi giới hạn multipart/file từ Multer phải trả về 4xx, không phải 500.
+  else if (err.name === "MulterError") {
+    statusCode = 400;
+    errorCode = `ERR_UPLOAD_${err.code || "INVALID"}`;
+    details = { field: err.field || null, code: err.code || null };
+    const multerMessages = {
+      LIMIT_FILE_COUNT: "Số lượng file upload vượt quá giới hạn cho phép",
+      LIMIT_FILE_SIZE: "Kích thước một file vượt quá giới hạn cho phép",
+      LIMIT_UNEXPECTED_FILE: "Trường file upload không hợp lệ",
+      LIMIT_PART_COUNT: "Số lượng phần multipart vượt quá giới hạn cho phép",
+    };
+    message = multerMessages[err.code] || "File upload không hợp lệ";
+  }
 
   // 3. In log ra console phục vụ debug (chỉ in ở DEV hoặc với lỗi 500)
   if (statusCode === 500 || process.env.NODE_ENV === "development") {

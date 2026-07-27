@@ -326,7 +326,8 @@ router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
  *         name: cursor
  *         schema:
  *           type: string
- *         description: Cursor from pagination.nextCursor. Recommended for large tables; do not send with offset.
+ *         description: Cursor from data.pagination.nextCursor of the previous response. Leave empty for the first page; do not send with offset.
+ *         example: eyJjcmVhdGVkQXQiOiIyMDI2LTA3LTI3VDAzOjA0OjA1LjAwMFoiLCJpZCI6NDJ9
  *       - in: query
  *         name: includeUrl
  *         schema:
@@ -341,7 +342,7 @@ router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
  *         description: Set true only when total record count is needed; this runs COUNT(*).
  *     responses:
  *       200:
- *         description: Thành công
+ *         description: Thành công. Cursor mode returns data.assets and data.pagination.nextCursor; send that nextCursor to load the next page.
  */
 router.get("/assets", protect, getAssetsSchema, S3Controller.getAssets);
 

@@ -11,6 +11,7 @@ const { CatalogueDTO } = require("../schemas/catalogue.schema");
 // Catalogue assets are intentionally kept in the shared public S3 folder.
 // This value is server-owned; clients cannot override it in the request payload.
 const CATALOGUE_FOLDER = "public";
+const S3_UPLOAD_CONCURRENCY = 5;
 
 class CatalogueService {
   async findModel(catalogueId) {
@@ -27,9 +28,12 @@ class CatalogueService {
   async uploadImages(imageFiles, uploadedBy) {
     if (!imageFiles?.length) return [];
 
-    return Promise.all(
-      imageFiles.map((file) =>
-        S3Service.upload({
+    const uploadedAssets = [];
+    try {
+      for (let index = 0; index < imageFiles.length; index += S3_UPLOAD_CONCURRENCY) {
+        const batch = imageFiles.slice(index, index + S3_UPLOAD_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map((file) => S3Service.upload({
           // UUID prevents a same-name batch uploaded in the same millisecond
           // from generating duplicate S3 object keys.
           key: S3Service.buildKey(CATALOGUE_FOLDER, `${randomUUID()}-${file.originalname}`),
@@ -41,9 +45,24 @@ class CatalogueService {
           uploadedBy,
           visibility: AssetVisibility.PUBLIC,
           description: `Catalogue image ${file.originalname}`,
-        }),
-      ),
-    );
+          })),
+        );
+
+        uploadedAssets.push(
+          ...results
+            .filter((result) => result.status === "fulfilled")
+            .map((result) => result.value),
+        );
+        const failedResult = results.find((result) => result.status === "rejected");
+        if (failedResult) throw failedResult.reason;
+      }
+      return uploadedAssets;
+    } catch (error) {
+      // Let callers clean up every completed upload, including files in a
+      // partially failed batch.
+      error.uploadedAssets = uploadedAssets;
+      throw error;
+    }
   }
 
   async cleanupAssets(assets) {
@@ -102,7 +121,7 @@ class CatalogueService {
       });
       return this.get(catalogue.catalogueId);
     } catch (error) {
-      await this.cleanupAssets(assets);
+      await this.cleanupAssets([...assets, ...(error.uploadedAssets || [])]);
       throw error;
     }
   }
@@ -141,7 +160,7 @@ class CatalogueService {
         }
       });
     } catch (error) {
-      await this.cleanupAssets(assets);
+      await this.cleanupAssets([...assets, ...(error.uploadedAssets || [])]);
       throw error;
     }
 

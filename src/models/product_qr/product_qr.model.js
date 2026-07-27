@@ -46,7 +46,7 @@ const ProductQR = sequelize.define(
       allowNull: false,
       defaultValue: "picare",
       validate: {
-        isIn: [["picare", "dermacoon"]],
+        isIn: [["picare", "dermacoon", "trunghanh"]],
       },
     },
     note: {
@@ -58,7 +58,11 @@ const ProductQR = sequelize.define(
     tableName: "product_qr",
     timestamps: true,
     indexes: [
-      { name: "product_qr_product_id_key", unique: true, fields: ["product_id"] },
+      {
+        name: "product_qr_product_id_key",
+        unique: true,
+        fields: ["product_id"],
+      },
     ],
   },
 );

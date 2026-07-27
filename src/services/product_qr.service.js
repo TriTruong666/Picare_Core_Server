@@ -15,6 +15,7 @@ const DEFAULT_LOGO = "picare";
 const LOGO_PATHS = Object.freeze({
   picare: path.join(process.cwd(), "picare_logo_light.svg"),
   dermacoon: path.join(process.cwd(), "dermacoon_logo.svg"),
+  trunghanh: path.join(process.cwd(), "trunghanh_qr_product_logo.svg"),
 });
 const QR_FOLDER = "product_qr";
 const QR_SIZE = 1000;
@@ -62,8 +63,13 @@ const decodeHtmlEntities = (value) => {
     (match, entity) => {
       if (entity[0] === "#") {
         const isHex = entity[1].toLowerCase() === "x";
-        const codePoint = parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
-        return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+        const codePoint = parseInt(
+          entity.slice(isHex ? 2 : 1),
+          isHex ? 16 : 10,
+        );
+        return Number.isNaN(codePoint)
+          ? match
+          : String.fromCodePoint(codePoint);
       }
 
       return entities[entity.toLowerCase()] || match;
@@ -136,7 +142,9 @@ const parseRichTextContent = (rawContent) => {
     }
 
     if (currentKey) {
-      result[currentKey] = [result[currentKey], line].filter(Boolean).join("\n");
+      result[currentKey] = [result[currentKey], line]
+        .filter(Boolean)
+        .join("\n");
     } else {
       unmappedLines.push(line);
     }
@@ -243,7 +251,9 @@ class ProductQRService {
   extractS3KeysFromUrls(fileUrls) {
     const normalizedUrls = Array.isArray(fileUrls)
       ? fileUrls
-      : (fileUrls ? [fileUrls] : []);
+      : fileUrls
+        ? [fileUrls]
+        : [];
 
     return normalizedUrls
       .map((fileUrl) => this.extractS3KeyFromUrl(fileUrl))
@@ -297,7 +307,11 @@ class ProductQRService {
   }) {
     const productId = randomUUID();
     const resolvedLinkUrl = linkUrl || this.buildClientQrUrl(productId);
-    const jsonContent = this.buildJsonContent(productId, resolvedLinkUrl, rawContent);
+    const jsonContent = this.buildJsonContent(
+      productId,
+      resolvedLinkUrl,
+      rawContent,
+    );
     const qrBuffer = await this.generateQRCodeBuffer(resolvedLinkUrl, logo);
     const qrFilename = `${productId}.png`;
     const qrKey = S3Service.buildKey(QR_FOLDER, qrFilename);
@@ -317,7 +331,10 @@ class ProductQRService {
         visibility: AssetVisibility.PUBLIC,
       });
 
-      uploadedImageAssets = await this.uploadProductImages(imageFiles, uploadedBy);
+      uploadedImageAssets = await this.uploadProductImages(
+        imageFiles,
+        uploadedBy,
+      );
 
       const productQR = await ProductQR.create({
         productId,
@@ -365,17 +382,23 @@ class ProductQRService {
     { imageFiles = [], uploadedBy = null } = {},
   ) {
     const productQR = await this.getProductQRModelByProductId(productId);
-    const nextLinkUrl =
-      Object.prototype.hasOwnProperty.call(updateData, "linkUrl")
-        ? updateData.linkUrl
-        : (productQR.linkUrl || productQR.jsonContent?.qrUrl || this.buildClientQrUrl(productId));
-    const nextRawContent =
-      Object.prototype.hasOwnProperty.call(updateData, "rawContent")
-        ? updateData.rawContent
-        : productQR.rawContent;
+    const nextLinkUrl = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "linkUrl",
+    )
+      ? updateData.linkUrl
+      : productQR.linkUrl ||
+        productQR.jsonContent?.qrUrl ||
+        this.buildClientQrUrl(productId);
+    const nextRawContent = Object.prototype.hasOwnProperty.call(
+      updateData,
+      "rawContent",
+    )
+      ? updateData.rawContent
+      : productQR.rawContent;
     const nextLogo = Object.prototype.hasOwnProperty.call(updateData, "logo")
       ? updateData.logo
-      : (productQR.logo || DEFAULT_LOGO);
+      : productQR.logo || DEFAULT_LOGO;
     const payload = {};
     let uploadedImageAssets = [];
     let uploadedQrAsset = null;
@@ -395,7 +418,11 @@ class ProductQRService {
       Object.prototype.hasOwnProperty.call(updateData, "linkUrl") ||
       Object.prototype.hasOwnProperty.call(updateData, "rawContent")
     ) {
-      payload.jsonContent = this.buildJsonContent(productId, nextLinkUrl, nextRawContent);
+      payload.jsonContent = this.buildJsonContent(
+        productId,
+        nextLinkUrl,
+        nextRawContent,
+      );
     }
 
     if (Object.prototype.hasOwnProperty.call(updateData, "note")) {
@@ -425,7 +452,10 @@ class ProductQRService {
       }
 
       if (Array.isArray(imageFiles) && imageFiles.length > 0) {
-        uploadedImageAssets = await this.uploadProductImages(imageFiles, uploadedBy);
+        uploadedImageAssets = await this.uploadProductImages(
+          imageFiles,
+          uploadedBy,
+        );
         payload.imageUrl = uploadedImageAssets.map((asset) => asset.url);
       }
 
@@ -448,7 +478,10 @@ class ProductQRService {
         try {
           await S3Service.deleteAndRecord(uploadedQrAsset.key);
         } catch (cleanupError) {
-          console.error(`[PRODUCT_QR]: Failed to clean up ${uploadedQrAsset.key}:`, cleanupError.message);
+          console.error(
+            `[PRODUCT_QR]: Failed to clean up ${uploadedQrAsset.key}:`,
+            cleanupError.message,
+          );
         }
       }
 

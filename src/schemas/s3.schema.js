@@ -99,13 +99,15 @@ const keyParamSchema = [
 const getAssetsSchema = [
   query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
   query("offset").optional().isInt({ min: 0 }).toInt(),
-  query("cursor").optional().isString().isLength({ min: 1, max: 512 }),
-  query("includeUrl").optional().isBoolean().toBoolean(),
-  query("includeTotal").optional().isBoolean().toBoolean(),
-  query("expiresIn").optional().isInt({ min: 60, max: 604800 }).toInt(),
-  query("clientId").optional().isUUID(4),
-  query("userId").optional().isUUID(4),
-  query("assetType").optional().isIn(["image", "video", "document", "audio", "other"]),
+  query("cursor").optional({ checkFalsy: true }).isString().isLength({ min: 1, max: 512 }),
+  query("includeUrl").optional({ checkFalsy: true }).isBoolean().toBoolean(),
+  query("includeTotal").optional({ checkFalsy: true }).isBoolean().toBoolean(),
+  query("expiresIn").optional({ checkFalsy: true }).isInt({ min: 60, max: 604800 }).toInt(),
+  query("clientId").optional({ checkFalsy: true }).isUUID(4),
+  query("userId").optional({ checkFalsy: true }).isUUID(4),
+  query("assetType")
+    .optional({ checkFalsy: true })
+    .isIn(["image", "video", "document", "audio", "other"]),
 ];
 
 module.exports = {

@@ -26,7 +26,7 @@ class ProductQRDTO {
 const createProductQRSchema = [
   body("logo")
     .optional()
-    .isIn(["picare", "dermacoon"])
+    .isIn(["picare", "dermacoon", "trunghanh"])
     .withMessage("logo phải là picare hoặc dermacoon"),
   body("linkUrl")
     .optional()
@@ -49,7 +49,7 @@ const updateProductQRSchema = [
   param("productId").isUUID(4).withMessage("productId không hợp lệ"),
   body("logo")
     .optional()
-    .isIn(["picare", "dermacoon"])
+    .isIn(["picare", "dermacoon", "trunghanh"])
     .withMessage("logo phải là picare hoặc dermacoon"),
   body("linkUrl")
     .optional()
