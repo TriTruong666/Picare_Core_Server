@@ -11,7 +11,11 @@ const { ProductQRDTO } = require("../schemas/product_qr.schema");
 const { NotFoundException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
-const LOGO_PATH = path.join(process.cwd(), "picare_logo_light.svg");
+const DEFAULT_LOGO = "picare";
+const LOGO_PATHS = Object.freeze({
+  picare: path.join(process.cwd(), "picare_logo_light.svg"),
+  dermacoon: path.join(process.cwd(), "dermacoon_logo.svg"),
+});
 const QR_FOLDER = "product_qr";
 const QR_SIZE = 1000;
 const LOGO_SIZE = 180;
@@ -186,7 +190,7 @@ class ProductQRService {
     return productQR;
   }
 
-  async generateQRCodeBuffer(url) {
+  async generateQRCodeBuffer(url, logo = DEFAULT_LOGO) {
     const qrBuffer = await QRCode.toBuffer(url, {
       type: "png",
       width: QR_SIZE,
@@ -198,7 +202,8 @@ class ProductQRService {
       },
     });
 
-    const logoBuffer = await sharp(LOGO_PATH)
+    const logoPath = LOGO_PATHS[logo] || LOGO_PATHS[DEFAULT_LOGO];
+    const logoBuffer = await sharp(logoPath)
       .resize(LOGO_SIZE, LOGO_SIZE, { fit: "contain" })
       .png()
       .toBuffer();
@@ -285,6 +290,7 @@ class ProductQRService {
   async create({
     linkUrl,
     rawContent,
+    logo = DEFAULT_LOGO,
     note = null,
     uploadedBy = null,
     imageFiles = [],
@@ -292,7 +298,7 @@ class ProductQRService {
     const productId = randomUUID();
     const resolvedLinkUrl = linkUrl || this.buildClientQrUrl(productId);
     const jsonContent = this.buildJsonContent(productId, resolvedLinkUrl, rawContent);
-    const qrBuffer = await this.generateQRCodeBuffer(resolvedLinkUrl);
+    const qrBuffer = await this.generateQRCodeBuffer(resolvedLinkUrl, logo);
     const qrFilename = `${productId}.png`;
     const qrKey = S3Service.buildKey(QR_FOLDER, qrFilename);
     let uploadedQrAsset = null;
@@ -320,6 +326,7 @@ class ProductQRService {
         qrImage: uploadedQrAsset.url,
         linkUrl: resolvedLinkUrl,
         imageUrl: uploadedImageAssets.map((asset) => asset.url),
+        logo,
         note,
       });
 
@@ -366,9 +373,15 @@ class ProductQRService {
       Object.prototype.hasOwnProperty.call(updateData, "rawContent")
         ? updateData.rawContent
         : productQR.rawContent;
+    const nextLogo = Object.prototype.hasOwnProperty.call(updateData, "logo")
+      ? updateData.logo
+      : (productQR.logo || DEFAULT_LOGO);
     const payload = {};
     let uploadedImageAssets = [];
+    let uploadedQrAsset = null;
     const oldImageKeys = this.extractS3KeysFromUrls(productQR.imageUrl);
+    const oldQrKey = this.extractS3KeyFromUrl(productQR.qrImage);
+    let productUpdated = false;
 
     if (Object.prototype.hasOwnProperty.call(updateData, "linkUrl")) {
       payload.linkUrl = updateData.linkUrl;
@@ -389,13 +402,39 @@ class ProductQRService {
       payload.note = updateData.note;
     }
 
+    if (Object.prototype.hasOwnProperty.call(updateData, "logo")) {
+      payload.logo = nextLogo;
+    }
+
     try {
+      if (nextLogo !== (productQR.logo || DEFAULT_LOGO)) {
+        const qrBuffer = await this.generateQRCodeBuffer(nextLinkUrl, nextLogo);
+        const qrFilename = `${productId}.png`;
+        uploadedQrAsset = await S3Service.upload({
+          key: S3Service.buildKey(QR_FOLDER, qrFilename),
+          body: qrBuffer,
+          mimeType: "image/png",
+          originalName: qrFilename,
+          fileSize: qrBuffer.length,
+          folder: QR_FOLDER,
+          uploadedBy,
+          description: `Product QR for ${productId}`,
+          visibility: AssetVisibility.PUBLIC,
+        });
+        payload.qrImage = uploadedQrAsset.url;
+      }
+
       if (Array.isArray(imageFiles) && imageFiles.length > 0) {
         uploadedImageAssets = await this.uploadProductImages(imageFiles, uploadedBy);
         payload.imageUrl = uploadedImageAssets.map((asset) => asset.url);
       }
 
       await productQR.update(payload);
+      productUpdated = true;
+
+      if (uploadedQrAsset && oldQrKey) {
+        await S3Service.deleteAndRecord(oldQrKey);
+      }
 
       if (uploadedImageAssets.length > 0) {
         for (const oldImageKey of oldImageKeys) {
@@ -403,16 +442,28 @@ class ProductQRService {
         }
       }
     } catch (error) {
-      for (const uploadedImageAsset of uploadedImageAssets) {
-        if (!uploadedImageAsset?.key) continue;
-
+      // Once the database row points to the new assets, never clean them up
+      // merely because deleting an old asset failed.
+      if (!productUpdated && uploadedQrAsset?.key) {
         try {
-          await S3Service.deleteAndRecord(uploadedImageAsset.key);
+          await S3Service.deleteAndRecord(uploadedQrAsset.key);
         } catch (cleanupError) {
-          console.error(
-            `[PRODUCT_QR]: Failed to clean up ${uploadedImageAsset.key}:`,
-            cleanupError.message,
-          );
+          console.error(`[PRODUCT_QR]: Failed to clean up ${uploadedQrAsset.key}:`, cleanupError.message);
+        }
+      }
+
+      if (!productUpdated) {
+        for (const uploadedImageAsset of uploadedImageAssets) {
+          if (!uploadedImageAsset?.key) continue;
+
+          try {
+            await S3Service.deleteAndRecord(uploadedImageAsset.key);
+          } catch (cleanupError) {
+            console.error(
+              `[PRODUCT_QR]: Failed to clean up ${uploadedImageAsset.key}:`,
+              cleanupError.message,
+            );
+          }
         }
       }
 

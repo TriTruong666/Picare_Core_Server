@@ -41,6 +41,14 @@ const ProductQR = sequelize.define(
       allowNull: true,
       field: "image_url",
     },
+    logo: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "picare",
+      validate: {
+        isIn: [["picare", "dermacoon"]],
+      },
+    },
     note: {
       type: DataTypes.TEXT,
       allowNull: true,

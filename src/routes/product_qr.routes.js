@@ -77,7 +77,7 @@ router.get("/:productId", productIdSchema, ProductQRController.getProductQRById)
  * /api/v1/product-qrs:
  *   post:
  *     summary: Tạo record sản phẩm và ảnh QR
- *     description: Nhận rich text, tách thành JSON theo các nhãn sản phẩm, tạo QR có logo Picare và upload ảnh PNG lên S3.
+ *     description: Nhận rich text, tách thành JSON theo các nhãn sản phẩm, tạo QR với logo Picare hoặc Dermacoon và upload ảnh PNG lên S3.
  *     tags: [Product QR]
  *     security:
  *       - cookieAuth: []
@@ -89,6 +89,11 @@ router.get("/:productId", productIdSchema, ProductQRController.getProductQRById)
  *             type: object
  *             required: [rawContent]
  *             properties:
+ *               logo:
+ *                 type: string
+ *                 enum: [picare, dermacoon]
+ *                 default: picare
+ *                 description: Logo hiển thị chính giữa QR
  *               linkUrl:
  *                 type: string
  *                 description: URL sẽ được encode vào mã QR. Nếu không truyền, backend tự sinh link mặc định của product QR.
@@ -142,6 +147,9 @@ router.post(
  *           schema:
  *             type: object
  *             properties:
+ *               logo:
+ *                 type: string
+ *                 enum: [picare, dermacoon]
  *               linkUrl:
  *                 type: string
  *               rawContent:

@@ -8,6 +8,7 @@ class ProductQRDTO {
     this.qrImage = productQR.qrImage;
     this.linkUrl = productQR.linkUrl;
     this.imageUrl = productQR.imageUrl;
+    this.logo = productQR.logo;
     this.note = productQR.note;
     this.createdAt = productQR.createdAt;
     this.updatedAt = productQR.updatedAt;
@@ -23,6 +24,10 @@ class ProductQRDTO {
 }
 
 const createProductQRSchema = [
+  body("logo")
+    .optional()
+    .isIn(["picare", "dermacoon"])
+    .withMessage("logo phải là picare hoặc dermacoon"),
   body("linkUrl")
     .optional()
     .isURL({ require_tld: false })
@@ -42,6 +47,10 @@ const createProductQRSchema = [
 
 const updateProductQRSchema = [
   param("productId").isUUID(4).withMessage("productId không hợp lệ"),
+  body("logo")
+    .optional()
+    .isIn(["picare", "dermacoon"])
+    .withMessage("logo phải là picare hoặc dermacoon"),
   body("linkUrl")
     .optional()
     .isURL({ require_tld: false })

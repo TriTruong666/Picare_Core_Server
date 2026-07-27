@@ -56,6 +56,7 @@ class ProductQRController {
       const productQR = await ProductQRService.create({
         linkUrl: req.body.linkUrl,
         rawContent: req.body.rawContent,
+        logo: req.body.logo,
         note: req.body.note,
         uploadedBy: req.user?.userId || null,
         imageFiles: req.files || [],
