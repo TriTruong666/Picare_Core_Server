@@ -5,8 +5,11 @@ const Catalogue = require("../models/catalogue/catalogue.model");
 const CatalogueDetail = require("../models/catalogue/catalogue_detail.model");
 const S3Service = require("./s3.service");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
-const { NotFoundException } = require("../common/exceptions/BaseException");
-const { CatalogueDTO } = require("../schemas/catalogue.schema");
+const {
+  BadRequestException,
+  NotFoundException,
+} = require("../common/exceptions/BaseException");
+const { CatalogueDTO, CatalogueListDTO } = require("../schemas/catalogue.schema");
 
 // Catalogue assets are intentionally kept in the shared public S3 folder.
 // This value is server-owned; clients cannot override it in the request payload.
@@ -78,7 +81,7 @@ class CatalogueService {
     status,
     sortBy = "createdAt",
     sortOrder = "DESC",
-  }) {
+  } = {}) {
     const where = {};
     if (search) where.catalogueName = { [Op.iLike]: `%${search}%` };
     if (status) where.status = status;
@@ -87,15 +90,26 @@ class CatalogueService {
     const { count, rows } = await Catalogue.findAndCountAll({
       where,
       distinct: true,
-      include: [{ model: CatalogueDetail, as: "details" }],
+      include: [{
+        model: CatalogueDetail,
+        as: "details",
+        attributes: ["catalogueDetailId", "imageUrl", "imageKey", "sortOrder"],
+        separate: true,
+        limit: 1,
+        order: [["sortOrder", "ASC"], ["createdAt", "ASC"]],
+      }],
       order: [
         [sortBy, sortOrder],
-        [{ model: CatalogueDetail, as: "details" }, "sortOrder", "ASC"],
       ],
       limit: parsedLimit,
       offset: (parsedPage - 1) * parsedLimit,
     });
-    return { count, page: parsedPage, limit: parsedLimit, rows: rows.map(CatalogueDTO.fromCatalogue) };
+    return {
+      count,
+      page: parsedPage,
+      limit: parsedLimit,
+      rows: rows.map(CatalogueListDTO.fromCatalogue),
+    };
   }
 
   async get(catalogueId) {
@@ -126,10 +140,46 @@ class CatalogueService {
     }
   }
 
-  async update(catalogueId, payload, { imageFiles = [], uploadedBy = null, removeDetailIds = [] } = {}) {
+  async update(
+    catalogueId,
+    payload,
+    {
+      imageFiles = [],
+      uploadedBy = null,
+      removeDetailIds = [],
+      details = [],
+    } = {},
+  ) {
     const catalogue = await this.findModel(catalogueId);
     const requestedRemovals = new Set(removeDetailIds);
     const detailsToRemove = catalogue.details.filter((detail) => requestedRemovals.has(detail.catalogueDetailId));
+    const existingDetailIds = new Set(
+      catalogue.details.map((detail) => detail.catalogueDetailId),
+    );
+    const updatedDetailIds = new Set();
+
+    for (const detail of details) {
+      if (
+        !detail ||
+        typeof detail.catalogueDetailId !== "string" ||
+        !Number.isInteger(Number(detail.sortOrder)) ||
+        Number(detail.sortOrder) < 0
+      ) {
+        throw new BadRequestException(
+          "Mỗi phần tử details phải có catalogueDetailId và sortOrder là số nguyên không âm",
+        );
+      }
+      if (!existingDetailIds.has(detail.catalogueDetailId)) {
+        throw new BadRequestException("catalogueDetailId không thuộc catalogue này");
+      }
+      if (requestedRemovals.has(detail.catalogueDetailId)) {
+        throw new BadRequestException("Không thể vừa cập nhật vừa xóa cùng một catalogueDetailId");
+      }
+      if (updatedDetailIds.has(detail.catalogueDetailId)) {
+        throw new BadRequestException("catalogueDetailId bị trùng trong details");
+      }
+      updatedDetailIds.add(detail.catalogueDetailId);
+    }
     let assets = [];
 
     try {
@@ -148,6 +198,22 @@ class CatalogueService {
             },
             transaction,
           });
+        }
+        if (details.length) {
+          await Promise.all(
+            details.map((detail) =>
+              CatalogueDetail.update(
+                { sortOrder: Number(detail.sortOrder) },
+                {
+                  where: {
+                    catalogueId,
+                    catalogueDetailId: detail.catalogueDetailId,
+                  },
+                  transaction,
+                },
+              ),
+            ),
+          );
         }
         if (assets.length) {
           const maxSortOrder = catalogue.details.reduce((max, item) => Math.max(max, item.sortOrder), -1);

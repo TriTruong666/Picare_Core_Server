@@ -22,6 +22,22 @@ const parseDetailIds = (value) => {
   return [];
 };
 
+const parseDetails = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") {
+    throw new BadRequestException("details phải là mảng JSON");
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) throw new Error("Not an array");
+    return parsed;
+  } catch (_) {
+    throw new BadRequestException("details phải là mảng JSON hợp lệ");
+  }
+};
+
 class CatalogueController {
   static async list(req, res, next) {
     try {
@@ -57,6 +73,7 @@ class CatalogueController {
         imageFiles: req.files || [],
         uploadedBy: req.user?.userId || null,
         removeDetailIds: parseDetailIds(req.body.removeDetailIds),
+        details: parseDetails(req.body.details),
       });
       return ResponseHandler.success(res, catalogue, "Cập nhật catalogue thành công");
     } catch (error) { next(error); }

@@ -54,7 +54,7 @@ const upload = multer({
  *         schema: { type: string, enum: [ASC, DESC], default: DESC }
  *     responses:
  *       200:
- *         description: Danh sách catalogue kèm các ảnh detail và phân trang
+ *         description: Danh sách catalogue và chỉ details[0] (ảnh cover theo sortOrder); dùng GET /catalogues/{catalogueId} để lấy toàn bộ ảnh.
  */
 router.get("/", catalogueListSchema, CatalogueController.list);
 
@@ -110,7 +110,7 @@ router.post("/", protect, upload.array("images", MAX_CATALOGUE_IMAGES), createCa
  * /api/v1/catalogues/{catalogueId}:
  *   put:
  *     summary: Cập nhật catalogue, thêm hoặc xóa ảnh
- *     description: removeDetailIds nhận mảng JSON các catalogueDetailId cần xóa. Ảnh mới luôn được upload vào folder S3 public.
+ *     description: details nhận mảng JSON để đổi sortOrder của ảnh hiện có. removeDetailIds nhận mảng JSON các catalogueDetailId cần xóa. Ảnh mới luôn được upload vào folder S3 public.
  *     tags: [Catalogues]
  *     security: [{ cookieAuth: [] }]
  *     parameters:
@@ -130,6 +130,10 @@ router.post("/", protect, upload.array("images", MAX_CATALOGUE_IMAGES), createCa
  *               removeDetailIds:
  *                 type: string
  *                 example: '["c1b1f2ad-5fe8-4e07-906a-e454f14a1eaf"]'
+ *               details:
+ *                 type: string
+ *                 description: Mảng JSON cập nhật thứ tự các ảnh đã tồn tại
+ *                 example: '[{"catalogueDetailId":"c1b1f2ad-5fe8-4e07-906a-e454f14a1eaf","sortOrder":0},{"catalogueDetailId":"a2c3d4e5-5fe8-4e07-906a-e454f14a1eaf","sortOrder":1}]'
  *               images:
  *                 type: array
  *                 maxItems: 100

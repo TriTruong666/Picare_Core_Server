@@ -30,6 +30,26 @@ class CatalogueDTO {
   }
 }
 
+// Lightweight shape for the management list. It deliberately preserves the
+// details array contract, but contains only details[0] as the cover image.
+class CatalogueListDTO {
+  constructor(catalogue) {
+    this.catalogueId = catalogue.catalogueId;
+    this.catalogueName = catalogue.catalogueName;
+    this.status = catalogue.status;
+    this.note = catalogue.note;
+    this.details = (catalogue.details || [])
+      .slice(0, 1)
+      .map((detail) => new CatalogueDetailDTO(detail));
+    this.createdAt = catalogue.createdAt;
+    this.updatedAt = catalogue.updatedAt;
+  }
+
+  static fromCatalogue(catalogue) {
+    return new CatalogueListDTO(catalogue);
+  }
+}
+
 const catalogueIdSchema = [
   param("catalogueId").isUUID(4).withMessage("catalogueId không hợp lệ"),
 ];
@@ -52,6 +72,8 @@ const updateCatalogueSchema = [
   body("catalogueName").optional().isString().trim().notEmpty(),
   body("status").optional().isIn(["ACTIVE", "INACTIVE"]),
   body("note").optional({ nullable: true }).isString(),
+  body("details").optional().isString(),
+  body("removeDetailIds").optional().isString(),
 ];
 
 const catalogueListSchema = [
@@ -65,6 +87,7 @@ const catalogueListSchema = [
 
 module.exports = {
   CatalogueDTO,
+  CatalogueListDTO,
   catalogueIdSchema,
   createCatalogueSchema,
   updateCatalogueSchema,
