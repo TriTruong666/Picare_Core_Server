@@ -156,6 +156,11 @@ const S3Asset = sequelize.define(
       { fields: ["asset_type"] },
       { fields: ["uploaded_by"] },
       { fields: ["folder_id"] },
+      { name: "s3_assets_created_at_id_idx", fields: ["createdAt", "id"] },
+      { name: "s3_assets_folder_created_at_idx", fields: ["folder_id", "createdAt"] },
+      { name: "s3_assets_client_created_at_idx", fields: ["client_id", "createdAt"] },
+      { name: "s3_assets_user_created_at_idx", fields: ["user_id", "createdAt"] },
+      { name: "s3_assets_type_created_at_idx", fields: ["asset_type", "createdAt"] },
       { unique: true, fields: ["s3_key", "s3_bucket"] }, // Không duplicate key trong cùng bucket
     ],
     hooks: {

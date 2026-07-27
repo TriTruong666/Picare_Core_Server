@@ -299,16 +299,27 @@ class S3Controller {
    */
   static async getAssets(req, res, next) {
     try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
       const {
         clientId,
         userId,
         folder,
         assetType,
         limit = 20,
-        offset = 0,
-        includeUrl = "true",
+        offset,
+        cursor,
+        includeTotal = "false",
+        includeUrl = "false",
         expiresIn = 3600,
       } = req.query;
+
+      if (offset !== undefined && cursor) {
+        throw new BadRequestException("Chỉ dùng cursor hoặc offset, không dùng đồng thời cả hai");
+      }
 
       const filter = {};
       if (clientId) filter.clientId = clientId;
@@ -326,20 +337,42 @@ class S3Controller {
       }
 
       const result = await S3Service.getAssetsFromDb(filter, {
-        limit: parseInt(limit, 10),
-        offset: parseInt(offset, 10),
-        includeUrl: includeUrl === "true",
-        expiresIn: parseInt(expiresIn, 10),
+        limit: Number(limit),
+        offset: Number(offset || 0),
+        cursor: cursor || null,
+        // Passing offset explicitly preserves the old count/offset response.
+        // New calls use cursor pagination and skip COUNT(*) by default.
+        useCursor: offset === undefined,
+        includeTotal: includeTotal === true || includeTotal === "true",
+        includeUrl: includeUrl === true || includeUrl === "true",
+        expiresIn: Number(expiresIn),
       });
 
-      const currentPage = Math.floor(parseInt(offset, 10) / parseInt(limit, 10)) + 1;
+      if (offset !== undefined) {
+        const currentPage = Math.floor(Number(offset) / Number(limit)) + 1;
+        return ResponseHandler.paginate(
+          res,
+          result.rows,
+          result.count,
+          currentPage,
+          limit,
+          "Lấy danh sách asset thành công",
+        );
+      }
 
-      return ResponseHandler.paginate(
+      return ResponseHandler.success(
         res,
-        result.rows,
-        result.count,
-        currentPage,
-        limit,
+        {
+          assets: result.rows,
+          pagination: {
+            limit: Number(limit),
+            hasNext: result.hasNext,
+            nextCursor: result.nextCursor,
+            ...((includeTotal === true || includeTotal === "true") && {
+              totalRecords: result.count,
+            }),
+          },
+        },
         "Lấy danh sách asset thành công",
       );
     } catch (error) {

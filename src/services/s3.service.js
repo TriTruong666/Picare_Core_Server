@@ -8,6 +8,7 @@ const {
 } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { Op } = require("sequelize");
 const slugify = require("slugify");
 const s3Client = require("../config/s3.config");
 const appConfig = require("../config/app.config");
@@ -344,22 +345,25 @@ class S3Service {
   /**
    * Lấy danh sách asset từ database kèm theo presigned URL nếu cần.
    * @param {Object} filter - Điều kiện lọc (clientId, userId, folder, etc.)
-   * @param {Object} options - Phân trang và cấu hình (limit, offset, includeUrl)
-   * @returns {Promise<{rows: S3Asset[], count: number}>}
+   * Cursor pagination is the default so list requests avoid both COUNT(*) and
+   * deep OFFSET scans as the s3_assets table grows.
+   * @returns {Promise<{rows: S3Asset[], nextCursor?: string, hasNext?: boolean, count?: number}>}
    */
   async getAssetsFromDb(filter = {}, options = {}) {
     const {
       limit = 20,
       offset = 0,
-      includeUrl = true,
+      cursor = null,
+      useCursor = true,
+      includeTotal = false,
+      includeUrl = false,
       expiresIn = 3600,
     } = options;
 
-    const { rows, count } = await S3Asset.findAndCountAll({
+    const query = {
       where: filter,
       limit,
-      offset,
-      order: [["createdAt", "DESC"]],
+      order: [["createdAt", "DESC"], ["id", "DESC"]],
       include: [
         {
           model: S3Folder,
@@ -373,23 +377,71 @@ class S3Service {
           ],
         },
       ],
-    });
+    };
 
-    if (includeUrl) {
-      // Gán thêm presignedUrl cho từng item nếu là private hoặc theo yêu cầu
-      for (const asset of rows) {
-        if (asset.visibility === AssetVisibility.PRIVATE) {
-          asset.setDataValue(
-            "presignedUrl",
-            await this.getPresignedUrl(asset.s3Key, expiresIn),
-          );
-        } else {
-          asset.setDataValue("presignedUrl", asset.s3Url);
-        }
-      }
+    if (!useCursor) {
+      const { rows, count } = await S3Asset.findAndCountAll({
+        ...query,
+        offset,
+      });
+      await this.attachListUrls(rows, includeUrl, expiresIn);
+      return { rows, count };
     }
 
-    return { rows, count };
+    if (cursor) {
+      const cursorData = this.decodeAssetsCursor(cursor);
+      query.where = {
+        ...filter,
+        [Op.or]: [
+          { createdAt: { [Op.lt]: cursorData.createdAt } },
+          { createdAt: cursorData.createdAt, id: { [Op.lt]: cursorData.id } },
+        ],
+      };
+    }
+
+    const rows = await S3Asset.findAll({ ...query, limit: limit + 1 });
+    const hasNext = rows.length > limit;
+    const pageRows = hasNext ? rows.slice(0, limit) : rows;
+    await this.attachListUrls(pageRows, includeUrl, expiresIn);
+
+    const lastRow = pageRows.at(-1);
+    const nextCursor = hasNext && lastRow
+      ? this.encodeAssetsCursor(lastRow.createdAt, lastRow.id)
+      : null;
+    const count = includeTotal
+      ? await S3Asset.count({ where: filter, include: query.include })
+      : undefined;
+
+    return { rows: pageRows, hasNext, nextCursor, count };
+  }
+
+  encodeAssetsCursor(createdAt, id) {
+    return Buffer.from(JSON.stringify({ createdAt, id })).toString("base64url");
+  }
+
+  decodeAssetsCursor(cursor) {
+    try {
+      const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+      const createdAt = new Date(decoded.createdAt);
+      const id = Number(decoded.id);
+      if (Number.isNaN(createdAt.getTime()) || !Number.isInteger(id) || id < 1) {
+        throw new Error("Invalid cursor data");
+      }
+      return { createdAt, id };
+    } catch (_) {
+      throw new BadRequestException("cursor không hợp lệ");
+    }
+  }
+
+  async attachListUrls(rows, includeUrl, expiresIn) {
+    if (!includeUrl) return;
+
+    await Promise.all(rows.map(async (asset) => {
+      const presignedUrl = asset.visibility === AssetVisibility.PRIVATE
+        ? await this.getPresignedUrl(asset.s3Key, expiresIn)
+        : asset.s3Url;
+      asset.setDataValue("presignedUrl", presignedUrl);
+    }));
   }
 
   // ─── DOWNLOAD & MERGE ────────────────────────────────────────────────────────

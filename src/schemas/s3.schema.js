@@ -96,6 +96,18 @@ const keyParamSchema = [
     .withMessage("key phải là chuỗi"),
 ];
 
+const getAssetsSchema = [
+  query("limit").optional().isInt({ min: 1, max: 100 }).toInt(),
+  query("offset").optional().isInt({ min: 0 }).toInt(),
+  query("cursor").optional().isString().isLength({ min: 1, max: 512 }),
+  query("includeUrl").optional().isBoolean().toBoolean(),
+  query("includeTotal").optional().isBoolean().toBoolean(),
+  query("expiresIn").optional().isInt({ min: 60, max: 604800 }).toInt(),
+  query("clientId").optional().isUUID(4),
+  query("userId").optional().isUUID(4),
+  query("assetType").optional().isIn(["image", "video", "document", "audio", "other"]),
+];
+
 module.exports = {
   S3UploadResultDTO,
   S3PresignedUrlDTO,
@@ -103,4 +115,5 @@ module.exports = {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
   keyParamSchema,
+  getAssetsSchema,
 };

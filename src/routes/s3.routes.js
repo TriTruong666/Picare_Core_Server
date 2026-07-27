@@ -6,6 +6,7 @@ const { protect } = require("../middlewares/auth.middleware");
 const {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
+  getAssetsSchema,
 } = require("../schemas/s3.schema");
 
 // Multer – lưu file vào memory buffer (không ghi ra disk)
@@ -320,11 +321,29 @@ router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
  *         schema:
  *           type: integer
  *           default: 0
+ *         description: Legacy offset pagination. Supplying it performs COUNT(*) and is slower for deep pages.
+ *       - in: query
+ *         name: cursor
+ *         schema:
+ *           type: string
+ *         description: Cursor from pagination.nextCursor. Recommended for large tables; do not send with offset.
+ *       - in: query
+ *         name: includeUrl
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Set true only when the current page needs view URLs; private assets are signed in parallel.
+ *       - in: query
+ *         name: includeTotal
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Set true only when total record count is needed; this runs COUNT(*).
  *     responses:
  *       200:
  *         description: Thành công
  */
-router.get("/assets", protect, S3Controller.getAssets);
+router.get("/assets", protect, getAssetsSchema, S3Controller.getAssets);
 
 /**
  * @swagger
