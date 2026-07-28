@@ -8,11 +8,12 @@ const {
   getPresignedUploadUrlSchema,
   getAssetsSchema,
 } = require("../schemas/s3.schema");
+const { maxFileUploadBytes } = require("../config/upload.config");
 
 // Multer – lưu file vào memory buffer (không ghi ra disk)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+  limits: { fileSize: maxFileUploadBytes },
 });
 
 // ─── UPLOAD ──────────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ const upload = multer({
  *               file:
  *                 type: string
  *                 format: binary
- *                 description: File cần upload (tối đa 50MB)
+ *                 description: File cần upload (mặc định tối đa 2GB)
  *               folder:
  *                 type: string
  *                 description: Thư mục đích trong bucket (mặc định "uploads")

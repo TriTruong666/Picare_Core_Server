@@ -17,6 +17,7 @@ const { startGrpcServer } = require("./src/services/grpc_server");
 const seedingRBAC = require("./src/seeds/rbac_seed");
 const seedingHubClients = require("./src/seeds/hub_client_seed");
 const { startJobs, stopJobs } = require("./src/jobs");
+const { maxFileUploadBytes } = require("./src/config/upload.config");
 
 const app = express();
 const server = http.createServer(app);
@@ -64,8 +65,8 @@ async function logDatabaseSchema(queryInterface) {
 
 app.use(morgan("dev"));
 app.use(cors({ origin: config.cors, credentials: true }));
-app.use(express.json({ limit: "500mb" }));
-app.use(express.urlencoded({ limit: "500mb", extended: true }));
+app.use(express.json({ limit: maxFileUploadBytes }));
+app.use(express.urlencoded({ limit: maxFileUploadBytes, extended: true }));
 app.use(cookieParser());
 
 app.get("/health", async (req, res) => {

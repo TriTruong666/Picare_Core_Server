@@ -8,12 +8,16 @@ const {
   updateCatalogueSchema,
   catalogueListSchema,
 } = require("../schemas/catalogue.schema");
+const { maxFileUploadBytes } = require("../config/upload.config");
 
 const router = express.Router();
 const MAX_CATALOGUE_IMAGES = 100;
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024, files: MAX_CATALOGUE_IMAGES },
+  limits: {
+    fileSize: maxFileUploadBytes,
+    files: MAX_CATALOGUE_IMAGES,
+  },
   fileFilter: (req, file, callback) => {
     callback(null, file.mimetype.startsWith("image/"));
   },

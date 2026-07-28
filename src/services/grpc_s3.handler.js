@@ -2,8 +2,10 @@ const grpc = require("@grpc/grpc-js");
 const { randomUUID } = require("crypto");
 const S3Service = require("./s3.service");
 const { s3UploadQueue } = require("../jobs/queues");
-
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const {
+  maxFileUploadMb,
+  maxFileUploadBytes,
+} = require("../config/upload.config");
 
 const fail = (callback, code, details) => callback({ code, details });
 
@@ -22,11 +24,11 @@ const grpcS3Handler = {
           "Không tìm thấy nội dung file",
         );
       }
-      if (file.length > MAX_FILE_SIZE) {
+      if (file.length > maxFileUploadBytes) {
         return fail(
           callback,
           grpc.status.RESOURCE_EXHAUSTED,
-          "File vượt quá giới hạn 50 MB",
+          `File vượt quá giới hạn ${maxFileUploadMb} MB`,
         );
       }
 

@@ -7,11 +7,12 @@ const {
   productIdSchema,
 } = require("../schemas/product_qr.schema");
 const { protect } = require("../middlewares/auth.middleware");
+const { maxFileUploadBytes } = require("../config/upload.config");
 
 const router = express.Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: maxFileUploadBytes },
 });
 
 /**

@@ -5,6 +5,8 @@ services:
     restart: always
     env_file:
       - .env
+    environment:
+      - MAX_FILE_UPLOAD_MB=${MAX_FILE_UPLOAD_MB:-2048}
     volumes:
       - ./src/seeds/local_data:/app/src/seeds/local_data
     networks:

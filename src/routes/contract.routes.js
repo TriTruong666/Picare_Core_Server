@@ -20,10 +20,11 @@ const {
   deletePartnerCredentialSchema,
   completeHandwrittenSignatureSchema,
 } = require("../schemas/contract.schema");
+const { maxFileUploadBytes } = require("../config/upload.config");
 
 const credentialUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: maxFileUploadBytes },
 });
 
 /**
@@ -288,7 +289,7 @@ router.post(
  *               file:
  *                 type: string
  *                 format: byte
- *                 description: PDF dạng base64 hoặc data URI, tối đa 20MB sau khi decode
+ *                 description: PDF dạng base64 hoặc data URI, mặc định tối đa 2GB sau khi decode
  *                 example: data:application/pdf;base64,JVBERi0xLjQK...
  *               fileName:
  *                 type: string
@@ -950,11 +951,11 @@ router.patch(
  *               first_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh mặt trước CMND/CCCD, tối đa 5MB
+ *                 description: Ảnh mặt trước CMND/CCCD, mặc định tối đa 2GB
  *               second_identification_image:
  *                 type: string
  *                 format: binary
- *                 description: Ảnh mặt sau CMND/CCCD, tối đa 5MB
+ *                 description: Ảnh mặt sau CMND/CCCD, mặc định tối đa 2GB
  *     responses:
  *       200:
  *         description: Upload ảnh CMND/CCCD thành công

@@ -21,12 +21,12 @@ const S3Service = require("./s3.service");
 const appConfig = require("../config/app.config");
 const JWTService = require("./jwt.service");
 const { ContractTypeRegistry } = require("../contracts");
+const { maxFileUploadBytes } = require("../config/upload.config");
 
 const INDIVIDUAL_CREDENTIAL_FOLDER = "individual_credential";
 const ORGANIZATION_CREDENTIAL_FOLDER = "organization_credential";
 const HANDWRITTEN_SIGNATURE_FOLDER = "handwritten_signature";
 const UPLOADED_CONTRACT_FOLDER = "uploaded-contracts";
-const MAX_UPLOADED_CONTRACT_FILE_SIZE = 20 * 1024 * 1024;
 
 const CONTRACT_STATUS = {
   DRAFT: "draft",
@@ -655,7 +655,7 @@ class ContractService {
   }) {
     if (
       !file?.buffer?.length ||
-      file.buffer.length > MAX_UPLOADED_CONTRACT_FILE_SIZE ||
+      file.buffer.length > maxFileUploadBytes ||
       file.mimetype !== "application/pdf" ||
       file.buffer.subarray(0, 5).toString("ascii") !== "%PDF-"
     ) {

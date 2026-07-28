@@ -4,6 +4,7 @@ const path = require("path");
 const grpcAuthHandler = require("./grpc_auth.handler");
 const grpcLicenseHandler = require("./grpc_license.handler");
 const grpcS3Handler = require("./grpc_s3.handler");
+const { maxGrpcMessageBytes } = require("../config/upload.config");
 
 // Đường dẫn file proto
 const PROTO_PATH = path.join(__dirname, "../../proto/auth.proto");
@@ -24,8 +25,8 @@ const authProto = grpc.loadPackageDefinition(packageDefinition).auth;
  */
 function startGrpcServer(port = 50051) {
   const server = new grpc.Server({
-    "grpc.max_receive_message_length": 64 * 1024 * 1024,
-    "grpc.max_send_message_length": 64 * 1024 * 1024,
+    "grpc.max_receive_message_length": maxGrpcMessageBytes,
+    "grpc.max_send_message_length": maxGrpcMessageBytes,
   });
 
   // Đăng ký service Auth
