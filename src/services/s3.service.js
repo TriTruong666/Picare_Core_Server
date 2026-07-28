@@ -22,6 +22,7 @@ const path = require("path");
 const { pipeline } = require("stream/promises");
 const { execFile } = require("child_process");
 const ffmpegPath = require("ffmpeg-static");
+const { randomUUID } = require("crypto");
 
 const BUCKET = appConfig.s3.bucketName;
 const REGION = appConfig.s3.region;
@@ -718,7 +719,7 @@ class S3Service {
     const ext = lastDot !== -1 ? filename.slice(lastDot) : "";
     const name = lastDot !== -1 ? filename.slice(0, lastDot) : filename;
     const slug = slugify(name, { lower: true, strict: true, locale: "vi" });
-    return `${folder}/${timestamp}_${slug}${ext}`;
+    return `${folder}/${timestamp}_${randomUUID()}_${slug}${ext}`;
   }
 }
 

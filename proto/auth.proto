@@ -148,3 +148,51 @@ message ListTicketsResponse {
   int32 currentPage = 6;
   int32 pageSize = 7;
 }
+
+service S3Service {
+  rpc QueueUpload (S3UploadRequest) returns (S3UploadJobResponse) {}
+  rpc GetUploadJob (S3UploadJobRequest) returns (S3UploadJobStatusResponse) {}
+}
+
+message S3UploadRequest {
+  bytes file = 1;
+  string mimeType = 2;
+  string originalName = 3;
+  int64 fileSize = 4;
+  string folder = 5;
+  string clientId = 6;
+  string uploadedBy = 7;
+  string description = 8;
+  string visibility = 9;
+}
+
+message S3UploadJobResponse {
+  bool success = 1;
+  string message = 2;
+  string jobId = 3;
+  string key = 4;
+  string status = 5;
+}
+
+message S3UploadJobRequest {
+  string jobId = 1;
+}
+
+message S3UploadResult {
+  string key = 1;
+  string url = 2;
+  string etag = 3;
+  string recordId = 4;
+  bool reused = 5;
+}
+
+message S3UploadJobStatusResponse {
+  bool success = 1;
+  string message = 2;
+  string jobId = 3;
+  string status = 4;
+  int32 progress = 5;
+  bool shouldPoll = 6;
+  S3UploadResult result = 7;
+  string failedReason = 8;
+}

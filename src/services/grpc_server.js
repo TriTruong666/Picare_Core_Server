@@ -3,6 +3,7 @@ const protoLoader = require("@grpc/proto-loader");
 const path = require("path");
 const grpcAuthHandler = require("./grpc_auth.handler");
 const grpcLicenseHandler = require("./grpc_license.handler");
+const grpcS3Handler = require("./grpc_s3.handler");
 
 // Đường dẫn file proto
 const PROTO_PATH = path.join(__dirname, "../../proto/auth.proto");
@@ -22,7 +23,10 @@ const authProto = grpc.loadPackageDefinition(packageDefinition).auth;
  * Khởi tạo và khởi chạy gRPC Server
  */
 function startGrpcServer(port = 50051) {
-  const server = new grpc.Server();
+  const server = new grpc.Server({
+    "grpc.max_receive_message_length": 64 * 1024 * 1024,
+    "grpc.max_send_message_length": 64 * 1024 * 1024,
+  });
 
   // Đăng ký service Auth
   server.addService(authProto.AuthService.service, {
@@ -39,6 +43,11 @@ function startGrpcServer(port = 50051) {
     CreateTicket: grpcLicenseHandler.createTicket,
     ListTickets: grpcLicenseHandler.listTickets,
     GetTicket: grpcLicenseHandler.getTicket,
+  });
+
+  server.addService(authProto.S3Service.service, {
+    QueueUpload: grpcS3Handler.queueUpload,
+    GetUploadJob: grpcS3Handler.getUploadJob,
   });
 
 
