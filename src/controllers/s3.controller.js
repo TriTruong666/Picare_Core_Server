@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const mime = require("mime-types");
 const ResponseHandler = require("../common/response.handler");
 const S3Service = require("../services/s3.service");
+const UploadStagingService = require("../services/upload_staging.service");
 const { packageVideoQueue, s3UploadQueue } = require("../jobs/queues");
 const {
   BadRequestException,
@@ -94,19 +95,32 @@ class S3Controller {
       const key = S3Service.buildKey(folder, originalName);
 
       const jobId = `s3-upload-${Date.now()}-${randomUUID()}`;
-      const job = await s3UploadQueue.add("upload-file", {
-        key,
-        body: fileBuffer,
-        mimeType,
-        originalName,
-        fileSize,
-        folder,
-        clientId,
-        uploadedBy,
-        description,
-        visibility,
-        requestedAt: new Date().toISOString(),
-      }, { jobId });
+      const tempFilePath =
+        await UploadStagingService.stageBuffer(fileBuffer);
+      let job;
+      try {
+        job = await s3UploadQueue.add(
+          "upload-file",
+          {
+            key,
+            tempFilePath,
+            mimeType,
+            originalName,
+            fileSize,
+            folder,
+            clientId,
+            uploadedBy,
+            description,
+            visibility,
+            allowExisting: true,
+            requestedAt: new Date().toISOString(),
+          },
+          { jobId },
+        );
+      } catch (error) {
+        await UploadStagingService.remove(tempFilePath).catch(() => {});
+        throw error;
+      }
 
       return ResponseHandler.created(
         res,

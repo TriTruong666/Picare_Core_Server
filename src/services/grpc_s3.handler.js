@@ -1,6 +1,7 @@
 const grpc = require("@grpc/grpc-js");
 const { randomUUID } = require("crypto");
 const S3Service = require("./s3.service");
+const UploadStagingService = require("./upload_staging.service");
 const { s3UploadQueue } = require("../jobs/queues");
 const {
   maxFileUploadMb,
@@ -8,6 +9,10 @@ const {
 } = require("../config/upload.config");
 
 const fail = (callback, code, details) => callback({ code, details });
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const optionalUuid = (value) =>
+  value && UUID_PATTERN.test(String(value)) ? String(value) : null;
 
 const grpcS3Handler = {
   async queueUpload(call, callback) {
@@ -32,28 +37,38 @@ const grpcS3Handler = {
         );
       }
 
-      const originalName = request.originalName || "upload.bin";
+      const originalName = (request.originalName || "upload.bin").slice(0, 512);
       const folder = request.folder || "uploads";
       const key = S3Service.buildKey(folder, originalName);
       const jobId = `s3-upload-${Date.now()}-${randomUUID()}`;
+      const tempFilePath = await UploadStagingService.stageBuffer(file);
 
-      const job = await s3UploadQueue.add(
-        "upload-file",
-        {
-          key,
-          body: file,
-          mimeType: request.mimeType || "application/octet-stream",
-          originalName,
-          fileSize: Number(request.fileSize) || file.length,
-          folder,
-          clientId: request.clientId || null,
-          uploadedBy: request.uploadedBy || null,
-          description: request.description || null,
-          visibility: request.visibility || "private",
-          requestedAt: new Date().toISOString(),
-        },
-        { jobId },
-      );
+      let job;
+      try {
+        job = await s3UploadQueue.add(
+          "upload-file",
+          {
+            key,
+            tempFilePath,
+            mimeType: (
+              request.mimeType || "application/octet-stream"
+            ).slice(0, 128),
+            originalName,
+            fileSize: Number(request.fileSize) || file.length,
+            folder,
+            clientId: optionalUuid(request.clientId),
+            uploadedBy: optionalUuid(request.uploadedBy),
+            description: request.description || null,
+            visibility: request.visibility === "public" ? "public" : "private",
+            allowExisting: true,
+            requestedAt: new Date().toISOString(),
+          },
+          { jobId },
+        );
+      } catch (error) {
+        await UploadStagingService.remove(tempFilePath).catch(() => {});
+        throw error;
+      }
 
       callback(null, {
         success: true,
