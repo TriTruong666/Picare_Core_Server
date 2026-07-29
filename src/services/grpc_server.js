@@ -35,6 +35,7 @@ function startGrpcServer(port = 50051) {
     CheckPermission: grpcAuthHandler.checkPermission,
     ListUsers: grpcAuthHandler.listUsers,
     GetUser: grpcAuthHandler.getUser,
+    GetUsersByIds: grpcAuthHandler.getUsersByIds,
   });
 
   // Đăng ký service License

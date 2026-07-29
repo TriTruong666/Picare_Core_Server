@@ -147,6 +147,19 @@ const grpcAuthHandler = {
       return callback(error);
     }
   },
+
+  /** RPC: GetUsersByIds - batched safe user references for other services. */
+  getUsersByIds: async (call, callback) => {
+    try {
+      const userIds = [...new Set((call.request.userIds || []).map((userId) => String(userId).trim()).filter(Boolean))];
+      if (!userIds.length) return callback(null, { users: [], missingUserIds: [] });
+      const users = await User.findAll({ where: { userId: { [Op.in]: userIds } } });
+      const foundUserIds = new Set(users.map((user) => user.userId));
+      return callback(null, { users: users.map(toHubUser), missingUserIds: userIds.filter((userId) => !foundUserIds.has(userId)) });
+    } catch (error) {
+      return callback(error);
+    }
+  },
 };
 
 module.exports = grpcAuthHandler;

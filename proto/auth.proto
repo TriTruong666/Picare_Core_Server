@@ -14,6 +14,7 @@ service AuthService {
 
   // Kiểm tra userId còn tồn tại trước khi lưu tham chiếu.
   rpc GetUser (GetUserRequest) returns (GetUserResponse) {}
+  rpc GetUsersByIds (GetUsersByIdsRequest) returns (GetUsersByIdsResponse) {}
 }
 
 message VerifyTokenRequest {
@@ -69,6 +70,9 @@ message GetUserResponse {
   bool found = 1;
   HubUser user = 2;
 }
+
+message GetUsersByIdsRequest { repeated string userIds = 1; }
+message GetUsersByIdsResponse { repeated HubUser users = 1; repeated string missingUserIds = 2; }
 
 service LicenseService {
   // Lấy trạng thái kích hoạt của client và danh sách các tính năng được mở khóa
