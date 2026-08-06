@@ -95,6 +95,10 @@ const checkAccessByUrlSchema = [
     .bail()
     .isURL({ require_tld: false })
     .withMessage("externalUrl khong hop le"),
+  query("clientId")
+    .optional({ nullable: true, checkFalsy: true })
+    .isUUID(4)
+    .withMessage("clientId khong hop le"),
 ];
 
 module.exports = {

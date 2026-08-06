@@ -12,7 +12,11 @@ const REQUIRED_PERSONAL_FIELDS = [
 ];
 
 function getInputValue(input, field) {
-  return input?.[field] ?? input?.contractData?.[field];
+  if (Object.prototype.hasOwnProperty.call(input || {}, field)) {
+    return input[field];
+  }
+
+  return input?.contractData?.[field];
 }
 
 module.exports = {
@@ -35,6 +39,7 @@ module.exports = {
         personalInfo: personalInfo ?? null,
         title: getInputValue(input, "title") ?? null,
         subTitle: getInputValue(input, "subTitle") ?? null,
+        legalRegulation: getInputValue(input, "legalRegulation") ?? null,
         rawContent: getInputValue(input, "rawContent") ?? null,
       },
     };
@@ -58,10 +63,20 @@ module.exports = {
       throw new Error(`personalInfo.${missingField} là bắt buộc`);
     }
     ["title", "subTitle", "rawContent"].forEach((field) => {
-      if (!getInputValue(input, field)?.trim()) {
+      const value = getInputValue(input, field);
+      if (typeof value !== "string" || !value.trim()) {
         throw new Error(`${field} là bắt buộc với hợp đồng tuỳ chỉnh cá nhân`);
       }
     });
+
+    const legalRegulation = getInputValue(input, "legalRegulation");
+    if (
+      legalRegulation !== null &&
+      legalRegulation !== undefined &&
+      (typeof legalRegulation !== "string" || !legalRegulation.trim())
+    ) {
+      throw new Error("legalRegulation phải là chuỗi HTML không rỗng hoặc null");
+    }
     return true;
   },
 

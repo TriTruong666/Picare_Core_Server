@@ -76,6 +76,10 @@ const credentialUpload = multer({
  *               rawContent:
  *                 type: string
  *                 description: Nội dung rich-text HTML gốc, được lưu nguyên trạng và render vào PDF cho hai loại hợp đồng tuỳ chỉnh.
+ *               legalRegulation:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Căn cứ pháp lý dạng rich-text HTML, không bắt buộc với custom_organization và custom_personal; được render phía trên phần thông tin các bên khi có dữ liệu.
  *               parentContractId:
  *                 type: string
  *                 format: uuid
@@ -179,6 +183,7 @@ const credentialUpload = multer({
  *                   role: Giám đốc
  *                 title: HỢP ĐỒNG HỢP TÁC
  *                 subTitle: (Về việc hợp tác kinh doanh)
+ *                 legalRegulation: "<p>- Căn cứ Bộ Luật Dân sự số 33/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;</p><p>- Căn cứ Luật Thương Mại số 36/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;</p><p>- Căn cứ vào khả năng và nhu cầu của hai bên.</p>"
  *                 rawContent: "<p>Điều khoản <strong>quan trọng</strong> của hợp đồng.</p>"
  *             customPersonal:
  *               summary: Hợp đồng tuỳ chỉnh cá nhân
@@ -202,6 +207,7 @@ const credentialUpload = multer({
  *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
  *                 title: THỎA THUẬN CÔNG VIỆC
  *                 subTitle: (Áp dụng cho nhân sự)
+ *                 legalRegulation: "<p>- Căn cứ Bộ Luật Dân sự hiện hành;</p><p>- Căn cứ vào khả năng và nhu cầu của hai bên.</p>"
  *                 rawContent: "<p>Nội dung thỏa thuận.</p>"
  *             appendix:
  *               summary: Phụ lục hợp đồng
@@ -475,6 +481,10 @@ router.delete(
  *               personalInfo:
  *                 type: object
  *                 description: Thông tin người cam kết. Dùng cho contractType=livestream_responsibility_commitment thay cho partnerCompanyInfo.
+ *               legalRegulation:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Căn cứ pháp lý dạng rich-text HTML của custom_organization và custom_personal. Có thể gửi riêng field này để bổ sung cho hợp đồng cũ hoặc gửi null để xoá.
  *               parentContractId:
  *                 type: string
  *                 format: uuid
@@ -648,6 +658,10 @@ router.delete(
  *                   citizenId: "079095001234"
  *                   citizenIdIssuedDate: 2021-06-15
  *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
+ *             customLegalRegulation:
+ *               summary: Bổ sung căn cứ pháp lý cho hợp đồng custom cũ
+ *               value:
+ *                 legalRegulation: "<p>- Căn cứ Bộ Luật Dân sự số 33/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;</p><p>- Căn cứ vào khả năng và nhu cầu của hai bên.</p>"
  *             custom:
  *               summary: Cập nhật loại hợp đồng động
  *               value:

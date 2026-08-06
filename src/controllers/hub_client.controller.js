@@ -153,13 +153,16 @@ class HubClientController {
       const externalUrl = Array.isArray(req.query?.externalUrl)
         ? req.query.externalUrl[0]
         : req.query?.externalUrl;
+      const clientId = Array.isArray(req.query?.clientId)
+        ? req.query.clientId[0]
+        : req.query?.clientId;
 
-      await HubClientService.checkClientAccessByExternalUrl(token, externalUrl);
+      await HubClientService.checkClientAccessByExternalUrl(token, externalUrl, clientId);
 
       return ResponseHandler.success(
         res,
         null,
-        "Tài khoản có quyền truy cập vào URL client này",
+        "Tài khoản có quyền truy cập vào client này",
       );
     } catch (error) {
       next(error);

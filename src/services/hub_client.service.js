@@ -67,11 +67,11 @@ class HubClientService {
     }
   }
 
-  static async findClientByExternalUrl(externalUrl) {
+  static async findClientByExternalUrl(externalUrl, role = null) {
     const normalizedTargetOrigin = this.extractOrigin(externalUrl);
     const clients = await HubClient.findAll();
 
-    const client = clients.find((item) => {
+    const matchingClients = clients.filter((item) => {
       try {
         return this.extractOrigin(item.clientExternalUrl) === normalizedTargetOrigin;
       } catch (error) {
@@ -79,26 +79,43 @@ class HubClientService {
       }
     });
 
-    if (!client) {
+    if (!matchingClients.length) {
       throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
     }
 
-    return client;
+    if (role) {
+      const normalizedRole = this.normalizeRole(role);
+      const matchedByRole = matchingClients.find((item) => {
+        const allowedRoles = (item.allowedRoles || []).map((r) => this.normalizeRole(r));
+        return allowedRoles.includes(normalizedRole);
+      });
+
+      if (matchedByRole) {
+        return matchedByRole;
+      }
+    }
+
+    return matchingClients[0];
   }
 
   static async validateAccessToClient({ role, clientId, externalUrl }) {
     let client = null;
 
+    // Priority 1: Check by clientId if provided
     if (clientId) {
       client = await HubClient.findOne({ where: { clientId } });
-    } else if (externalUrl) {
-      client = await this.findClientByExternalUrl(externalUrl);
-    } else {
-      throw new BadRequestException(ErrorCodes.HUB_CLIENT_PERMISSION_INPUT_MISSING);
+    }
+
+    // Priority 2: Fallback to externalUrl (with role-aware selection if multiple clients match URL)
+    if (!client && externalUrl) {
+      client = await this.findClientByExternalUrl(externalUrl, role);
     }
 
     if (!client) {
-      throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+      if (clientId || externalUrl) {
+        throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
+      }
+      throw new BadRequestException(ErrorCodes.HUB_CLIENT_PERMISSION_INPUT_MISSING);
     }
 
     this.ensureClientActive(client);
@@ -247,9 +264,9 @@ class HubClientService {
   }
 
   /**
-   * Check access by external URL for the current token.
+   * Check access by external URL (and optional clientId) for the current token.
    */
-  static async checkClientAccessByExternalUrl(token, externalUrl) {
+  static async checkClientAccessByExternalUrl(token, externalUrl, clientId = null) {
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
@@ -259,7 +276,7 @@ class HubClientService {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    await this.validateAccessToClient({ role: decoded.role, externalUrl });
+    await this.validateAccessToClient({ role: decoded.role, clientId, externalUrl });
     return null;
   }
 }

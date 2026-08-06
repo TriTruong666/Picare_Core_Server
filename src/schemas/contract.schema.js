@@ -168,6 +168,10 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isEmail()
     .withMessage("personalInfo.email phải là email hợp lệ"),
+  body("legalRegulation")
+    .optional({ nullable: true })
+    .isString()
+    .withMessage("legalRegulation phải là chuỗi HTML"),
   body("parentContractId")
     .optional({ nullable: true, checkFalsy: true })
     .isUUID()

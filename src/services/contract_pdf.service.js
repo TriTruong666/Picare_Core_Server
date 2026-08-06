@@ -84,7 +84,7 @@ const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
 const BYTE_RANGE_PLACEHOLDER = "**********";
-const DEFAULT_TEXT_LINE_GAP = 1.5;
+const DEFAULT_TEXT_LINE_GAP = 2.5;
 const SIGNATURE_WIDGET_RECTS = {
   owner: [75, 141, 255, 215],
   partner: [340, 141, 520, 215],
@@ -915,7 +915,10 @@ class ContractPdfBuilder {
     this.fontPath = fontPath;
     this.boldFontPath = boldFontPath;
     this.signatureWidgets = {};
-    this.doc.font(fontPath).fontSize(10);
+    this.doc
+      .font(fontPath)
+      .fontSize(10)
+      .lineGap(DEFAULT_TEXT_LINE_GAP);
   }
 
   get bufferPromise() {
@@ -966,6 +969,21 @@ class ContractPdfBuilder {
     }
   }
 
+  richHtml(rawContent, options = {}) {
+    htmlToPdfBlocks(rawContent).forEach((block) => {
+      const parts = block.listItem
+        ? [{ text: "• " }, ...block.parts]
+        : block.parts;
+
+      this.richText(parts, {
+        size: block.heading ? 11 : 10,
+        lineGap: DEFAULT_TEXT_LINE_GAP,
+        gap: block.heading ? 0.2 : 0.12,
+        ...options,
+      });
+    });
+  }
+
   labelValue(label, value, options = {}) {
     this.richText(
       [{ text: label, bold: true }, { text: formatOptionalText(value) }],
@@ -996,7 +1014,12 @@ class ContractPdfBuilder {
 
   heading(value) {
     this.doc.moveDown(0.4);
-    this.text(value, { size: 11, bold: true, gap: 0.25, lineGap: 1.5 });
+    this.text(value, {
+      size: 11,
+      bold: true,
+      gap: 0.25,
+      lineGap: DEFAULT_TEXT_LINE_GAP,
+    });
   }
 
   bullet(value) {
@@ -1340,6 +1363,11 @@ class ContractPdfBuilder {
     this.centered(data.title, 14, 0.1, true);
     this.centered(data.subTitle, 10, 0.8);
 
+    if (data.legalRegulation) {
+      this.richHtml(data.legalRegulation, { gap: 0.2 });
+      this.doc.moveDown(0.25);
+    }
+
     this.text(
       `Hôm nay, ngày ${formatShortDate(renderedAt)} tại văn phòng công ty, chúng tôi gồm có:`,
       { gap: 0.35 },
@@ -1362,15 +1390,7 @@ class ContractPdfBuilder {
       this.customCompanyBlock("BÊN B", partner, "Bên B");
     }
 
-    htmlToPdfBlocks(data.rawContent).forEach((block) => {
-      const parts = block.listItem ? [{ text: "• " }, ...block.parts] : block.parts;
-      this.richText(parts, {
-        // Nội dung thường nhỏ hơn heading và luôn dùng regular font, trừ thẻ <strong>/<b>.
-        size: block.heading ? 11 : 10,
-        lineGap: 1.5,
-        gap: block.heading ? 0.2 : 0.12,
-      });
-    });
+    this.richHtml(data.rawContent);
 
     this.signatureArea(
       owner,
