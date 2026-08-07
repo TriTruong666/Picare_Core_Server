@@ -153,7 +153,7 @@ const startServer = async () => {
     } else {
       console.log("[DATABASE]: Đang kiểm tra và đồng bộ cấu trúc database...");
       await sequelize.sync({ logging: logSyncSql });
-      console.log("[DATABASE]: Database đã sẵn sàng.");
+      console.log("[DATABASE]: Database đã sẵn sàng");
     }
 
     // await logDatabaseSchema(queryInterface);
