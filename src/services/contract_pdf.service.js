@@ -1340,26 +1340,9 @@ class ContractPdfBuilder {
     const partner = isPersonal ? data.personalInfo || {} : contract.partnerCompanyInfo || {};
     const renderedAt = new Date();
 
-    this.text(owner.companyName || "CÔNG TY TNHH PICARE VIỆT NAM", {
-      width: 245,
-      bold: true,
-    });
-    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Độc lập - Tự do - Hạnh phúc", { size: 10, bold: true, gap: 1.2 });
-    this.doc.x = 300;
-    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
-      size: 10,
-      gap: 0.8,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
+    this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
+    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
     this.centered(data.title, 14, 0.1, true);
     this.centered(data.subTitle, 10, 0.8);
 
@@ -1412,30 +1395,9 @@ class ContractPdfBuilder {
     const person = contract.contractData?.personalInfo || {};
     const renderedAt = new Date();
 
-    this.text(owner.companyName || "CTY TNHH PICARE VIỆT NAM", {
-      width: 245,
-      bold: true,
-    });
-    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Độc lập – Tự do – Hạnh phúc", {
-      size: 10,
-      bold: true,
-      gap: 0.8,
-    });
-    this.doc.x = 300;
-    this.rightBlock(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, {
-      size: 10,
-      gap: 0.8,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
+    this.centered("Độc lập – Tự do – Hạnh phúc", 12, 0.8, true);
+    this.centered(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
     this.centered(
       "BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN TUÂN THỦ",
       14,
@@ -1552,33 +1514,9 @@ class ContractPdfBuilder {
     const paragraphs = (values) =>
       values.forEach((value) => this.text(value, { gap: 0.15 }));
 
-    this.text(owner.companyName || "CÔNG TY TNHH PICARE VIỆT NAM", {
-      width: 245,
-      bold: true,
-    });
-    this.text(`Số: ${contract.contractNumber}`, {
-      width: 245,
-      bold: true,
-    });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Độc lập – Tự do – Hạnh phúc", {
-      size: 10,
-      bold: true,
-      gap: 0.8,
-    });
-    this.doc.x = 300;
-    this.rightBlock(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, {
-      size: 10,
-      gap: 0.8,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
+    this.centered("Độc lập – Tự do – Hạnh phúc", 12, 0.8, true);
+    this.centered(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
     this.centered("PHỤ LỤC BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN", 14, 0.1, true);
     this.centered("TUÂN THỦ QUY ĐỊNH HOẠT ĐỘNG LIVESTREAM", 14, 0.2, true);
     this.centered(
@@ -1761,28 +1699,9 @@ class ContractPdfBuilder {
     const partner = contract.partnerCompanyInfo || {};
     const renderedAt = new Date();
 
-    this.text(owner.companyName, { width: 245, bold: true });
-    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Độc lập - Tự do - Hạnh phúc", {
-      size: 10,
-      bold: true,
-      gap: 1.2,
-    });
-    this.doc.x = 300;
-    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
-      size: 10,
-      bold: true,
-      gap: 0.8,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
+    this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
+    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8, true);
     this.centered("HỢP ĐỒNG NGUYÊN TẮC", 14, 0.1, true);
     this.centered(`Số ${contract.contractNumber}`, 10, 0.1, true);
     this.centered("(Về việc: Bán hàng)", 10, 0.8);
@@ -2310,28 +2229,9 @@ class ContractPdfBuilder {
       contractData.principleContractNumber || "08/2026/HĐNT/MOCELUX-PICARE";
     const products = this.collectAppendixProducts(contract, details);
 
-    this.text(owner.companyName, { width: 245, bold: true });
-    this.text(`Số: ${contract.contractNumber}`, { width: 245, bold: true });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Độc lập - Tự do - Hạnh phúc", {
-      size: 10,
-      bold: true,
-      gap: 1.2,
-    });
-    this.doc.x = 300;
-    this.rightBlock(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, {
-      size: 10,
-      bold: true,
-      gap: 0.8,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
+    this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
+    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8, true);
     this.centered("PHỤ LỤC HỢP ĐỒNG", 14, 0.25, true);
     this.centered(
       `Đính kèm Hợp đồng nguyên tắc số: ${principleContractNumber}`,
@@ -2376,22 +2276,8 @@ class ContractPdfBuilder {
       contractData.contractTitle ||
       `HOP DONG ${asText(contract.contractType).toUpperCase()}`;
 
-    this.text(owner.companyName || "", { width: 245, bold: true });
-    this.text(`So: ${contract.contractNumber}`, { width: 245, bold: true });
-    this.doc.y = 56;
-    this.doc.x = 300;
-    this.rightBlock("CONG HOA XA HOI CHU NGHIA VIET NAM", {
-      size: 11,
-      bold: true,
-      gap: 0.1,
-    });
-    this.doc.x = 300;
-    this.rightBlock("Doc lap - Tu do - Hanh phuc", {
-      size: 10,
-      bold: true,
-      gap: 1.2,
-    });
-    this.doc.x = this.doc.page.margins.left;
+    this.centered("CONG HOA XA HOI CHU NGHIA VIET NAM", 14, 0.1, true);
+    this.centered("Doc lap - Tu do - Hanh phuc", 12, 1.2, true);
     this.centered(title, 14, 0.8, true);
 
     Object.entries(contractData).forEach(([key, value]) => {
