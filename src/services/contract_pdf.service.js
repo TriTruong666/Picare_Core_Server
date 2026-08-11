@@ -1378,10 +1378,10 @@ class ContractPdfBuilder {
       this.doc.moveDown(0.25);
     }
 
-    this.text(
-      `Hôm nay, ngày ${formatShortDate(renderedAt)} tại văn phòng công ty, chúng tôi gồm có:`,
-      { gap: 0.35 },
-    );
+    // this.text(
+    //   `Hôm nay, ngày ${formatShortDate(renderedAt)} tại văn phòng công ty, chúng tôi gồm có:`,
+    //   { gap: 0.35 },
+    // );
     this.customCompanyBlock("BÊN A", owner, "Bên A");
 
     if (isPersonal) {
@@ -1441,10 +1441,10 @@ class ContractPdfBuilder {
       "Căn cứ Nội quy lao động và các quy định nội bộ của Công ty TNHH PICARE VIỆT NAM.",
     ].forEach((line) => this.bullet(line));
 
-    this.text(
-      `Hôm nay, ${formatLongVietnameseDate(renderedAt)}, tại văn phòng Công ty, chúng tôi gồm:`,
-      { gap: 0.3 },
-    );
+    // this.text(
+    //   `Hôm nay, ${formatLongVietnameseDate(renderedAt)}, tại văn phòng Công ty, chúng tôi gồm:`,
+    //   { gap: 0.3 },
+    // );
     this.text(
       `BÊN A: ${(owner.companyName || "CTY TNHH PICARE VIỆT NAM").toUpperCase()} (Sau đây gọi là “Công ty”)`,
       { bold: true },
@@ -1740,12 +1740,12 @@ class ContractPdfBuilder {
       "Căn cứ Luật Thương Mại số 36/2005/QH ngày 14/06/2005 của Quốc hội nước CHXHCN Việt Nam;",
     );
     this.bullet("Căn cứ vào khả năng và nhu cầu của hai bên.");
-    this.text(
-      `Hôm nay, ngày ${formatShortDate(
-        renderedAt,
-      )} tại văn phòng công ty chúng tôi gồm có:`,
-      { gap: 0.35, bold: true },
-    );
+    // this.text(
+    //   `Hôm nay, ngày ${formatShortDate(
+    //     renderedAt,
+    //   )} tại văn phòng công ty chúng tôi gồm có:`,
+    //   { gap: 0.35, bold: true },
+    // );
 
     this.companyBlock("CÔNG TY BÁN ( Bên A)", owner, "Bên A");
     this.companyBlock("CÔNG TY MUA ( Bên B)", partner, "Bên B");
@@ -2267,12 +2267,12 @@ class ContractPdfBuilder {
       true,
     );
 
-    this.text(
-      `Hôm nay, ngày ${formatShortDate(
-        renderedAt,
-      )} tại văn phòng công ty chúng tôi gồm có:`,
-      { gap: 0.35, bold: true },
-    );
+    // this.text(
+    //   `Hôm nay, ngày ${formatShortDate(
+    //     renderedAt,
+    //   )} tại văn phòng công ty chúng tôi gồm có:`,
+    //   { gap: 0.35, bold: true },
+    // );
 
     this.companyBlock("CÔNG TY BÁN ( Bên A)", owner, "Bên A");
     this.companyBlock("CÔNG TY MUA ( Bên B)", partner, "Bên B");
