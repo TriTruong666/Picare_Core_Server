@@ -44,8 +44,12 @@ const SIGNATURE_APPEARANCE_THEMES = {
 
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
+  path.resolve(__dirname, "../assets/fonts/times.ttf"),
   "C:/Windows/Fonts/times.ttf",
   "C:/Windows/Fonts/arial.ttf",
+  "/usr/share/fonts/truetype/msttcorefonts/times.ttf",
+  "/usr/share/fonts/TTF/LiberationSerif-Regular.ttf",
+  "/usr/share/fonts/truetype/liberation2/LiberationSerif-Regular.ttf",
   "/usr/share/fonts/TTF/DejaVuSans.ttf",
   "/usr/share/fonts/TTF/LiberationSans-Regular.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -53,31 +57,40 @@ const DEFAULT_FONT_PATHS = [
 ].filter(Boolean);
 const DEFAULT_BOLD_FONT_PATHS = [
   process.env.CONTRACT_BOLD_FONT_PATH,
+  path.resolve(__dirname, "../assets/fonts/timesbd.ttf"),
   "C:/Windows/Fonts/timesbd.ttf",
   "C:/Windows/Fonts/arialbd.ttf",
+  "/usr/share/fonts/truetype/msttcorefonts/timesbd.ttf",
+  "/usr/share/fonts/TTF/LiberationSerif-Bold.ttf",
+  "/usr/share/fonts/truetype/liberation2/LiberationSerif-Bold.ttf",
   "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
   "/usr/share/fonts/TTF/LiberationSans-Bold.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
   "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
 ].filter(Boolean);
 const FONT_SEARCH_DIRS = [
+  path.resolve(__dirname, "../assets/fonts"),
   "/usr/share/fonts",
   "/usr/local/share/fonts",
   "C:/Windows/Fonts",
 ];
 const REGULAR_FONT_FILE_NAMES = [
+  "times.ttf",
+  "Times.ttf",
+  "LiberationSerif-Regular.ttf",
   "DejaVuSans.ttf",
   "LiberationSans-Regular.ttf",
   "Arial.ttf",
   "arial.ttf",
-  "times.ttf",
 ];
 const BOLD_FONT_FILE_NAMES = [
+  "timesbd.ttf",
+  "Timesbd.ttf",
+  "LiberationSerif-Bold.ttf",
   "DejaVuSans-Bold.ttf",
   "LiberationSans-Bold.ttf",
   "Arial Bold.ttf",
   "arialbd.ttf",
-  "timesbd.ttf",
 ];
 const watermarkLogoDataUriPromises = new Map();
 const DEFAULT_SIGNATURE_LENGTH = Number(
@@ -96,13 +109,26 @@ function asText(value, fallback = "") {
 }
 
 function decodeHtmlEntities(value) {
-  const entities = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
-  return asText(value).replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (match, entity) => {
-    if (entity[0] !== "#") return entities[entity.toLowerCase()] || match;
-    const isHex = entity[1].toLowerCase() === "x";
-    const codePoint = Number.parseInt(entity.slice(isHex ? 2 : 1), isHex ? 16 : 10);
-    return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
-  });
+  const entities = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  };
+  return asText(value).replace(
+    /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+    (match, entity) => {
+      if (entity[0] !== "#") return entities[entity.toLowerCase()] || match;
+      const isHex = entity[1].toLowerCase() === "x";
+      const codePoint = Number.parseInt(
+        entity.slice(isHex ? 2 : 1),
+        isHex ? 16 : 10,
+      );
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    },
+  );
 }
 
 function htmlToPdfBlocks(rawContent) {
@@ -111,23 +137,28 @@ function htmlToPdfBlocks(rawContent) {
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\s*\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n");
 
-  return content.split(/\n+/).map((line) => {
-    const heading = /<\s*h[1-6][^>]*>/i.test(line);
-    const listItem = /<\s*li[^>]*>/i.test(line);
-    let bold = heading;
-    const parts = [];
-    for (const token of line.split(/(<\s*\/?\s*(?:strong|b)\b[^>]*>)/gi)) {
-      if (/^<\s*(strong|b)\b/i.test(token)) {
-        bold = true;
-      } else if (/^<\s*\/\s*(strong|b)\s*>/i.test(token)) {
-        bold = heading;
-      } else {
-        const text = decodeHtmlEntities(token.replace(/<[^>]+>/g, "")).replace(/\s+/g, " ");
-        if (text) parts.push({ text, bold });
+  return content
+    .split(/\n+/)
+    .map((line) => {
+      const heading = /<\s*h[1-6][^>]*>/i.test(line);
+      const listItem = /<\s*li[^>]*>/i.test(line);
+      let bold = heading;
+      const parts = [];
+      for (const token of line.split(/(<\s*\/?\s*(?:strong|b)\b[^>]*>)/gi)) {
+        if (/^<\s*(strong|b)\b/i.test(token)) {
+          bold = true;
+        } else if (/^<\s*\/\s*(strong|b)\s*>/i.test(token)) {
+          bold = heading;
+        } else {
+          const text = decodeHtmlEntities(
+            token.replace(/<[^>]+>/g, ""),
+          ).replace(/\s+/g, " ");
+          if (text) parts.push({ text, bold });
+        }
       }
-    }
-    return { parts, heading, listItem };
-  }).filter((block) => block.parts.length);
+      return { parts, heading, listItem };
+    })
+    .filter((block) => block.parts.length);
 }
 
 function normalizeVietnameseText(value, fallback = "") {
@@ -541,9 +572,8 @@ async function createHandwrittenSignatureAppearanceImage({
   signatureImageBuffer,
   signingTime,
 }) {
-  const trimmedSignatureBuffer = await prepareHandwrittenSignatureImage(
-    signatureImageBuffer,
-  );
+  const trimmedSignatureBuffer =
+    await prepareHandwrittenSignatureImage(signatureImageBuffer);
   const signaturePngBuffer = await sharp(trimmedSignatureBuffer)
     .resize({
       width: Math.round((width - 16) * 3),
@@ -915,10 +945,7 @@ class ContractPdfBuilder {
     this.fontPath = fontPath;
     this.boldFontPath = boldFontPath;
     this.signatureWidgets = {};
-    this.doc
-      .font(fontPath)
-      .fontSize(10)
-      .lineGap(DEFAULT_TEXT_LINE_GAP);
+    this.doc.font(fontPath).fontSize(10).lineGap(DEFAULT_TEXT_LINE_GAP);
   }
 
   get bufferPromise() {
@@ -1060,7 +1087,10 @@ class ContractPdfBuilder {
   }
 
   customCompanyBlock(title, companyInfo, shortName) {
-    this.boldLabelValue(`${title}: `, asText(companyInfo.companyName).toUpperCase());
+    this.boldLabelValue(
+      `${title}: `,
+      asText(companyInfo.companyName).toUpperCase(),
+    );
     this.boldLabelValue("Địa chỉ: ", companyInfo.address);
     this.boldLabelValue("Điện thoại: ", companyInfo.phone);
     if (companyInfo.email) {
@@ -1068,18 +1098,13 @@ class ContractPdfBuilder {
     }
     this.boldLabelValue("Tài khoản số: ", companyInfo.bankInfo);
     this.boldLabelValue("Mã số thuế: ", companyInfo.mst);
-    this.richText(
-      [
-        { text: "Đại diện là Ông/Bà: ", bold: true },
-        { text: getOwnerName(companyInfo) },
-        ...(companyInfo.role
-          ? [
-              { text: "    Chức vụ: ", bold: true },
-              { text: companyInfo.role },
-            ]
-          : []),
-      ],
-    );
+    this.richText([
+      { text: "Đại diện là Ông/Bà: ", bold: true },
+      { text: getOwnerName(companyInfo) },
+      ...(companyInfo.role
+        ? [{ text: "    Chức vụ: ", bold: true }, { text: companyInfo.role }]
+        : []),
+    ]);
     this.text(`Sau đây gọi tắt là ${shortName}`, { gap: 0.35 });
   }
 
@@ -1337,12 +1362,14 @@ class ContractPdfBuilder {
     const owner = contract.ownerCompanyInfo || {};
     const data = contract.contractData || {};
     const isPersonal = partyType === "personal";
-    const partner = isPersonal ? data.personalInfo || {} : contract.partnerCompanyInfo || {};
+    const partner = isPersonal
+      ? data.personalInfo || {}
+      : contract.partnerCompanyInfo || {};
     const renderedAt = new Date();
 
     this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
     this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
-    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
+
     this.centered(data.title, 14, 0.1, true);
     this.centered(data.subTitle, 10, 0.8);
 
@@ -1397,7 +1424,7 @@ class ContractPdfBuilder {
 
     this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
     this.centered("Độc lập – Tự do – Hạnh phúc", 12, 0.8, true);
-    this.centered(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
+
     this.centered(
       "BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN TUÂN THỦ",
       14,
@@ -1516,7 +1543,7 @@ class ContractPdfBuilder {
 
     this.centered("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
     this.centered("Độc lập – Tự do – Hạnh phúc", 12, 0.8, true);
-    this.centered(`TP.HCM, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8);
+
     this.centered("PHỤ LỤC BẢN CAM KẾT TRÁCH NHIỆM VÀ XÁC NHẬN", 14, 0.1, true);
     this.centered("TUÂN THỦ QUY ĐỊNH HOẠT ĐỘNG LIVESTREAM", 14, 0.2, true);
     this.centered(
@@ -1701,7 +1728,7 @@ class ContractPdfBuilder {
 
     this.centered("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
     this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
-    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8, true);
+
     this.centered("HỢP ĐỒNG NGUYÊN TẮC", 14, 0.1, true);
     this.centered(`Số ${contract.contractNumber}`, 10, 0.1, true);
     this.centered("(Về việc: Bán hàng)", 10, 0.8);
@@ -2231,7 +2258,7 @@ class ContractPdfBuilder {
 
     this.centered("CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM", 14, 0.1, true);
     this.centered("Độc lập - Tự do - Hạnh phúc", 12, 1.2, true);
-    this.centered(`Hôm nay, ${formatLongVietnameseDate(renderedAt)}`, 12, 0.8, true);
+
     this.centered("PHỤ LỤC HỢP ĐỒNG", 14, 0.25, true);
     this.centered(
       `Đính kèm Hợp đồng nguyên tắc số: ${principleContractNumber}`,

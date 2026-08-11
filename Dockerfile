@@ -22,8 +22,8 @@ ENV NODE_ENV=production
 
 # FFmpeg/libass needs fontconfig and real fonts to burn ASS subtitles.
 RUN apk add --no-cache fontconfig ttf-dejavu ttf-liberation
-ENV CONTRACT_FONT_PATH=/usr/share/fonts/TTF/DejaVuSans.ttf
-ENV CONTRACT_BOLD_FONT_PATH=/usr/share/fonts/TTF/DejaVuSans-Bold.ttf
+ENV CONTRACT_FONT_PATH=/app/src/assets/fonts/times.ttf
+ENV CONTRACT_BOLD_FONT_PATH=/app/src/assets/fonts/timesbd.ttf
 
 # Copy built assets and dependencies from builder
 COPY --from=builder /app/package*.json ./
