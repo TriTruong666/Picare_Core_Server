@@ -168,6 +168,27 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isEmail()
     .withMessage("personalInfo.email phải là email hợp lệ"),
+  body(["contractDate", "startDate"])
+    .optional({ nullable: true, checkFalsy: true })
+    .isISO8601()
+    .withMessage("contractDate và startDate phải là ngày ISO8601 hợp lệ"),
+  body(["contractTerm", "workLocation", "salaryInWords"])
+    .optional({ nullable: true })
+    .isString()
+    .withMessage(
+      "contractTerm, workLocation và salaryInWords phải là chuỗi",
+    ),
+  body([
+    "baseSalary",
+    "mealAllowance",
+    "phoneUniformAllowance",
+    "performanceBonus",
+    "transportationAllowance",
+    "totalSalary",
+  ])
+    .optional({ nullable: true })
+    .isFloat({ min: 0 })
+    .withMessage("Các khoản lương và phụ cấp phải là số không âm"),
   body("legalRegulation")
     .optional({ nullable: true })
     .isString()

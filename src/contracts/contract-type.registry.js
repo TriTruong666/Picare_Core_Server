@@ -4,6 +4,7 @@ const livestreamResponsibilityCommitmentContractType = require("./types/livestre
 const livestreamResponsibilityCommitmentAppendixContractType = require("./types/livestream-responsibility-commitment-appendix.contract-type");
 const customOrganizationContractType = require("./types/custom-organization.contract-type");
 const customPersonalContractType = require("./types/custom-personal.contract-type");
+const employmentContractType = require("./types/employment-contract.contract-type");
 const { createGenericContractType } = require("./types/generic.contract-type");
 const {
   normalizeContractDataForResponse,
@@ -50,6 +51,7 @@ register(livestreamResponsibilityCommitmentContractType);
 register(livestreamResponsibilityCommitmentAppendixContractType);
 register(customOrganizationContractType);
 register(customPersonalContractType);
+register(employmentContractType);
 
 function normalizeType(contractType) {
   const rawType = normalizeRawType(contractType);

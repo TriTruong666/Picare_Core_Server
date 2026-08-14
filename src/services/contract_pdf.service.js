@@ -12,36 +12,6 @@ const {
   normalizeProduct: normalizeContractProduct,
 } = require("../contracts/common/contract-input.normalizer");
 
-function resolveAssetPath(fileName) {
-  return path.resolve(__dirname, "..", "..", fileName);
-}
-
-const PICARE_WATERMARK_LOGO_PATH = resolveAssetPath("picare_logo_light.svg");
-const TRUNGHANH_WATERMARK_LOGO_PATH = resolveAssetPath("trunghanh.svg");
-const SIGNATURE_APPEARANCE_THEMES = {
-  PIC: {
-    logoPath: PICARE_WATERMARK_LOGO_PATH,
-    watermarkWidthInset: 6,
-    watermarkHeightScale: 2.2,
-    watermarkYOffset: 8,
-    watermarkOpacity: 0.2,
-  },
-  TH: {
-    logoPath: TRUNGHANH_WATERMARK_LOGO_PATH,
-    watermarkWidthInset: 0.4,
-    watermarkHeightScale: 0.6,
-    watermarkYOffset: 10,
-    watermarkOpacity: 0.16,
-  },
-  default: {
-    logoPath: null,
-    watermarkWidthInset: 6,
-    watermarkHeightScale: 2.2,
-    watermarkYOffset: 8,
-    watermarkOpacity: 0,
-  },
-};
-
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
   path.resolve(__dirname, "../assets/fonts/times.ttf"),
@@ -92,7 +62,6 @@ const BOLD_FONT_FILE_NAMES = [
   "Arial Bold.ttf",
   "arialbd.ttf",
 ];
-const watermarkLogoDataUriPromises = new Map();
 const DEFAULT_SIGNATURE_LENGTH = Number(
   process.env.PDF_SIGNATURE_PLACEHOLDER_LENGTH || 16384,
 );
@@ -264,6 +233,39 @@ function formatMoney(value) {
   }).format(numberValue)} VND`;
 }
 
+function formatTemplateDate(value, long = false) {
+  const rawValue = asText(value).trim();
+  if (!rawValue) return "";
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(rawValue);
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return long
+      ? `ngày ${day} tháng ${month} năm ${year}`
+      : `${day}/${month}/${year}`;
+  }
+
+  const parsedDate = new Date(rawValue);
+  const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  return long ? formatLongVietnameseDate(safeDate) : formatShortDate(safeDate);
+}
+
+function formatTemplateMoney(value) {
+  const rawValue = asText(value).trim();
+  if (!rawValue) return "";
+
+  const numberValue = Number(rawValue.replace(/[.,\s]/g, ""));
+
+  if (!Number.isFinite(numberValue)) {
+    return rawValue;
+  }
+
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(numberValue);
+}
+
 function buildContractFilePrefix(contract) {
   return ContractTypeRegistry.getFilePrefix(contract?.contractType);
 }
@@ -304,16 +306,11 @@ function getDigitalSignatureAppearanceData({
   const identityLine = getSignatureIdentityLine(companyInfo);
   const addressLine = `\u0110\u1ecba ch\u1ec9: ${formatOptionalText(companyInfo.address)}`;
   const timeLine = `Th\u1eddi gian: ${formatVietnameseDateTime(signingTime)}`;
-  const signatureTheme = getSignatureAppearanceTheme(
-    signerType === "partner" ? contract?.ownerCompanyInfo : companyInfo,
-  );
-
   return {
     companyName,
     identityLine,
     addressLine,
     timeLine,
-    signatureTheme,
   };
 }
 function truncatePdfText(value, maxLength) {
@@ -436,50 +433,6 @@ function fitTextForImage(text, fontPath, fontSize, maxWidth) {
   return `${trimmed}...`;
 }
 
-function getSignatureAppearanceTheme(companyInfo = {}) {
-  const companyCode = String(companyInfo.companyCode || "")
-    .trim()
-    .toUpperCase();
-
-  return (
-    SIGNATURE_APPEARANCE_THEMES[companyCode] ||
-    SIGNATURE_APPEARANCE_THEMES.default
-  );
-}
-
-async function getWatermarkLogoDataUri(logoPath) {
-  if (!watermarkLogoDataUriPromises.has(logoPath)) {
-    watermarkLogoDataUriPromises.set(
-      logoPath,
-      fs
-        .readFile(logoPath, "utf8")
-        .then(async (svg) => {
-          const cleanedSvg = svg.replace(
-            /<path[^>]*fill="#FDFDFD"[^>]*\/>\s*/i,
-            "",
-          );
-          const trimmedLogoBuffer = await sharp(Buffer.from(cleanedSvg, "utf8"))
-            .trim({ background: "#ffffff" })
-            .png()
-            .toBuffer();
-
-          return `data:image/png;base64,${trimmedLogoBuffer.toString("base64")}`;
-        })
-        .catch((error) => {
-          if (error?.code === "ENOENT") {
-            throw new Error(
-              ErrorCodes.PDF_WATERMARK_LOGO_NOT_FOUND(logoPath).message,
-            );
-          }
-
-          throw error;
-        }),
-    );
-  }
-
-  return watermarkLogoDataUriPromises.get(logoPath);
-}
-
 async function createDigitalSignatureAppearanceImage({
   width,
   height,
@@ -521,27 +474,9 @@ async function createDigitalSignatureAppearanceImage({
     contentWidth,
   );
   const timeLine = fitTextForImage(data.timeLine, fontPath, 7.4, contentWidth);
-  const logoDataUri = data.signatureTheme.logoPath
-    ? await getWatermarkLogoDataUri(data.signatureTheme.logoPath)
-    : null;
-  const watermarkWidth = Math.max(
-    24,
-    width - data.signatureTheme.watermarkWidthInset,
-  );
-  const watermarkHeight = Math.max(
-    24,
-    height * data.signatureTheme.watermarkHeightScale,
-  );
-  const watermarkX = (width - watermarkWidth) / 2;
-  const watermarkY =
-    (height - watermarkHeight) / 2 + data.signatureTheme.watermarkYOffset;
-  const watermarkMarkup = logoDataUri
-    ? `<image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="${data.signatureTheme.watermarkOpacity}" preserveAspectRatio="none"/>`
-    : "";
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
-  ${watermarkMarkup}
   <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
   <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.2" fill="#111111">${escapeXml(identityLine)}</text>
   <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
@@ -939,7 +874,7 @@ class ContractPdfBuilder {
       bufferPages: true,
       info: {
         Title: `Hợp đồng ${contract.contractNumber}` || "Hợp đồng nguyên tắc",
-        Author: "Picare Việt Nam",
+        Author: contract.ownerCompanyInfo?.companyName || "Contract Hub",
       },
     });
     this.fontPath = fontPath;
@@ -1414,6 +1349,358 @@ class ContractPdfBuilder {
             rightHint: "(Ký, đóng dấu, ghi rõ họ và tên)",
           }
         : {},
+    );
+  }
+
+  renderEmploymentContract(contract) {
+    const doc = this.doc;
+    const owner = contract.ownerCompanyInfo || {};
+    const data = contract.contractData || {};
+    const person = contract.contractData?.personalInfo || {};
+    const blank = (value, fallback = "................") =>
+      formatOptionalText(value, fallback);
+    const contractDate = data.contractDate || contract.createdAt || new Date();
+    const longDate = formatTemplateDate(contractDate, true);
+    const shortDate = (value) => formatTemplateDate(value) || ".../.../....";
+    const money = (value) => {
+      const formatted = formatTemplateMoney(value);
+      return formatted || "................";
+    };
+    const companyName = blank(owner.companyName).toLocaleUpperCase("vi-VN");
+    const employeeName = blank(person.fullName).toLocaleUpperCase("vi-VN");
+    const ownerName = blank(getOwnerName(owner));
+    const paragraphs = (items) =>
+      items.forEach((item) => this.text(item, { gap: 0.12 }));
+    const bullets = (items) => items.forEach((item) => this.bullet(item));
+    const numbered = (items) =>
+      items.forEach((item, index) =>
+        this.text(`${index + 1}. ${item}`, { gap: 0.12 }),
+      );
+    const subheading = (value) => this.text(value, { bold: true, gap: 0.18 });
+    const header = (title) => {
+      const top = doc.page.margins.top;
+      const leftWidth = 225;
+      const rightX = doc.page.width / 2 + 10;
+      const rightWidth = doc.page.width - doc.page.margins.right - rightX;
+
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text(companyName, doc.page.margins.left, top, {
+        width: leftWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text(
+        `Số: ${blank(contract.contractNumber)}`,
+        doc.page.margins.left,
+        top + 28,
+        {
+          width: leftWidth,
+          align: "center",
+        },
+      );
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", rightX, top, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text("Độc lập - Tự do - Hạnh phúc", rightX, top + 17, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text("----------- oOo ----------", rightX, top + 34, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text(`TP. Hồ Chí Minh, ${longDate}`, rightX, top + 51, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.x = doc.page.margins.left;
+      doc.y = top + 84;
+      this.centered(title, 15, 0.7, true);
+    };
+    const partyInformation = () => {
+      subheading(`BÊN A (NGƯỜI SỬ DỤNG LAO ĐỘNG): ${companyName}`);
+      this.labelValue("Trụ sở chính: ", owner.address);
+      this.labelValue("Mã số thuế: ", owner.mst);
+      this.labelValue("Đại diện bởi: ", ownerName);
+      this.labelValue("Chức vụ: ", owner.role);
+      this.labelValue("Điện thoại: ", owner.phone);
+      subheading(`BÊN B (NGƯỜI LAO ĐỘNG): ${employeeName}`);
+      this.richText([
+        { text: "Sinh ngày: ", bold: true },
+        { text: shortDate(person.dateOfBirth) },
+        { text: "    Giới tính: ", bold: true },
+        { text: blank(person.gender) },
+      ]);
+      this.richText([
+        { text: "CCCD/CMTND số: ", bold: true },
+        { text: blank(person.citizenId) },
+        { text: "    Ngày cấp: ", bold: true },
+        { text: shortDate(person.citizenIdIssuedDate) },
+      ]);
+      this.labelValue("Nơi cấp: ", person.citizenIdIssuedPlace);
+      this.labelValue("Nơi thường trú (theo CCCD): ", person.permanentAddress);
+      this.labelValue("Địa chỉ hiện đang sinh sống: ", person.currentAddress);
+      this.labelValue("Mã số thuế (nếu có): ", person.taxCode);
+      this.labelValue("Mã số BHXH (nếu có): ", person.socialInsuranceNumber);
+      this.labelValue(
+        "Người liên lạc trường hợp khẩn cấp: ",
+        person.emergencyContact,
+        { gap: 0.3 },
+      );
+    };
+
+    header("HỢP ĐỒNG LAO ĐỘNG");
+    bullets([
+      "Căn cứ Bộ luật Dân sự số 91/2015/QH13 ban hành ngày 24 tháng 11 năm 2015;",
+      "Căn cứ Bộ luật Lao động số 45/2019/QH14 ban hành ngày 20 tháng 11 năm 2019;",
+      `Căn cứ quy định của ${companyName};`,
+      "Căn cứ khả năng và nhu cầu của hai bên.",
+    ]);
+    this.text(
+      `Hôm nay, ${longDate}, tại văn phòng ${companyName}, chúng tôi gồm các bên sau đây:`,
+      { gap: 0.3 },
+    );
+    partyInformation();
+    this.text(
+      "Hai bên đã thỏa thuận ký kết Hợp đồng lao động (HĐLĐ) và cam kết thực hiện nghiêm túc những điều khoản sau đây:",
+      { gap: 0.3 },
+    );
+
+    this.heading("ĐIỀU 1: THỜI HẠN VÀ CÔNG VIỆC");
+    bullets([
+      `Thời hạn của hợp đồng: Hợp đồng lao động ${blank(data.contractTerm)}.`,
+      `Bắt đầu từ ngày: ${shortDate(data.startDate)}.`,
+      `Địa điểm làm việc: ${blank(data.workLocation)} (và/hoặc các địa điểm khác thuộc mạng lưới của Công ty theo Quyết định của Công ty từng thời kỳ).`,
+      `Chức danh chuyên môn/vị trí công việc: ${blank(person.position)}.`,
+      `Phòng ban/Bộ phận: ${blank(person.department)}.`,
+      "Công việc phải thực hiện: theo bảng mô tả công việc và/hoặc sự phân công của Ban Giám đốc/Người được ủy quyền.",
+    ]);
+
+    this.heading("ĐIỀU 2: THỜI GIAN LÀM VIỆC VÀ BẢO HỘ LAO ĐỘNG");
+    subheading("1. Thời gian làm việc:");
+    bullets([
+      "Buổi sáng: 8h00 – 12h00 từ thứ 2 đến sáng thứ 7.",
+      "Buổi chiều: 13h30 – 17h00 từ thứ 2 đến thứ 7 (Thứ 7: nếu có công việc, người lao động đến Công ty hoặc làm việc tại nhà theo sự sắp xếp của quản lý và bảo đảm tiến độ công việc).",
+    ]);
+    paragraphs([
+      "2. Được cấp phát những thiết bị, dụng cụ làm cần thiết phục vụ cho công việc để nhân viên có thể hoàn thành công việc một cách có hiệu quả nhất. Nhân viên có trách nhiệm bảo quản, giữ gìn trang thiết bị ở điều kiện tốt nhất.",
+      "3. Phương tiện đi lại: Tự túc.",
+      "4. Điều kiện an toàn và vệ sinh lao động tại nơi làm việc theo quy định của pháp luật hiện hành.",
+    ]);
+
+    this.heading("ĐIỀU 3: MỨC LƯƠNG VÀ CÁC KHOẢN LIÊN QUAN");
+    bullets([
+      "Phương tiện đi lại làm việc: Cá nhân tự túc.",
+      `Mức lương chính hoặc tiền công: ${money(data.baseSalary)} VND/tháng (Bằng chữ: ${blank(data.salaryInWords)}).`,
+      "Hình thức trả lương: Tiền mặt hoặc chuyển khoản.",
+      "Các khoản phụ cấp: Không.",
+      "Các khoản phúc lợi: Theo quy định của Công ty.",
+      "Chế độ nâng lương: Theo quy định của Công ty.",
+      "Chế độ nghỉ ngơi (nghỉ hàng tuần, phép năm, lễ tết...): Theo quy định pháp luật hiện hành.",
+      "Chế độ đào tạo: Theo quy định của Công ty.",
+      "Thuế TNCN, BHYT, BHXH, BHTN (nếu có): Theo quy định của pháp luật hiện hành.",
+      "Những thỏa thuận khác: Theo Phụ lục Hợp đồng (nếu có).",
+    ]);
+    subheading("Các khoản bổ sung: Không.");
+    bullets([
+      "Tiền tạm ứng hàng tháng: 0 VND/tháng. Mức tiền cụ thể hàng tháng phụ thuộc vào tỷ lệ % hoàn thành kế hoạch và quy định về tiền thưởng hiệu quả công việc của Công ty từng thời điểm.",
+      "Tiền thưởng sáng kiến: Mức tiền cụ thể hàng tháng phụ thuộc vào số lượng sáng kiến mỗi tháng và quy định về tiền thưởng sáng kiến của Công ty từng thời điểm.",
+      "Tiền thưởng doanh thu: Mức tiền cụ thể hàng tháng phụ thuộc vào doanh số đảm nhận và quy định về thưởng doanh số của Công ty từng thời điểm.",
+    ]);
+
+    this.heading("ĐIỀU 4: HÌNH THỨC VÀ THỜI HẠN TRẢ LƯƠNG");
+    subheading("1. Thời hạn trả lương:");
+    bullets([
+      "Được trả lương vào các ngày 05 đến ngày 10 của tháng kế tiếp dựa theo mức lương, các khoản phụ cấp, các chế độ phúc lợi và các khoản bổ sung khác (như: thưởng cải tiến, thưởng hoàn thành công việc, thưởng doanh thu) hàng tháng, sau khi trừ thuế thu nhập cá nhân (TNCN), tiền bảo hiểm xã hội/bảo hiểm y tế/bảo hiểm thất nghiệp (BHXH/BHYT/BHTN) người lao động chịu.",
+      "Trường hợp tổng thu nhập trong năm lớn hơn tổng tiền lương hàng tháng đã nhận thì phần chênh lệch sẽ được quyết toán lại sau khi hoàn thành quyết toán thuế cho khách hàng và được chi trả trong vòng 15 ngày sau khi hoàn thành quyết toán thuế.",
+      "Trường hợp kết thúc hợp đồng lao động giữa năm tài chính, sau khi hoàn tất thủ tục bàn giao thì phần chênh lệch sẽ được quyết toán trong vòng 30 ngày.",
+    ]);
+
+    this.heading("ĐIỀU 5: QUYỀN LỢI VÀ NGHĨA VỤ CỦA NGƯỜI LAO ĐỘNG");
+    subheading("A. QUYỀN LỢI");
+    numbered([
+      "Phương tiện đi lại: Cá nhân tự túc.",
+      "Cấp phát những dụng cụ làm việc gồm: Theo tính chất và phân công công việc.",
+      "Chế độ nghỉ ngơi: Nghỉ hàng tuần và các ngày phép, ngày lễ, ngày tết theo quy định của Công ty và Bộ luật Lao động. Nghỉ phép năm: 12 ngày phép một năm, với mỗi tháng có 01 ngày nghỉ phép có hưởng lương khi được ký hợp đồng lao động có thời hạn từ 01 năm trở lên. Vì yêu cầu công việc mà người lao động chưa nghỉ hết phép năm thì Công ty không thanh toán số tiền lương các ngày phép tồn của năm trước mà chỉ xem xét giải quyết cho người lao động nghỉ bù phép tồn của năm trước đến hết Quý 1 năm sau.",
+      "Chế độ bảo hiểm: Bảo hiểm xã hội, bảo hiểm y tế, bảo hiểm thất nghiệp theo quy định của pháp luật Việt Nam.",
+      "Chế độ đào tạo: Được Công ty đào tạo nâng cao năng lực chuyên môn và kỹ năng công việc trong trường hợp cần thiết. Ngoài ra, do yêu cầu của công việc người lao động phải hoàn thành các khóa học theo sự điều động của cấp trên.",
+      "Chế độ nâng lương: Lương sẽ được xem xét lại hàng năm và có hiệu lực kể từ tháng điều chỉnh, được thể hiện bằng Quyết định điều chỉnh lương của Ban Giám đốc Công ty hoặc Phụ lục kèm theo HĐLĐ.",
+      "Chế độ thưởng: Ngoài lương và phụ cấp, người lao động sẽ được thưởng theo quy định của pháp luật lao động và Nội quy Công ty.",
+      "Nghỉ việc: Người lao động có quyền đơn phương chấm dứt hợp đồng và được coi là không vi phạm hợp đồng lao động khi thuộc một trong những trường hợp được quy định theo Luật Lao động hiện hành; có đơn xin thôi việc trước ít nhất 30 ngày làm việc kể từ ngày nộp đơn gửi cấp trên để Công ty có kế hoạch tìm nhân sự thay thế; đồng thời thanh quyết toán các khoản tài chính liên quan, bàn giao trang thiết bị, dụng cụ và công việc được giao trước khi chấm dứt hợp đồng.",
+    ]);
+    subheading("B. NGHĨA VỤ");
+    numbered([
+      "Thực hiện công việc với sự tận tâm, tận lực và trung thực, đảm bảo hoàn thành công việc với hiệu quả cao nhất theo sự phân công, điều hành của Ban Giám đốc Công ty và các cá nhân được Ban Giám đốc bổ nhiệm hoặc ủy quyền phụ trách.",
+      "Chấp hành mọi sự điều động của Lãnh đạo Công ty khi có yêu cầu.",
+      "Thực hiện ký cam kết bảo mật đầy đủ theo quy định của Công ty. Tuyệt đối trung thành với Công ty, tuyệt đối giữ bí mật và không được để lộ thông tin của Công ty, đối tác giao dịch và khách hàng cho đơn vị hay cá nhân khác trong suốt thời gian làm việc theo hợp đồng lao động này và sau khi thôi việc tại Công ty.",
+      "Nắm rõ và chấp hành nghiêm túc kỷ luật lao động, an toàn lao động, vệ sinh lao động, PCCC (phòng cháy chữa cháy), văn hóa Công ty, nội quy lao động và các chủ trương, chính sách của Công ty.",
+      "Bồi thường vi phạm và vật chất khi có hành vi tiết lộ thông tin của Công ty, gây tổn hại nghiêm trọng đến Công ty theo mức độ vi phạm; gây thiệt hại nghiêm trọng đến thiết bị, tài sản của Công ty. Công ty có quyền chấm dứt hợp đồng này trước thời hạn.",
+      "Đóng các loại bảo hiểm bắt buộc, thuế thu nhập cá nhân đầy đủ theo quy định của pháp luật.",
+      "Cam kết tham gia đầy đủ các chương trình đào tạo tập trung tại Công ty hoặc được cử đi đào tạo. Trường hợp được cử đi đào tạo, người lao động phải hoàn thành khóa học đúng thời hạn.",
+      "Người lao động có chứng chỉ hành nghề (kiểm toán viên, kế toán viên, đại lý thuế, thẩm định giá, luật sư) phải hoàn tất đầy đủ số giờ cập nhật kiến thức tối thiểu để đảm bảo hành nghề cho các năm sau.",
+      "Kịp thời thông báo cho Công ty những thay đổi về cá nhân như nhân thân, địa chỉ thường trú/tạm trú dài hạn, trình độ học vấn, sức khỏe và các thông tin cá nhân có liên quan khác được đề cập trong HĐLĐ và các phụ lục HĐLĐ.",
+      "Trước khi chấm dứt hợp đồng, quyết toán các khoản tài chính, thanh toán các khoản nợ còn tồn đọng, bàn giao trang thiết bị, dụng cụ và công việc được giao cho người tiếp nhận do lãnh đạo đơn vị chỉ định trong thời hạn quy định của Công ty.",
+      "Hoàn thành số liệu cho khách hàng đến tháng nghỉ việc.",
+    ]);
+    this.text(
+      `Người lao động buộc phải đọc toàn bộ Nội quy Công ty và tuân thủ Nội quy đó. Mọi hành vi vi phạm nội quy sẽ được xử lý theo quy định và không được lấy lý do không biết đến quy định trong Nội quy lao động của ${companyName}.`,
+      { gap: 0.2 },
+    );
+
+    this.heading("ĐIỀU 6: NGHĨA VỤ VÀ QUYỀN HẠN CỦA NGƯỜI SỬ DỤNG LAO ĐỘNG");
+    subheading("A. NGHĨA VỤ");
+    numbered([
+      "Bảo đảm việc làm và thực hiện đầy đủ những điều khoản trong hợp đồng.",
+      "Thanh toán đầy đủ, đúng thời hạn các chế độ và quyền lợi cho người lao động theo hợp đồng này.",
+      "Trường hợp chậm thanh toán các chế độ và quyền lợi thì người sử dụng lao động phải trả lãi của khoản tiền chậm thanh toán theo lãi suất Ngân hàng Nhà nước Việt Nam.",
+      "Hướng dẫn, đào tạo người lao động về quy chế và quy định của Công ty.",
+    ]);
+    subheading("B. QUYỀN HẠN");
+    numbered([
+      "Điều hành người lao động hoàn thành công việc theo hợp đồng; bố trí, điều chuyển công việc theo đúng chức năng chuyên môn, cử đi công tác hoặc điều chuyển nơi công tác.",
+      "Chuyển tạm thời lao động, ngừng việc, thay đổi, tạm thời chấm dứt HĐLĐ và áp dụng các biện pháp kỷ luật theo pháp luật hiện hành và nội quy Công ty trong thời gian hợp đồng còn giá trị.",
+      "Tạm hoãn, chấm dứt hợp đồng, kỷ luật người lao động theo đúng quy định của pháp luật và nội quy lao động của Công ty.",
+      "Yêu cầu bồi thường, khiếu nại với cơ quan nhà nước để bảo vệ quyền lợi nếu người lao động vi phạm pháp luật hoặc các điều khoản của hợp đồng này.",
+      "Trích thuế thu nhập cá nhân, các khoản bảo hiểm bắt buộc theo quy định pháp luật và bất kỳ nghĩa vụ pháp lý nào khác của người lao động từ tiền lương, tiền công để nộp cho cơ quan nhà nước có thẩm quyền.",
+    ]);
+
+    this.heading("ĐIỀU 7: ĐƠN PHƯƠNG CHẤM DỨT HĐLĐ");
+    subheading("1. Người sử dụng lao động");
+    this.text(
+      "Người sử dụng lao động có quyền đơn phương chấm dứt HĐLĐ trong những trường hợp sau:",
+    );
+    bullets([
+      "Người lao động thường xuyên không hoàn thành công việc theo sự phân công của Công ty. Mức độ hoàn thành và cách thức đánh giá áp dụng theo Nội quy lao động, bản Phân công công việc và các quy định nội bộ khác của Công ty.",
+      "Người lao động ốm đau đã điều trị 12 tháng liền, không đủ sức khỏe để thực hiện công việc.",
+      "Do thiên tai, hỏa hoạn, dịch bệnh nguy hiểm, địch họa hoặc di dời, thu hẹp sản xuất, kinh doanh theo yêu cầu của cơ quan nhà nước có thẩm quyền mà Công ty đã tìm mọi biện pháp khắc phục nhưng vẫn buộc phải giảm chỗ làm việc.",
+      "Người lao động có hành vi gây thiệt hại nghiêm trọng về tài sản, lợi ích của Công ty và các cam kết bảo mật với Công ty.",
+      "Người lao động tự ý bỏ việc không có lý do chính đáng từ 05 ngày làm việc liên tục trở lên hoặc tổng cộng 20 ngày trong một năm.",
+      "Người lao động cung cấp không trung thực thông tin theo khoản 2 Điều 16 Bộ luật Lao động 2019 khi giao kết HĐLĐ, làm ảnh hưởng đến việc tuyển dụng.",
+      "Người lao động vi phạm pháp luật hình sự hoặc bị cấm làm công việc ghi trong HĐLĐ theo bản án, quyết định của Tòa án đã có hiệu lực pháp luật.",
+    ]);
+    subheading("2. Người lao động");
+    this.text(
+      "Người lao động được đơn phương chấm dứt HĐLĐ trước thời hạn trong những trường hợp sau:",
+    );
+    bullets([
+      "Không được bố trí theo đúng công việc hoặc không được bảo đảm các điều kiện làm việc đã thỏa thuận trong hợp đồng.",
+      "Không được trả công đầy đủ hoặc trả công không đúng thời hạn đã thỏa thuận trong hợp đồng.",
+      "Bị ngược đãi, đánh đập, nhục mạ, bị hành vi làm ảnh hưởng đến sức khỏe, nhân phẩm, danh dự; bị cưỡng bức lao động hoặc quấy rối tình dục tại nơi làm việc.",
+      "Được bầu làm nhiệm vụ chuyên trách ở các cơ quan dân cử hoặc được bổ nhiệm giữ chức vụ trong bộ máy Nhà nước.",
+      "Người lao động nữ có thai phải nghỉ việc theo chỉ định của bác sĩ.",
+      "Người lao động bị ốm đau, tai nạn đã điều trị 03 tháng liền mà khả năng lao động chưa được hồi phục.",
+      "Người lao động phải đảm bảo thời hạn báo trước ít nhất 30 ngày đối với HĐLĐ xác định thời hạn 01 năm.",
+    ]);
+
+    this.heading("ĐIỀU 8: THỎA THUẬN KHÔNG CẠNH TRANH");
+    numbered([
+      "Trong suốt thời gian làm việc tại Công ty và 12 tháng sau khi nghỉ việc, người lao động không được làm việc cho các công ty đối thủ hoặc cung cấp dịch vụ cho khách hàng của Công ty; không được tiết lộ bất kỳ thông tin nào liên quan đến hoạt động kinh doanh, tài chính hoặc khách hàng của Công ty.",
+      "Nếu vi phạm điều khoản này, Công ty có quyền yêu cầu bồi thường thiệt hại bằng 05 (năm) tháng lương quy định tại Điều 3 của hợp đồng này mà người lao động nhận gần nhất tính đến khi nghỉ việc.",
+    ]);
+
+    this.heading(
+      "ĐIỀU 9: SỬ DỤNG HÌNH ẢNH VÀ THÔNG TIN CÁ NHÂN CỦA NGƯỜI LAO ĐỘNG",
+    );
+    subheading("1. Mục đích và thời gian sử dụng hình ảnh, thông tin cá nhân");
+    this.bullet(
+      "Người lao động đồng ý rằng trong thời gian làm việc và sau khi chấm dứt hợp đồng lao động, Công ty có quyền tiếp tục sử dụng hình ảnh, video và thông tin cá nhân được thu thập trong quá trình làm việc để phục vụ truyền thông nội bộ, quảng bá và tiếp thị sản phẩm, dịch vụ của Công ty, bao gồm đăng tải trên các kênh truyền thông, website, mạng xã hội và các ấn phẩm của Công ty.",
+    );
+    subheading("2. Quyền yêu cầu ngừng sử dụng");
+    bullets([
+      "Người lao động có quyền yêu cầu Công ty ngừng sử dụng hình ảnh và thông tin cá nhân sau khi chấm dứt hợp đồng bằng thông báo văn bản. Công ty sẽ ngừng sử dụng trong các hoạt động tương lai kể từ ngày chấm dứt hợp đồng, nhưng không có nghĩa vụ gỡ bỏ hoặc thu hồi tài liệu, hình ảnh, video đã phát hành hoặc đăng tải trước đó, đặc biệt khi nội dung đã lan truyền rộng rãi hoặc được bên thứ ba sử dụng lại.",
+      "Người lao động hiểu và chấp nhận việc kiểm soát toàn bộ sự lan truyền thông tin, hình ảnh trên mạng xã hội và các kênh bên ngoài là rất khó khăn; Công ty không chịu trách nhiệm về hình ảnh đã được bên thứ ba phát hành lại.",
+    ]);
+    subheading("3. Cam kết của Công ty");
+    this.bullet(
+      "Công ty chỉ sử dụng hình ảnh và thông tin cá nhân của người lao động vào mục đích hợp pháp và không chuyển giao cho bên thứ ba ngoài mục đích nêu trên nếu không có sự đồng ý của người lao động.",
+    );
+    subheading("4. Trách nhiệm của Công ty đối với yêu cầu gỡ bỏ");
+    this.bullet(
+      "Người lao động đồng ý rằng Công ty không chịu trách nhiệm đối với việc sử dụng lại hình ảnh bởi các bên thứ ba mà Công ty không kiểm soát và không chịu trách nhiệm gỡ bỏ các nội dung hình ảnh, video đã phát hành trước đó.",
+    );
+
+    this.heading("ĐIỀU 10: NHỮNG THỎA THUẬN KHÁC");
+    numbered([
+      "Thông tin về tiền lương, tiền công phải được bảo mật.",
+      "Người lao động đồng ý và chấp thuận các nội dung dưới đây.",
+      "Khi Công ty cơ cấu, thành lập mới, sắp xếp lại tổ chức, đổi mới công nghệ hoặc thay đổi chiến lược kinh doanh phù hợp thực tiễn, Công ty có quyền điều chuyển người lao động sang vị trí hoặc công việc khác phù hợp với khả năng, trình độ và có trách nhiệm đào tạo theo pháp luật hiện hành.",
+      "Sẵn sàng đi công tác hoặc thay đổi địa điểm làm việc đến địa phương khác, Chi nhánh/Văn phòng đại diện khác trong hệ thống theo sự điều hành của Công ty.",
+      "Những sáng kiến, sáng tạo của người lao động được thẩm định và áp dụng trong công việc thuộc tài sản và quyền khai thác của Công ty.",
+      "Tham gia đầy đủ các khóa đào tạo định kỳ online và đào tạo tập trung theo lịch của Công ty. Trường hợp vắng mặt từ 02 buổi/tháng và 05 buổi/năm cộng dồn không có lý do chính đáng thì chấp thuận mọi hình thức xử lý từ Công ty.",
+      "Nếu một bên có nhu cầu thay đổi nội dung HĐLĐ phải báo cho bên kia trước ít nhất 05 ngày và ký Phụ lục theo pháp luật. Trong thời gian thỏa thuận, hai bên vẫn tuân theo HĐLĐ đã ký.",
+      "Người lao động đồng ý cho Công ty, với tư cách người sử dụng lao động, tiết lộ thông tin cá nhân bao gồm nhưng không giới hạn họ tên, địa chỉ, quá trình làm việc, lương thưởng và các thông tin liên quan đến công việc cho các tổ chức quy định dưới đây.",
+      "Các đơn vị liên kết, đơn vị trực thuộc Công ty (bao gồm Chi nhánh, Văn phòng đại diện) và các bên tư vấn về pháp luật, quản trị của Công ty.",
+      "Các đối tác, nhà cung cấp dịch vụ hoặc các bên khác với điều kiện Công ty yêu cầu các đối tượng này tuân thủ bảo mật.",
+    ]);
+
+    this.heading("ĐIỀU 11: GIẢI QUYẾT TRANH CHẤP");
+    numbered([
+      "Những vấn đề lao động khác không ghi trong hợp đồng này áp dụng theo quy chế, nội quy lao động của Công ty và pháp luật lao động Việt Nam có hiệu lực tại thời điểm ký hợp đồng.",
+      "Trong quá trình thực hiện hợp đồng nếu có tình huống phát sinh, các bên giải quyết trên cơ sở thương lượng và hòa giải.",
+      "Nếu không thể hòa giải, vụ việc được giải quyết tại Tòa án nhân dân có thẩm quyền tại Thành phố Hồ Chí Minh.",
+    ]);
+
+    this.heading("ĐIỀU 12: ĐIỀU KHOẢN THI HÀNH");
+    numbered([
+      "Những vấn đề về lao động không ghi trong HĐLĐ này áp dụng theo Thỏa ước lao động tập thể, nội quy lao động và pháp luật lao động.",
+      "Mọi thỏa thuận trong các HĐLĐ khác hoặc văn bản trước đây trái với thỏa thuận trong HĐLĐ này đương nhiên hết hiệu lực.",
+      "Hợp đồng này được các bên hoàn toàn tự nguyện thỏa thuận và cùng ký kết trong trạng thái tinh thần tỉnh táo, không bị lừa dối hay ép buộc, nhằm đảm bảo lợi ích của mỗi bên.",
+      "Khi hai bên ký Phụ lục HĐLĐ thì nội dung của Phụ lục có giá trị như các nội dung của hợp đồng này.",
+      "Hợp đồng được lập thành 02 (hai) bản có giá trị như nhau, Công ty giữ 01 (một) bản, người lao động giữ 01 (một) bản để thực hiện và có hiệu lực kể từ ngày ký.",
+      `Hợp đồng được lập tại Văn phòng Công ty vào ${longDate}.`,
+    ]);
+    this.signatureArea(
+      owner,
+      { ownerName: person.fullName },
+      {
+        leftTitle: "NGƯỜI SỬ DỤNG LAO ĐỘNG",
+        rightTitle: "NGƯỜI LAO ĐỘNG",
+        rightHint: "(Ký, ghi rõ họ và tên)",
+      },
+    );
+
+    doc.addPage();
+    header("PHỤ LỤC HỢP ĐỒNG LAO ĐỘNG");
+    this.text(
+      `Hôm nay, ${longDate}, tại văn phòng ${companyName}, chúng tôi gồm các bên sau đây:`,
+      { gap: 0.3 },
+    );
+    partyInformation();
+    this.text(
+      `Căn cứ Hợp đồng lao động số ${blank(contract.contractNumber)} ký ${longDate} và nhu cầu sử dụng lao động, hai bên cùng nhau thỏa thuận thay đổi một số nội dung của hợp đồng đã ký như sau:`,
+      { gap: 0.3 },
+    );
+    this.heading("ĐIỀU 1: NỘI DUNG THAY ĐỔI");
+    subheading("1.1. Tiền lương, chế độ, phúc lợi, thưởng:");
+    bullets([
+      `Mức lương cơ bản: ${money(data.baseSalary)} đồng.`,
+      `Tiền ăn giữa ca: ${money(data.mealAllowance)} đồng.`,
+      `Hỗ trợ điện thoại + đồng phục: ${money(data.phoneUniformAllowance)} đồng.`,
+      `Thưởng hiệu quả công việc: ${money(data.performanceBonus)} đồng.`,
+      `Hỗ trợ xăng xe: ${money(data.transportationAllowance)} đồng.`,
+      `Tổng cộng: ${money(data.totalSalary)} đồng.`,
+      "Lương làm thêm giờ: Được tính theo quy định của pháp luật lao động và quy định của Công ty.",
+      "Lương tháng 13: Người lao động được hưởng tháng lương 13 và các khoản tương đương lương khác (nếu có) tùy theo hiệu quả công việc và kết quả kinh doanh của Công ty trong năm.",
+      "BHXH, BHYT, BHTN: Theo quy định của Luật BHXH hiện hành về mức tham gia đóng và tỷ lệ đóng BHXH, BHYT, BHTN cho người lao động.",
+      "Thuế TNCN phát sinh dựa trên tổng thu nhập hàng tháng của người lao động (nếu có) sẽ do người lao động chi trả và Công ty khấu trừ vào lương để trích nộp theo quy định.",
+    ]);
+    this.heading("ĐIỀU 2: THỜI GIAN THỰC HIỆN");
+    bullets([
+      "Phụ lục hợp đồng có hiệu lực kể từ ngày ký cho đến khi Hợp đồng lao động đã ký kết hết hạn.",
+      `Phụ lục này là bộ phận không thể tách rời của Hợp đồng lao động số ${blank(contract.contractNumber)}, được làm thành hai bản có giá trị như nhau, mỗi bên giữ một bản và là cơ sở giải quyết khi có tranh chấp lao động.`,
+      `Phụ lục Hợp đồng này được lập tại ${companyName}, ${longDate}.`,
+    ]);
+    this.signatureArea(
+      owner,
+      { ownerName: person.fullName },
+      {
+        leftTitle: "NGƯỜI SỬ DỤNG LAO ĐỘNG",
+        rightTitle: "NGƯỜI LAO ĐỘNG",
+        rightHint: "(Ký, ghi rõ họ và tên)",
+      },
     );
   }
 
@@ -2425,7 +2712,7 @@ class ContractPdfService {
       y -= 24;
     };
 
-    page.drawText("PICARE DIGITAL SIGNATURE CONFIRMATION", {
+    page.drawText("DIGITAL SIGNATURE CONFIRMATION", {
       x: marginX,
       y,
       size: 16,
@@ -2536,7 +2823,7 @@ class ContractPdfService {
 
   static getPdfObjectBody(buffer, objectNumber) {
     const objectPattern = new RegExp(
-      `${objectNumber}\\s+0\\s+obj\\s*([\\s\\S]*?)\\s*endobj`,
+      `(?:^|\\r?\\n)${objectNumber}\\s+0\\s+obj\\s*([\\s\\S]*?)\\s*endobj`,
       "g",
     );
     let match;
@@ -2657,7 +2944,7 @@ class ContractPdfService {
 /SubFilter /adbe.pkcs7.detached
 ${byteRangePlaceholder}
 /Contents <${signatureHexPlaceholder}>
-/Reason (Picare contract ${escapePdfString(signerType || "digital")} signature)
+/Reason (Contract ${escapePdfString(signerType || "digital")} signature)
 /M (${formatPdfDate(signingTime)})
 /ContactInfo ()
 /Name (${escapePdfString(signerName)})
@@ -2854,14 +3141,14 @@ ${xrefOffset}
     pdflibAddPlaceholder({
       pdfDoc,
       pdfPage: targetPage,
-      reason: `Picare contract ${signerType || "digital"} signature`,
+      reason: `Contract ${signerType || "digital"} signature`,
       contactInfo: "",
       name: normalizeVietnameseText(signerName),
       location: "Vietnam",
       signingTime,
       signatureLength,
       byteRangePlaceholder: BYTE_RANGE_PLACEHOLDER,
-      appName: "Picare Core Hub",
+      appName: "Contract Hub",
       widgetRect,
     });
 

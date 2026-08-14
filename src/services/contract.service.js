@@ -2052,7 +2052,9 @@ class ContractService {
     }
 
     const partnerEmail =
-      contract.partnerCompanyInfo?.email || "partner@example.com";
+      contract.contractData?.personalInfo?.email ||
+      contract.partnerCompanyInfo?.email ||
+      "partner@example.com";
 
     // Sinh secure JWT token có thời gian hết hạn là 7 ngày cho đối tác
     const token = JWTService.signJson(
