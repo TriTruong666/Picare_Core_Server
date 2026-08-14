@@ -93,8 +93,12 @@ module.exports = {
     const startDateValue = getInputValue(input, "probationStartDate");
     const endDateValue = getInputValue(input, "probationEndDate");
     if (hasValue(startDateValue) && hasValue(endDateValue)) {
-      const startDate = new Date(`${String(startDateValue).slice(0, 10)}T00:00:00Z`);
-      const endDate = new Date(`${String(endDateValue).slice(0, 10)}T00:00:00Z`);
+      const startDate = new Date(
+        `${String(startDateValue).slice(0, 10)}T00:00:00Z`,
+      );
+      const endDate = new Date(
+        `${String(endDateValue).slice(0, 10)}T00:00:00Z`,
+      );
       const durationInDays =
         (endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000);
 
