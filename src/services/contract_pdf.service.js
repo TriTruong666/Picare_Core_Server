@@ -1961,8 +1961,8 @@ class ContractPdfBuilder {
       owner,
       { ownerName: person.fullName },
       {
-        leftTitle: "BÊN A - NGƯỜI SỬ DỤNG LAO ĐỘNG",
-        rightTitle: "BÊN B - NGƯỜI LAO ĐỘNG",
+        leftTitle: "NGƯỜI SỬ DỤNG LAO ĐỘNG",
+        rightTitle: "NGƯỜI LAO ĐỘNG",
         leftHint: "(Ký, ghi rõ họ tên, đóng dấu)",
         rightHint: "(Ký, ghi rõ họ và tên)",
       },
