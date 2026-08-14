@@ -5,20 +5,21 @@ const livestreamResponsibilityCommitmentAppendixContractType = require("./types/
 const customOrganizationContractType = require("./types/custom-organization.contract-type");
 const customPersonalContractType = require("./types/custom-personal.contract-type");
 const employmentContractType = require("./types/employment-contract.contract-type");
+const probationContractType = require("./types/probation-contract.contract-type");
 const { createGenericContractType } = require("./types/generic.contract-type");
 const {
   normalizeContractDataForResponse,
 } = require("./common/contract-input.normalizer");
-const {
-  buildContractDetailRows,
-} = require("./common/contract-detail.builder");
+const { buildContractDetailRows } = require("./common/contract-detail.builder");
 
 const DEFAULT_CONTRACT_TYPE = principleContractType.type;
 const definitions = new Map();
 const aliases = new Map();
 
 function normalizeRawType(contractType) {
-  return String(contractType || DEFAULT_CONTRACT_TYPE).trim().toLowerCase();
+  return String(contractType || DEFAULT_CONTRACT_TYPE)
+    .trim()
+    .toLowerCase();
 }
 
 function register(definition) {
@@ -52,6 +53,7 @@ register(livestreamResponsibilityCommitmentAppendixContractType);
 register(customOrganizationContractType);
 register(customPersonalContractType);
 register(employmentContractType);
+register(probationContractType);
 
 function normalizeType(contractType) {
   const rawType = normalizeRawType(contractType);

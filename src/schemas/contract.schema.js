@@ -168,16 +168,16 @@ const createContractTemplateSchema = [
     .optional({ nullable: true, checkFalsy: true })
     .isEmail()
     .withMessage("personalInfo.email phải là email hợp lệ"),
-  body(["contractDate", "startDate"])
+  body(["contractDate", "startDate", "probationStartDate", "probationEndDate"])
     .optional({ nullable: true, checkFalsy: true })
     .isISO8601()
-    .withMessage("contractDate và startDate phải là ngày ISO8601 hợp lệ"),
+    .withMessage(
+      "contractDate, startDate, probationStartDate và probationEndDate phải là ngày ISO8601 hợp lệ",
+    ),
   body(["contractTerm", "workLocation", "salaryInWords"])
     .optional({ nullable: true })
     .isString()
-    .withMessage(
-      "contractTerm, workLocation và salaryInWords phải là chuỗi",
-    ),
+    .withMessage("contractTerm, workLocation và salaryInWords phải là chuỗi"),
   body([
     "baseSalary",
     "mealAllowance",
@@ -185,6 +185,7 @@ const createContractTemplateSchema = [
     "performanceBonus",
     "transportationAllowance",
     "totalSalary",
+    "probationSalary",
   ])
     .optional({ nullable: true })
     .isFloat({ min: 0 })
@@ -258,10 +259,7 @@ const createContractTemplateSchema = [
 ];
 
 const uploadContractSchema = [
-  body("file")
-    .isString()
-    .notEmpty()
-    .withMessage("file base64 là bắt buộc"),
+  body("file").isString().notEmpty().withMessage("file base64 là bắt buộc"),
   body("fileName")
     .isString()
     .trim()

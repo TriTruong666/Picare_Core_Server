@@ -39,7 +39,7 @@ const credentialUpload = multer({
  * /api/v1/contracts:
  *   post:
  *     summary: Tạo hợp đồng theo loại hợp đồng
- *     description: Tạo hợp đồng ở trạng thái nháp. contractType được resolve qua contract type registry; employment_contract được dựng PDF động hoàn toàn và có phụ lục liền kèm, các type chưa đăng ký dùng generic builder với dữ liệu động trong contractData/details.
+ *     description: Tạo hợp đồng ở trạng thái nháp. contractType được resolve qua contract type registry; employment_contract và probation_contract được dựng PDF động hoàn toàn, các type chưa đăng ký dùng generic builder với dữ liệu động trong contractData/details.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -66,7 +66,7 @@ const credentialUpload = multer({
  *                 description: Thông tin đối tác. Bắt buộc với contractType=principle.
  *               personalInfo:
  *                 type: object
- *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal hoặc employment_contract thay cho partnerCompanyInfo.
+ *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract hoặc probation_contract thay cho partnerCompanyInfo.
  *               title:
  *                 type: string
  *                 description: Tiêu đề bắt buộc của custom_organization và custom_personal.
@@ -91,7 +91,7 @@ const credentialUpload = multer({
  *               contractDate:
  *                 type: string
  *                 format: date
- *                 description: Ngày lập hợp đồng lao động và phụ lục. Dùng cho employment_contract.
+ *                 description: Ngày lập hợp đồng. Dùng cho employment_contract và probation_contract.
  *               contractTerm:
  *                 type: string
  *                 description: Loại/thời hạn hợp đồng lao động.
@@ -99,9 +99,19 @@ const credentialUpload = multer({
  *                 type: string
  *                 format: date
  *                 description: Ngày bắt đầu làm việc.
+ *               probationStartDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Ngày bắt đầu thử việc.
+ *               probationEndDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Ngày kết thúc thử việc.
  *               workLocation:
  *                 type: string
  *               baseSalary:
+ *                 type: number
+ *               probationSalary:
  *                 type: number
  *               salaryInWords:
  *                 type: string
@@ -274,6 +284,40 @@ const credentialUpload = multer({
  *                 performanceBonus: 1000000
  *                 transportationAllowance: 200000
  *                 totalSalary: 10000000
+ *             probationContract:
+ *               summary: Hợp đồng thử việc
+ *               value:
+ *                 contractType: probation_contract
+ *                 ownerCompanyInfo:
+ *                   companyCode: PIC
+ *                   companyName: CÔNG TY TNHH PICARE VIỆT NAM
+ *                   address: 38/11 Nguyễn Giản Thanh, Phường Hòa Hưng, TP.HCM
+ *                   phone: "0916167216"
+ *                   email: hr@picare.vn
+ *                   mst: "0315127259"
+ *                   ownerName: Nguyễn Thành Trung
+ *                   role: Giám đốc điều hành
+ *                 personalInfo:
+ *                   fullName: Nguyễn Văn A
+ *                   email: nguyenvana@example.com
+ *                   dateOfBirth: 2000-11-18
+ *                   gender: Nam
+ *                   citizenId: "068300006986"
+ *                   citizenIdIssuedDate: 2021-11-12
+ *                   citizenIdIssuedPlace: Cục Cảnh sát QLHC về TTXH
+ *                   permanentAddress: TP.HCM
+ *                   currentAddress: TP.HCM
+ *                   taxCode: null
+ *                   socialInsuranceNumber: null
+ *                   emergencyContact: null
+ *                   position: Nhân viên marketing
+ *                   department: Marketing
+ *                 contractDate: 2026-08-14
+ *                 probationStartDate: 2026-08-20
+ *                 probationEndDate: 2026-10-18
+ *                 workLocation: Văn phòng chính của Công ty
+ *                 probationSalary: 6000000
+ *                 performanceBonus: null
  *             appendix:
  *               summary: Phụ lục hợp đồng
  *               value:
@@ -545,7 +589,7 @@ router.delete(
  *                 type: object
  *               personalInfo:
  *                 type: object
- *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal hoặc employment_contract thay cho partnerCompanyInfo.
+ *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract hoặc probation_contract thay cho partnerCompanyInfo.
  *               legalRegulation:
  *                 type: string
  *                 nullable: true
@@ -560,15 +604,23 @@ router.delete(
  *               contractDate:
  *                 type: string
  *                 format: date
- *                 description: Ngày lập hợp đồng lao động và phụ lục. Dùng cho employment_contract.
+ *                 description: Ngày lập hợp đồng. Dùng cho employment_contract và probation_contract.
  *               contractTerm:
  *                 type: string
  *               startDate:
  *                 type: string
  *                 format: date
+ *               probationStartDate:
+ *                 type: string
+ *                 format: date
+ *               probationEndDate:
+ *                 type: string
+ *                 format: date
  *               workLocation:
  *                 type: string
  *               baseSalary:
+ *                 type: number
+ *               probationSalary:
  *                 type: number
  *               salaryInWords:
  *                 type: string

@@ -1704,6 +1704,271 @@ class ContractPdfBuilder {
     );
   }
 
+  renderProbationContract(contract) {
+    const doc = this.doc;
+    const owner = contract.ownerCompanyInfo || {};
+    const data = contract.contractData || {};
+    const person = data.personalInfo || {};
+    const blank = (value, fallback = "................") =>
+      formatOptionalText(value, fallback);
+    const contractDate = data.contractDate || contract.createdAt || new Date();
+    const longDate = formatTemplateDate(contractDate, true);
+    const shortDate = (value) => formatTemplateDate(value) || ".../.../....";
+    const money = (value) => formatTemplateMoney(value) || "................";
+    const companyName = blank(owner.companyName).toLocaleUpperCase("vi-VN");
+    const employeeName = blank(person.fullName).toLocaleUpperCase("vi-VN");
+    const ownerName = blank(getOwnerName(owner));
+    const paragraphs = (items) =>
+      items.forEach((item) => this.text(item, { gap: 0.12 }));
+    const bullets = (items) => items.forEach((item) => this.bullet(item));
+    const numbered = (items) =>
+      items.forEach((item, index) =>
+        this.text(`${index + 1}. ${item}`, { gap: 0.12 }),
+      );
+    const subheading = (value) => this.text(value, { bold: true, gap: 0.18 });
+    const header = () => {
+      const top = doc.page.margins.top;
+      const leftWidth = 225;
+      const rightX = doc.page.width / 2 + 10;
+      const rightWidth = doc.page.width - doc.page.margins.right - rightX;
+
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text(companyName, doc.page.margins.left, top, {
+        width: leftWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text(
+        `Số: ${blank(contract.contractNumber)}`,
+        doc.page.margins.left,
+        top + 28,
+        { width: leftWidth, align: "center" },
+      );
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", rightX, top, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text("Độc lập - Tự do - Hạnh phúc", rightX, top + 17, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text("----------- oOo ----------", rightX, top + 34, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text(`TP. Hồ Chí Minh, ${longDate}`, rightX, top + 51, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.x = doc.page.margins.left;
+      doc.y = top + 84;
+      this.centered("HỢP ĐỒNG THỬ VIỆC", 15, 0.7, true);
+    };
+    const partyInformation = () => {
+      subheading(`BÊN A (NGƯỜI SỬ DỤNG LAO ĐỘNG): ${companyName}`);
+      this.labelValue("Trụ sở chính: ", owner.address);
+      this.labelValue("Mã số thuế: ", owner.mst);
+      this.labelValue("Đại diện bởi: ", ownerName);
+      this.labelValue("Chức vụ: ", owner.role);
+      this.labelValue("Điện thoại: ", owner.phone);
+      this.text("Và:", { gap: 0.12 });
+      subheading(`BÊN B (NGƯỜI LAO ĐỘNG): ${employeeName}`);
+      this.richText([
+        { text: "Sinh ngày: ", bold: true },
+        { text: shortDate(person.dateOfBirth) },
+        { text: "    Giới tính: ", bold: true },
+        { text: blank(person.gender) },
+      ]);
+      this.richText([
+        { text: "CCCD/CMTND số: ", bold: true },
+        { text: blank(person.citizenId) },
+        { text: "    Cấp ngày: ", bold: true },
+        { text: shortDate(person.citizenIdIssuedDate) },
+      ]);
+      this.labelValue("Nơi cấp: ", person.citizenIdIssuedPlace);
+      this.labelValue("Nơi thường trú (theo CCCD): ", person.permanentAddress);
+      this.labelValue("Địa chỉ hiện đang sinh sống: ", person.currentAddress);
+      this.labelValue("Mã số thuế (nếu có): ", person.taxCode);
+      this.labelValue(
+        "Số sổ lao động/sổ BHXH (nếu có): ",
+        person.socialInsuranceNumber,
+      );
+      this.labelValue(
+        "Người liên lạc trường hợp khẩn cấp: ",
+        person.emergencyContact,
+        { gap: 0.3 },
+      );
+    };
+
+    header();
+    bullets([
+      "Căn cứ Bộ luật Dân sự số 91/2015/QH13 ban hành ngày 24 tháng 11 năm 2015;",
+      "Căn cứ vào Bộ luật Lao động số 45/2019/QH14 ban hành ngày 20 tháng 11 năm 2019;",
+      `Căn cứ vào quy định của ${companyName};`,
+      "Căn cứ vào khả năng và nhu cầu của hai bên.",
+    ]);
+    this.text(
+      `Hôm nay, ${longDate}, tại văn phòng ${companyName}, chúng tôi gồm các bên sau đây:`,
+      { gap: 0.3 },
+    );
+    partyInformation();
+    this.text(
+      "Hai bên đã thỏa thuận ký kết Hợp đồng thử việc và cam kết thực hiện nghiêm túc những điều khoản sau đây:",
+      { gap: 0.3 },
+    );
+
+    this.heading("ĐIỀU 1: THỜI HẠN VÀ CÔNG VIỆC");
+    paragraphs([
+      `1. Thời hạn hợp đồng: Hợp đồng có hiệu lực từ ngày ${shortDate(data.probationStartDate)} đến ngày ${shortDate(data.probationEndDate)} và kéo dài tối đa 60 ngày.`,
+      `2. Vị trí công việc: ${blank(person.position)}.`,
+      `3. Phòng ban/Bộ phận: ${blank(person.department)}.`,
+      "4. Công việc: Thực hiện theo phân công của Trưởng dự án/Ban Giám đốc.",
+      `5. Địa điểm làm việc: ${blank(data.workLocation, "Tại văn phòng chính hoặc các địa điểm khác theo quyết định của Công ty")}.`,
+    ]);
+
+    this.heading("ĐIỀU 2: THỜI GIAN LÀM VIỆC");
+    subheading("1. Thời gian làm việc:");
+    bullets([
+      "Buổi sáng: 8h00 – 12h00 từ thứ 2 đến thứ 7.",
+      "Buổi chiều: 13h30 – 17h00 từ thứ 2 đến thứ 7.",
+    ]);
+    paragraphs([
+      "2. Được cấp phát những thiết bị, dụng cụ làm cần thiết phục vụ cho công việc để nhân viên có thể hoàn thành công việc một cách có hiệu quả nhất. Nhân viên có trách nhiệm bảo quản, giữ gìn trang thiết bị ở điều kiện tốt nhất.",
+      "3. Phương tiện đi lại: Tự túc.",
+      "4. Điều kiện an toàn và vệ sinh lao động tại nơi làm việc theo quy định của pháp luật hiện hành.",
+    ]);
+
+    this.heading("ĐIỀU 3: MỨC LƯƠNG VÀ CÁC KHOẢN LIÊN QUAN");
+    paragraphs([
+      `1. Mức lương thử việc: ${money(data.probationSalary)} VND/tháng.`,
+      "2. Các khoản phụ cấp: Không.",
+      "3. Các khoản bổ sung: Không.",
+    ]);
+    bullets([
+      `Tiền thưởng hiệu quả công việc: ${money(data.performanceBonus)} VND/tháng.`,
+      "Mức tiền cụ thể hàng tháng phụ thuộc vào tỷ lệ % hoàn thành kế hoạch và quy định về tiền thưởng hiệu quả công việc của Công ty từng thời điểm.",
+      "Tiền thưởng sáng kiến: Mức tiền cụ thể hàng tháng phụ thuộc vào số lượng sáng kiến mỗi tháng và quy định về tiền thưởng sáng kiến của Công ty từng thời điểm.",
+      "Tiền thưởng doanh thu: Mức tiền cụ thể hàng tháng phụ thuộc vào doanh số đảm nhận và quy định về thưởng doanh số của Công ty từng thời điểm.",
+    ]);
+    subheading("4. Thuế thu nhập cá nhân (TNCN):");
+    bullets([
+      "Người lao động tự chịu trách nhiệm kê khai và nộp thuế thu nhập cá nhân. Công ty sẽ khấu trừ thuế TNCN tại nguồn trước khi thanh toán lương cho nhân viên.",
+      "Công ty sẽ cung cấp chứng từ khấu trừ thuế thu nhập cá nhân để người lao động thực hiện quyết toán với cơ quan thuế.",
+    ]);
+    this.text(
+      "5. Thời hạn trả lương: Lương được thanh toán vào ngày 05 của tháng kế tiếp.",
+      { gap: 0.12 },
+    );
+
+    this.heading("ĐIỀU 4: THỎA THUẬN KHÔNG CẠNH TRANH");
+    this.text(
+      "1. Trong thời gian thử việc và 6 tháng sau khi kết thúc hợp đồng, Người lao động không được phép:",
+      { gap: 0.12 },
+    );
+    bullets([
+      "Làm việc hoặc hợp tác với bất kỳ công ty nào khác có xung đột về lợi ích tương tự với Công ty.",
+      "Tiếp cận hoặc cung cấp dịch vụ cho các khách hàng của Công ty.",
+    ]);
+    this.text(
+      "Vi phạm điều khoản không cạnh tranh sẽ bị xử lý theo quy định của pháp luật và Công ty có quyền yêu cầu bồi thường thiệt hại.",
+      { gap: 0.12 },
+    );
+
+    this.heading("ĐIỀU 5: QUYỀN LỢI VÀ NGHĨA VỤ CỦA NGƯỜI LAO ĐỘNG");
+    subheading("A. QUYỀN LỢI");
+    numbered([
+      "Phương tiện đi lại: Cá nhân tự túc.",
+      "Cấp phát những dụng cụ làm việc gồm: Theo tính chất và phân công công việc.",
+      "Chế độ nghỉ ngơi: Nghỉ ngơi theo lịch làm việc tại Văn phòng.",
+      "Chế độ đào tạo: Được Công ty đào tạo nâng cao năng lực chuyên môn và kỹ năng công việc. Ngoài ra, do yêu cầu của công việc người lao động phải hoàn thành các khóa học theo sự điều động của cấp trên.",
+      "Chế độ thưởng: Ngoài lương và phụ cấp, người lao động sẽ được thưởng theo quy định của pháp luật lao động và Nội quy Công ty.",
+    ]);
+    subheading("6. Nghỉ việc:");
+    this.text(
+      "Người lao động có quyền đơn phương chấm dứt hợp đồng và được coi là không vi phạm hợp đồng thử việc khi:",
+      { gap: 0.12 },
+    );
+    paragraphs([
+      "6.1. Người lao động nghỉ việc thuộc một trong những trường hợp được quy định theo Luật Lao động hiện hành.",
+      "6.2. Có đơn xin thôi việc trước ít nhất 03 - 05 ngày làm việc kể từ ngày nộp đơn gửi lên cấp trên để Công ty có kế hoạch tìm nhân sự thay thế.",
+      "6.3. Người lao động có trách nhiệm thanh quyết toán các khoản tài chính có liên quan, bàn giao trang thiết bị, dụng cụ, công việc được giao cho Công ty trước khi chấm dứt hợp đồng.",
+    ]);
+    subheading("B. NGHĨA VỤ");
+    numbered([
+      "Thực hiện công việc với trách nhiệm và đảm bảo hiệu quả.",
+      "Tuân thủ các quy định bảo mật thông tin, kỷ luật lao động và văn hóa Công ty.",
+      "Chấp hành mọi điều động công việc của Công ty.",
+    ]);
+    this.text(
+      "Trong vòng 7 ngày làm việc, kể từ ngày ký kết Hợp đồng này, người lao động phải nộp đầy đủ Hồ sơ Nhân sự, gồm:",
+      { gap: 0.12 },
+    );
+    bullets([
+      "Sơ yếu lý lịch (có công chứng);",
+      "Chứng minh thư nhân dân/căn cước công dân/Hộ chiếu hoặc các giấy tờ chứng minh nhân thân có giá trị tương đương (có công chứng);",
+      "Bằng cấp (có công chứng);",
+      "Giấy khám sức khỏe (bản chính).",
+    ]);
+    this.text(
+      `Người lao động buộc phải đọc toàn bộ Nội quy Công ty và tuân thủ theo Nội quy đó. Mọi hành vi vi phạm nội quy sẽ được xử lý theo quy định và không được lấy lý do là không biết đến quy định trong Nội quy lao động của ${companyName}.`,
+      { gap: 0.12 },
+    );
+
+    this.heading("ĐIỀU 6: NGHĨA VỤ VÀ QUYỀN HẠN CỦA NGƯỜI SỬ DỤNG LAO ĐỘNG");
+    subheading("A. NGHĨA VỤ");
+    numbered([
+      "Bảo đảm việc làm và thực hiện đầy đủ những điều khoản trong hợp đồng.",
+      "Thanh toán đầy đủ, đúng thời hạn các chế độ và quyền lợi cho người lao động theo hợp đồng này.",
+      "Trong trường hợp chậm thanh toán các chế độ và quyền lợi cho người lao động theo hợp đồng này thì người sử dụng lao động phải có nghĩa vụ trả lãi của khoản tiền chậm thanh toán. Lãi suất chi trả theo lãi suất Ngân hàng Nhà nước Việt Nam.",
+      "Thực hiện hướng dẫn, đào tạo cho người lao động về quy chế, quy định của Công ty.",
+    ]);
+    subheading("B. QUYỀN HẠN");
+    numbered([
+      "Điều hành người lao động hoàn thành công việc theo Hợp đồng (bố trí, điều chuyển, tạm ngừng việc).",
+      "Tạm hoãn, chấm dứt hợp đồng thử việc, kỷ luật người lao động theo quy định của pháp luật lao động hiện hành và nội quy lao động, thỏa ước lao động tập thể (nếu có) của Công ty.",
+      "Có quyền khiếu nại và đòi người lao động bồi thường khi người lao động vi phạm các điều đã cam kết trong hợp đồng này.",
+      "Có quyền được đơn phương chấm dứt hợp đồng thử việc nếu người lao động vi phạm nghiêm trọng các nội quy, quy định của Công ty và làm ảnh hưởng đến tài sản, uy tín của Công ty.",
+    ]);
+
+    this.heading("ĐIỀU 7: CHẤM DỨT HỢP ĐỒNG");
+    this.text("Các Bên thỏa thuận các trường hợp chấm dứt Hợp đồng như sau:", {
+      gap: 0.12,
+    });
+    numbered([
+      "Một bên có hành vi vi phạm các điều khoản cơ bản của Hợp đồng và không khắc phục vi phạm trong thời hạn kể từ ngày nhận được thông báo yêu cầu khắc phục bằng văn bản của Bên bị vi phạm. Thời hạn quy định do các bên thỏa thuận, nếu không thỏa thuận được thì thời hạn quy định là 03 ngày.",
+      "Theo thỏa thuận giữa các Bên.",
+      "Các Bên hoàn thành trách nhiệm của mình và không có thỏa thuận khác.",
+      "Một bên đơn phương chấm dứt Hợp đồng trước thời hạn quy định tại Điều 5 của Hợp đồng.",
+    ]);
+
+    this.heading("ĐIỀU 8: GIẢI QUYẾT TRANH CHẤP");
+    numbered([
+      "Những vấn đề lao động khác không ghi trong hợp đồng này thì áp dụng theo quy định của quy chế và nội quy lao động của Công ty, cũng như pháp luật Lao động Việt Nam và có hiệu lực thi hành tại thời điểm ký hợp đồng lao động này.",
+      "Trong quá trình thực hiện hợp đồng nếu có tình huống phát sinh, các bên giải quyết trên cơ sở thương lượng và hòa giải.",
+      "Trong trường hợp không thể hòa giải được thì vụ việc sẽ tiến hành giải quyết tại Tòa án nhân dân có thẩm quyền tại Thành phố Hồ Chí Minh.",
+    ]);
+
+    this.heading("ĐIỀU 9: ĐIỀU KHOẢN THI HÀNH");
+    numbered([
+      "Những vấn đề về lao động không ghi trong hợp đồng này thì áp dụng quy định của nội quy, quy chế quản lý nội bộ của Công ty và Bộ luật Lao động.",
+      "Khi hợp đồng này được ký kết sẽ chấm dứt toàn bộ hiệu lực của các Hợp đồng và Phụ lục Hợp đồng đã được hai bên ký trước đó.",
+      "Hợp đồng này gồm 04 trang, được lập thành 02 (hai) bản có giá trị pháp lý như nhau, mỗi bên giữ 01 (một) bản để thực hiện và có hiệu lực kể từ ngày ký.",
+      "Khi hết thời hạn hợp đồng, nếu Công ty không có nhu cầu tiếp tục sử dụng người lao động thì hợp đồng thử việc này tự động hết hiệu lực và được thanh lý.",
+    ]);
+    this.signatureArea(
+      owner,
+      { ownerName: person.fullName },
+      {
+        leftTitle: "BÊN A - NGƯỜI SỬ DỤNG LAO ĐỘNG",
+        rightTitle: "BÊN B - NGƯỜI LAO ĐỘNG",
+        leftHint: "(Ký, ghi rõ họ tên, đóng dấu)",
+        rightHint: "(Ký, ghi rõ họ và tên)",
+      },
+    );
+  }
+
   renderLivestreamResponsibilityCommitment(contract) {
     const owner = contract.ownerCompanyInfo || {};
     const person = contract.contractData?.personalInfo || {};
