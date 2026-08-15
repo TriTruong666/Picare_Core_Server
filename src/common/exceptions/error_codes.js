@@ -550,6 +550,11 @@ const ErrorCodes = {
     message: "Ảnh chữ ký tay không hợp lệ",
     statusCode: 400,
   },
+  CONTRACT_PARENT_TYPE_INVALID: {
+    code: "ERR_CONTRACT_044",
+    message: "Loại hợp đồng gốc không phù hợp với loại phụ lục",
+    statusCode: 400,
+  },
   GRPC_LICENSE_INPUT_MISSING: {
     code: "ERR_LICENSE_GRPC_001",
     message: "Thiếu licenseKey hoặc softwareId",

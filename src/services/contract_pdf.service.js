@@ -12,6 +12,12 @@ const {
   normalizeProduct: normalizeContractProduct,
 } = require("../contracts/common/contract-input.normalizer");
 
+const PICARE_WATERMARK_LOGO_PATH = path.resolve(
+  __dirname,
+  "../assets/picare-watermark-logo.svg",
+);
+let picareWatermarkLogoDataUriPromise;
+
 const DEFAULT_FONT_PATHS = [
   process.env.CONTRACT_FONT_PATH,
   path.resolve(__dirname, "../assets/fonts/times.ttf"),
@@ -285,6 +291,28 @@ function getSignatureWidgetRect(signerType) {
   return SIGNATURE_WIDGET_RECTS[signerType] || SIGNATURE_WIDGET_RECTS.default;
 }
 
+function getSignatureWidgetPlacements(signatureWidget, signerType) {
+  const placements = Array.isArray(signatureWidget?.placements)
+    ? signatureWidget.placements
+    : signatureWidget?.rect
+      ? [
+          {
+            pageIndex: signatureWidget.pageIndex,
+            rect: signatureWidget.rect,
+          },
+        ]
+      : [];
+
+  if (placements.length) return placements;
+
+  return [
+    {
+      pageIndex: null,
+      rect: getSignatureWidgetRect(signerType),
+    },
+  ];
+}
+
 function getPartnerIdentityText(companyInfo = {}) {
   return companyInfo.mst || companyInfo.phone || "N/A";
 }
@@ -433,6 +461,71 @@ function fitTextForImage(text, fontPath, fontSize, maxWidth) {
   return `${trimmed}...`;
 }
 
+function getSignatureWatermarkCompanyInfo(contract, signerType) {
+  const signerCompanyInfo = getSignerCompanyInfo(contract, signerType);
+
+  if (signerCompanyInfo?.companyName || signerCompanyInfo?.companyCode) {
+    return signerCompanyInfo;
+  }
+
+  return contract?.ownerCompanyInfo || {};
+}
+
+function getCompanyMonogram(companyInfo = {}) {
+  const companyCode = asText(companyInfo.companyCode).trim();
+  if (companyCode) return companyCode.slice(0, 8).toLocaleUpperCase("vi-VN");
+
+  const ignoredWords = new Set([
+    "CONG",
+    "TY",
+    "TNHH",
+    "CO",
+    "PHAN",
+    "CORPORATION",
+    "COMPANY",
+    "LIMITED",
+  ]);
+  const words = normalizeVietnameseText(companyInfo.companyName)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLocaleUpperCase("vi-VN")
+    .split(/[^A-Z0-9]+/)
+    .filter((word) => word && !ignoredWords.has(word));
+  const initials = words.map((word) => word[0]).join("");
+
+  return (initials || "CT").slice(0, 6);
+}
+
+async function getSignatureWatermarkDataUri(contract, signerType) {
+  const companyInfo = getSignatureWatermarkCompanyInfo(contract, signerType);
+  const explicitLogo =
+    companyInfo.watermarkLogoDataUri || companyInfo.logoDataUri || "";
+  if (/^data:image\/(?:png|jpe?g|svg\+xml);base64,/i.test(explicitLogo)) {
+    return explicitLogo;
+  }
+
+  const companyIdentity = `${asText(companyInfo.companyCode)} ${asText(
+    companyInfo.companyName,
+  )}`.toLocaleUpperCase("vi-VN");
+  if (/PICARE|\bPIC\b/.test(companyIdentity)) {
+    if (!picareWatermarkLogoDataUriPromise) {
+      picareWatermarkLogoDataUriPromise = fs
+        .readFile(PICARE_WATERMARK_LOGO_PATH)
+        .then(
+          (logoBuffer) =>
+            `data:image/svg+xml;base64,${logoBuffer.toString("base64")}`,
+        );
+    }
+
+    return picareWatermarkLogoDataUriPromise;
+  }
+
+  const monogram = getCompanyMonogram(companyInfo);
+  const monogramSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160"><rect x="8" y="8" width="304" height="144" rx="24" fill="none" stroke="#00995d" stroke-width="10"/><text x="160" y="108" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="72" font-weight="700" fill="#00995d">${escapeXml(monogram)}</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(monogramSvg).toString("base64")}`;
+}
+
 async function createDigitalSignatureAppearanceImage({
   width,
   height,
@@ -474,11 +567,19 @@ async function createDigitalSignatureAppearanceImage({
     contentWidth,
   );
   const timeLine = fitTextForImage(data.timeLine, fontPath, 7.4, contentWidth);
+  const logoDataUri = await getSignatureWatermarkDataUri(contract, signerType);
+  const watermarkWidth = Math.max(24, width - 8);
+  const watermarkHeight = Math.min(height - 8, watermarkWidth * (5 / 12));
+  const watermarkX = (width - watermarkWidth) / 2;
+  const watermarkY = (height - watermarkHeight) / 2 + 4;
+  const borderInset = 1.2;
   const svg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${imageWidth}" height="${imageHeight}" viewBox="0 0 ${width} ${height}">
   <rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>
-  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" font-weight="700" fill="#000000">${escapeXml(companyName)}</text>
-  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.2" fill="#111111">${escapeXml(identityLine)}</text>
+  <rect x="${borderInset}" y="${borderInset}" width="${width - borderInset * 2}" height="${height - borderInset * 2}" fill="none" stroke="#00995d" stroke-width="1.2"/>
+  <image href="${logoDataUri}" x="${watermarkX}" y="${watermarkY}" width="${watermarkWidth}" height="${watermarkHeight}" opacity="0.12" preserveAspectRatio="xMidYMid meet"/>
+  <text x="${width / 2}" y="${height * 0.22}" text-anchor="middle" font-family="Times New Roman, serif" font-size="9.2" font-weight="700" fill="#0b5b41">${escapeXml(companyName)}</text>
+  <text x="${width / 2}" y="${height * 0.45}" text-anchor="middle" font-family="Times New Roman, serif" font-size="8.2" fill="#111111">${escapeXml(identityLine)}</text>
   <text x="${width / 2}" y="${height * 0.63}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.8" fill="#111111">${escapeXml(addressLine)}</text>
   <text x="${width / 2}" y="${height * 0.81}" text-anchor="middle" font-family="Times New Roman, serif" font-size="7.4" fill="#111111">${escapeXml(timeLine)}</text>
 </svg>`;
@@ -575,101 +676,6 @@ function formatOptionalText(value, fallback = "N/A") {
   }
 
   return value;
-}
-
-function drawVisibleSignatureAppearance(
-  pdfPage,
-  widgetRect,
-  {
-    signerName,
-    signerType,
-    contract,
-    font,
-    boldFont,
-    signingTime = new Date(),
-  },
-) {
-  return drawCompanyDigitalSignatureAppearance(pdfPage, widgetRect, {
-    signerName,
-    signerType,
-    contract,
-    font,
-    boldFont,
-    signingTime,
-  });
-
-  const [x1, y1, x2, y2] = widgetRect;
-  const width = x2 - x1;
-  const height = y2 - y1;
-  const paddingX = 8;
-  const contentWidth = width - paddingX * 2;
-  const appearanceData = getDigitalSignatureAppearanceData({
-    contract,
-    signerType,
-    signerName,
-    signingTime,
-  });
-
-  pdfPage.drawRectangle({
-    x: x1,
-    y: y1,
-    width,
-    height,
-    color: rgb(0.96, 0.99, 0.97),
-    borderColor: rgb(0.07, 0.45, 0.24),
-    borderWidth: 0.9,
-  });
-
-  pdfPage.drawRectangle({
-    x: x1,
-    y: y2 - 15,
-    width,
-    height: 15,
-    color: rgb(0.07, 0.45, 0.24),
-  });
-
-  drawCenteredText(
-    pdfPage,
-    "ĐÃ KÝ SỐ",
-    x1,
-    y2 - 11,
-    width,
-    boldFont,
-    7.5,
-    rgb(1, 1, 1),
-  );
-  drawCenteredText(
-    pdfPage,
-    normalizeVietnameseText(signerName || signerRole).toLocaleUpperCase(
-      "vi-VN",
-    ),
-    x1 + paddingX,
-    y1 + Math.max(31, height - 39),
-    contentWidth,
-    boldFont,
-    8,
-    rgb(0.04, 0.25, 0.13),
-  );
-  drawCenteredText(
-    pdfPage,
-    `Vai trò: ${signerRole}`,
-    x1 + paddingX,
-    y1 + 20,
-    contentWidth,
-    font,
-    7,
-    rgb(0.1, 0.1, 0.1),
-  );
-  drawCenteredText(
-    pdfPage,
-    `Thời gian: ${formatVietnameseDateTime(signingTime)}`,
-    x1 + paddingX,
-    y1 + 9,
-    contentWidth,
-    font,
-    6.5,
-    rgb(0.1, 0.1, 0.1),
-  );
 }
 
 async function drawCompanyDigitalSignatureAppearance(
@@ -1000,10 +1006,18 @@ class ContractPdfBuilder {
   drawSignatureBox(signerType, x, y, width, height) {
     const doc = this.doc;
     const pageHeight = doc.page.height;
-
-    this.signatureWidgets[signerType] = {
+    const placement = {
       pageIndex: this.currentPageIndex(),
       rect: topLeftRectToPdfRect(x, y, width, height, pageHeight),
+    };
+    const previousPlacements = getSignatureWidgetPlacements(
+      this.signatureWidgets[signerType],
+      signerType,
+    ).filter((item) => Number.isInteger(item.pageIndex));
+
+    this.signatureWidgets[signerType] = {
+      ...placement,
+      placements: [...previousPlacements, placement],
     };
 
     doc.save();
@@ -1691,6 +1705,133 @@ class ContractPdfBuilder {
     bullets([
       "Phụ lục hợp đồng có hiệu lực kể từ ngày ký cho đến khi Hợp đồng lao động đã ký kết hết hạn.",
       `Phụ lục này là bộ phận không thể tách rời của Hợp đồng lao động số ${blank(contract.contractNumber)}, được làm thành hai bản có giá trị như nhau, mỗi bên giữ một bản và là cơ sở giải quyết khi có tranh chấp lao động.`,
+      `Phụ lục Hợp đồng này được lập tại ${companyName}, ${longDate}.`,
+    ]);
+    this.signatureArea(
+      owner,
+      { ownerName: person.fullName },
+      {
+        leftTitle: "NGƯỜI SỬ DỤNG LAO ĐỘNG",
+        rightTitle: "NGƯỜI LAO ĐỘNG",
+        rightHint: "(Ký, ghi rõ họ và tên)",
+      },
+    );
+  }
+
+  renderEmploymentContractAppendix(contract) {
+    const doc = this.doc;
+    const owner = contract.ownerCompanyInfo || {};
+    const data = contract.contractData || {};
+    const person = data.personalInfo || {};
+    const blank = (value, fallback = "................") =>
+      formatOptionalText(value, fallback);
+    const contractDate = data.contractDate || contract.createdAt || new Date();
+    const longDate = formatTemplateDate(contractDate, true);
+    const shortDate = (value) => formatTemplateDate(value) || ".../.../....";
+    const money = (value) => formatTemplateMoney(value) || "................";
+    const companyName = blank(owner.companyName).toLocaleUpperCase("vi-VN");
+    const employeeName = blank(person.fullName).toLocaleUpperCase("vi-VN");
+    const employmentContractNumber = blank(data.employmentContractNumber);
+    const subheading = (value) => this.text(value, { bold: true, gap: 0.18 });
+    const bullets = (items) => items.forEach((item) => this.bullet(item));
+    const header = () => {
+      const top = doc.page.margins.top;
+      const leftWidth = 225;
+      const rightX = doc.page.width / 2 + 10;
+      const rightWidth = doc.page.width - doc.page.margins.right - rightX;
+
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text(companyName, doc.page.margins.left, top, {
+        width: leftWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text(
+        `Số: ${blank(contract.contractNumber)}`,
+        doc.page.margins.left,
+        top + 28,
+        { width: leftWidth, align: "center" },
+      );
+      doc.font(this.boldFontPath).fontSize(10);
+      doc.text("CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", rightX, top, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text("Độc lập - Tự do - Hạnh phúc", rightX, top + 17, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.font(this.fontPath).fontSize(9.5);
+      doc.text("----------- oOo ----------", rightX, top + 34, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.text(`TP. Hồ Chí Minh, ${longDate}`, rightX, top + 51, {
+        width: rightWidth,
+        align: "center",
+      });
+      doc.x = doc.page.margins.left;
+      doc.y = top + 84;
+      this.centered("PHỤ LỤC HỢP ĐỒNG LAO ĐỘNG", 15, 0.7, true);
+    };
+
+    header();
+    this.text(
+      `Hôm nay, ${longDate}, tại văn phòng ${companyName}, chúng tôi gồm các bên sau đây:`,
+      { gap: 0.3 },
+    );
+    subheading(`BÊN A (NGƯỜI SỬ DỤNG LAO ĐỘNG): ${companyName}`);
+    this.labelValue("Trụ sở chính: ", owner.address);
+    this.labelValue("Mã số thuế: ", owner.mst);
+    this.labelValue("Đại diện bởi: ", getOwnerName(owner));
+    this.labelValue("Chức vụ: ", owner.role);
+    this.labelValue("Điện thoại: ", owner.phone);
+    subheading(`BÊN B (NGƯỜI LAO ĐỘNG): ${employeeName}`);
+    this.richText([
+      { text: "Sinh ngày: ", bold: true },
+      { text: shortDate(person.dateOfBirth) },
+      { text: "    Giới tính: ", bold: true },
+      { text: blank(person.gender) },
+    ]);
+    this.richText([
+      { text: "CCCD/CMTND số: ", bold: true },
+      { text: blank(person.citizenId) },
+      { text: "    Ngày cấp: ", bold: true },
+      { text: shortDate(person.citizenIdIssuedDate) },
+    ]);
+    this.labelValue("Nơi cấp: ", person.citizenIdIssuedPlace);
+    this.labelValue("Nơi thường trú (theo CCCD): ", person.permanentAddress);
+    this.labelValue("Địa chỉ hiện đang sinh sống: ", person.currentAddress);
+    this.labelValue("Mã số thuế (nếu có): ", person.taxCode);
+    this.labelValue("Mã số BHXH (nếu có): ", person.socialInsuranceNumber);
+    this.labelValue(
+      "Người liên lạc trường hợp khẩn cấp: ",
+      person.emergencyContact,
+      { gap: 0.3 },
+    );
+    this.text(
+      `Căn cứ Hợp đồng lao động số ${employmentContractNumber} ký ${longDate} và nhu cầu sử dụng lao động, hai bên cùng nhau thỏa thuận thay đổi một số nội dung của hợp đồng đã ký như sau:`,
+      { gap: 0.3 },
+    );
+
+    this.heading("ĐIỀU 1: NỘI DUNG THAY ĐỔI");
+    subheading("1.1. Tiền lương, chế độ, phúc lợi, thưởng:");
+    bullets([
+      `Mức lương cơ bản: ${money(data.baseSalary)} đồng.`,
+      `Tiền ăn giữa ca: ${money(data.mealAllowance)} đồng.`,
+      `Hỗ trợ điện thoại + đồng phục: ${money(data.phoneUniformAllowance)} đồng.`,
+      `Thưởng hiệu quả công việc: ${money(data.performanceBonus)} đồng.`,
+      `Hỗ trợ xăng xe: ${money(data.transportationAllowance)} đồng.`,
+      `Tổng cộng: ${money(data.totalSalary)} đồng.`,
+      "Lương làm thêm giờ: Được tính theo quy định của pháp luật lao động và quy định của Công ty.",
+      "Lương tháng 13: Người lao động được hưởng tháng lương 13 và các khoản tương đương lương khác (nếu có) tùy theo hiệu quả công việc và kết quả kinh doanh của Công ty trong năm.",
+      "BHXH, BHYT, BHTN: Theo quy định của Luật BHXH hiện hành về mức tham gia đóng và tỷ lệ đóng BHXH, BHYT, BHTN cho người lao động.",
+      "Thuế TNCN phát sinh dựa trên tổng thu nhập hàng tháng của người lao động (nếu có) sẽ do người lao động chi trả và Công ty khấu trừ vào lương để trích nộp theo quy định.",
+    ]);
+    this.heading("ĐIỀU 2: THỜI GIAN THỰC HIỆN");
+    bullets([
+      "Phụ lục hợp đồng có hiệu lực kể từ ngày ký cho đến khi Hợp đồng lao động đã ký kết hết hạn.",
+      `Phụ lục này là bộ phận không thể tách rời của Hợp đồng lao động số ${employmentContractNumber}, được làm thành hai bản có giá trị như nhau, mỗi bên giữ một bản và là cơ sở giải quyết khi có tranh chấp lao động.`,
       `Phụ lục Hợp đồng này được lập tại ${companyName}, ${longDate}.`,
     ]);
     this.signatureArea(
@@ -3134,6 +3275,7 @@ class ContractPdfService {
     signerType,
     widgetRect,
     pageIndex,
+    placements,
     signatureLength,
     signingTime,
   }) {
@@ -3162,45 +3304,35 @@ class ContractPdfService {
     const rootObjectNumber = Number(rootMatch[1]);
     const prevStartXref = Number(startXrefMatch[1]);
     const acroFormObjectNumber = Number(acroFormMatch[1]);
-    const pageObjectNumber =
-      this.getPageObjectNumberAtIndex(sourceBytes, objectMatches, pageIndex) ||
-      Number(widgetMatches[widgetMatches.length - 1][2]);
     const signatureObjectNumber = maxObjectNumber + 1;
     const widgetObjectNumber = maxObjectNumber + 2;
-    const appearanceObjectNumber = maxObjectNumber + 3;
-    const imageObjectNumber = maxObjectNumber + 4;
-    const pageBody = this.getPdfObjectBody(sourceBytes, pageObjectNumber);
+    let nextObjectNumber = maxObjectNumber + 3;
     const acroFormBody = this.getPdfObjectBody(
       sourceBytes,
       acroFormObjectNumber,
     );
+    const resolvedPlacements =
+      Array.isArray(placements) && placements.length
+        ? placements
+        : getSignatureWidgetPlacements(
+            { pageIndex, rect: widgetRect },
+            signerType,
+          );
+    const primaryPlacementIndex = resolvedPlacements.length - 1;
+    const fallbackPageObjectNumber = Number(
+      widgetMatches[widgetMatches.length - 1][2],
+    );
 
-    if (!pageBody || !acroFormBody) {
+    if (!acroFormBody) {
       throw new Error(ErrorCodes.PDF_PAGE_OR_ACROFORM_MISSING.message);
     }
 
     const widgetRef = `${widgetObjectNumber} 0 R`;
-    const updatedPageBody = this.replaceOrAppendArrayItem(
-      pageBody,
-      "Annots",
-      widgetRef,
-    );
     const updatedAcroFormBody = this.replaceOrAppendArrayItem(
       acroFormBody,
       "Fields",
       widgetRef,
     );
-    const resolvedWidgetRect = widgetRect || getSignatureWidgetRect(signerType);
-    const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
-    const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
-    const appearanceImage = await createDigitalSignatureAppearanceImage({
-      width: widgetWidth,
-      height: widgetHeight,
-      contract,
-      signerType,
-      signerName,
-      signingTime,
-    });
     const signatureHexPlaceholder = "0".repeat(signatureLength);
     const byteRangePlaceholder = `/ByteRange [${BYTE_RANGE_PLACEHOLDER} ${BYTE_RANGE_PLACEHOLDER} ${BYTE_RANGE_PLACEHOLDER} ${BYTE_RANGE_PLACEHOLDER}]`;
     const signatureObject = `<<
@@ -3215,7 +3347,39 @@ ${byteRangePlaceholder}
 /Name (${escapePdfString(signerName)})
 /Location (Vietnam)
 >>`;
-    const widgetObject = `<<
+    const pageAnnotationRefs = new Map();
+    const objects = [
+      [acroFormObjectNumber, updatedAcroFormBody],
+      [signatureObjectNumber, signatureObject],
+    ];
+
+    for (const [placementIndex, placement] of resolvedPlacements.entries()) {
+      const isPrimary = placementIndex === primaryPlacementIndex;
+      const resolvedWidgetRect =
+        placement.rect || widgetRect || getSignatureWidgetRect(signerType);
+      const resolvedPageObjectNumber =
+        this.getPageObjectNumberAtIndex(
+          sourceBytes,
+          objectMatches,
+          placement.pageIndex,
+        ) || fallbackPageObjectNumber;
+      const annotationObjectNumber = isPrimary
+        ? widgetObjectNumber
+        : nextObjectNumber++;
+      const appearanceObjectNumber = nextObjectNumber++;
+      const imageObjectNumber = nextObjectNumber++;
+      const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
+      const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
+      const appearanceImage = await createDigitalSignatureAppearanceImage({
+        width: widgetWidth,
+        height: widgetHeight,
+        contract,
+        signerType,
+        signerName,
+        signingTime,
+      });
+      const annotationObject = isPrimary
+        ? `<<
 /Type /Annot
 /Subtype /Widget
 /FT /Sig
@@ -3223,14 +3387,25 @@ ${byteRangePlaceholder}
 /V ${signatureObjectNumber} 0 R
 /T (Signature_${escapePdfString(signerType)}_${Date.now()})
 /F 4
-/P ${pageObjectNumber} 0 R
+/P ${resolvedPageObjectNumber} 0 R
 /AP << /N ${appearanceObjectNumber} 0 R >>
+>>`
+        : `<<
+/Type /Annot
+/Subtype /Stamp
+/Rect [${resolvedWidgetRect.join(" ")}]
+/Name /Approved
+/F 4
+/P ${resolvedPageObjectNumber} 0 R
+/AP << /N ${appearanceObjectNumber} 0 R >>
+/T (SignatureAppearance_${escapePdfString(signerType)}_${placementIndex})
+/M (${formatPdfDate(signingTime)})
 >>`;
-    const appearanceStream = `q
+      const appearanceStream = `q
 ${widgetWidth} 0 0 ${widgetHeight} 0 0 cm
 /ImSig Do
 Q`;
-    const appearanceObject = `<<
+      const appearanceObject = `<<
 /Type /XObject
 /Subtype /Form
 /BBox [0 0 ${widgetWidth} ${widgetHeight}]
@@ -3244,9 +3419,9 @@ Q`;
 stream
 ${appearanceStream}
 endstream`;
-    const imageObject = Buffer.concat([
-      Buffer.from(
-        `<<
+      const imageObject = Buffer.concat([
+        Buffer.from(
+          `<<
 /Type /XObject
 /Subtype /Image
 /Width ${appearanceImage.width}
@@ -3258,19 +3433,40 @@ endstream`;
 >>
 stream
 `,
-        "latin1",
-      ),
-      appearanceImage.buffer,
-      Buffer.from("\nendstream", "latin1"),
-    ]);
-    const objects = [
-      [pageObjectNumber, updatedPageBody],
-      [acroFormObjectNumber, updatedAcroFormBody],
-      [signatureObjectNumber, signatureObject],
-      [widgetObjectNumber, widgetObject],
-      [appearanceObjectNumber, appearanceObject],
-      [imageObjectNumber, imageObject],
-    ].sort((left, right) => left[0] - right[0]);
+          "latin1",
+        ),
+        appearanceImage.buffer,
+        Buffer.from("\nendstream", "latin1"),
+      ]);
+      const pageRefs = pageAnnotationRefs.get(resolvedPageObjectNumber) || [];
+      pageRefs.push(`${annotationObjectNumber} 0 R`);
+      pageAnnotationRefs.set(resolvedPageObjectNumber, pageRefs);
+      objects.push(
+        [annotationObjectNumber, annotationObject],
+        [appearanceObjectNumber, appearanceObject],
+        [imageObjectNumber, imageObject],
+      );
+    }
+
+    for (const [pageObjectNumber, annotationRefs] of pageAnnotationRefs) {
+      let updatedPageBody = this.getPdfObjectBody(
+        sourceBytes,
+        pageObjectNumber,
+      );
+      if (!updatedPageBody) {
+        throw new Error(ErrorCodes.PDF_PAGE_OR_ACROFORM_MISSING.message);
+      }
+      for (const annotationRef of annotationRefs) {
+        updatedPageBody = this.replaceOrAppendArrayItem(
+          updatedPageBody,
+          "Annots",
+          annotationRef,
+        );
+      }
+      objects.push([pageObjectNumber, updatedPageBody]);
+    }
+
+    objects.sort((left, right) => left[0] - right[0]);
 
     const chunks = [Buffer.from("\n", "latin1")];
     const offsets = [];
@@ -3299,7 +3495,7 @@ stream
 
     trailer += `trailer
 <<
-/Size ${imageObjectNumber + 1}
+/Size ${nextObjectNumber}
 /Root ${rootObjectNumber} 0 R
 /Prev ${prevStartXref}
 >>
@@ -3337,6 +3533,10 @@ ${xrefOffset}
         details,
       );
       const signatureWidget = signatureWidgets?.[signerType];
+      const signaturePlacements = getSignatureWidgetPlacements(
+        signatureWidget,
+        signerType,
+      );
       const placeholderBytes = await this.appendIncrementalSignaturePlaceholder(
         {
           sourceBytes,
@@ -3345,6 +3545,7 @@ ${xrefOffset}
           signerType,
           widgetRect: signatureWidget?.rect,
           pageIndex: signatureWidget?.pageIndex,
+          placements: signaturePlacements,
           signatureLength,
           signingTime,
         },
@@ -3376,6 +3577,10 @@ ${xrefOffset}
       details,
     );
     const signatureWidget = signatureWidgets?.[signerType];
+    const signaturePlacements = getSignatureWidgetPlacements(
+      signatureWidget,
+      signerType,
+    );
     const targetPage =
       pages[signatureWidget?.pageIndex] || pages[pages.length - 1];
     const widgetRect =
@@ -3394,14 +3599,22 @@ ${xrefOffset}
       pdfDoc.embedFont(boldFontBytes, { subset: true }),
     ]);
 
-    await drawCompanyDigitalSignatureAppearance(targetPage, widgetRect, {
-      signerName,
-      signerType,
-      contract,
-      font: appearanceFont,
-      boldFont: appearanceBoldFont,
-      signingTime,
-    });
+    for (const placement of signaturePlacements) {
+      const placementPage =
+        pages[placement.pageIndex] || pages[pages.length - 1];
+      await drawCompanyDigitalSignatureAppearance(
+        placementPage,
+        placement.rect,
+        {
+          signerName,
+          signerType,
+          contract,
+          font: appearanceFont,
+          boldFont: appearanceBoldFont,
+          signingTime,
+        },
+      );
+    }
 
     pdflibAddPlaceholder({
       pdfDoc,
@@ -3492,6 +3705,7 @@ ${xrefOffset}
     signerType,
     widgetRect,
     pageIndex,
+    placements,
     signatureImageBuffer,
     signingTime,
   }) {
@@ -3521,33 +3735,41 @@ ${xrefOffset}
     );
     const rootObjectNumber = Number(rootMatch[1]);
     const prevStartXref = Number(startXrefMatch[1]);
-    const pageObjectNumber =
-      this.getPageObjectNumberAtIndex(sourceBuffer, objectMatches, pageIndex) ||
-      Number(widgetMatches[widgetMatches.length - 1][2]);
-    const annotationObjectNumber = maxObjectNumber + 1;
-    const appearanceObjectNumber = maxObjectNumber + 2;
-    const imageObjectNumber = maxObjectNumber + 3;
-    const pageBody = this.getPdfObjectBody(sourceBuffer, pageObjectNumber);
-
-    if (!pageBody) {
-      throw new Error(ErrorCodes.PDF_PAGE_OBJECT_MISSING.message);
-    }
-
-    const resolvedWidgetRect = widgetRect || getSignatureWidgetRect(signerType);
-    const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
-    const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
-    const appearanceImage = await createHandwrittenSignatureAppearanceImage({
-      width: widgetWidth,
-      height: widgetHeight,
-      signatureImageBuffer,
-      signingTime,
-    });
-    const updatedPageBody = this.replaceOrAppendArrayItem(
-      pageBody,
-      "Annots",
-      `${annotationObjectNumber} 0 R`,
+    const resolvedPlacements =
+      Array.isArray(placements) && placements.length
+        ? placements
+        : getSignatureWidgetPlacements(
+            { pageIndex, rect: widgetRect },
+            signerType,
+          );
+    const fallbackPageObjectNumber = Number(
+      widgetMatches[widgetMatches.length - 1][2],
     );
-    const annotationObject = `<<
+    let nextObjectNumber = maxObjectNumber + 1;
+    const pageAnnotationRefs = new Map();
+    const objects = [];
+
+    for (const [placementIndex, placement] of resolvedPlacements.entries()) {
+      const resolvedWidgetRect =
+        placement.rect || widgetRect || getSignatureWidgetRect(signerType);
+      const pageObjectNumber =
+        this.getPageObjectNumberAtIndex(
+          sourceBuffer,
+          objectMatches,
+          placement.pageIndex,
+        ) || fallbackPageObjectNumber;
+      const annotationObjectNumber = nextObjectNumber++;
+      const appearanceObjectNumber = nextObjectNumber++;
+      const imageObjectNumber = nextObjectNumber++;
+      const widgetWidth = resolvedWidgetRect[2] - resolvedWidgetRect[0];
+      const widgetHeight = resolvedWidgetRect[3] - resolvedWidgetRect[1];
+      const appearanceImage = await createHandwrittenSignatureAppearanceImage({
+        width: widgetWidth,
+        height: widgetHeight,
+        signatureImageBuffer,
+        signingTime,
+      });
+      const annotationObject = `<<
 /Type /Annot
 /Subtype /Stamp
 /Rect [${resolvedWidgetRect.join(" ")}]
@@ -3555,14 +3777,14 @@ ${xrefOffset}
 /F 4
 /P ${pageObjectNumber} 0 R
 /AP << /N ${appearanceObjectNumber} 0 R >>
-/T (${escapePdfString(signerName || signerType || "handwritten")})
+/T (${escapePdfString(signerName || signerType || "handwritten")}_${placementIndex})
 /M (${formatPdfDate(signingTime)})
 >>`;
-    const appearanceStream = `q
+      const appearanceStream = `q
 ${widgetWidth} 0 0 ${widgetHeight} 0 0 cm
 /ImSig Do
 Q`;
-    const appearanceObject = `<<
+      const appearanceObject = `<<
 /Type /XObject
 /Subtype /Form
 /BBox [0 0 ${widgetWidth} ${widgetHeight}]
@@ -3576,9 +3798,9 @@ Q`;
 stream
 ${appearanceStream}
 endstream`;
-    const imageObject = Buffer.concat([
-      Buffer.from(
-        `<<
+      const imageObject = Buffer.concat([
+        Buffer.from(
+          `<<
 /Type /XObject
 /Subtype /Image
 /Width ${appearanceImage.width}
@@ -3590,17 +3812,40 @@ endstream`;
 >>
 stream
 `,
-        "latin1",
-      ),
-      appearanceImage.buffer,
-      Buffer.from("\nendstream", "latin1"),
-    ]);
-    const objects = [
-      [pageObjectNumber, updatedPageBody],
-      [annotationObjectNumber, annotationObject],
-      [appearanceObjectNumber, appearanceObject],
-      [imageObjectNumber, imageObject],
-    ].sort((left, right) => left[0] - right[0]);
+          "latin1",
+        ),
+        appearanceImage.buffer,
+        Buffer.from("\nendstream", "latin1"),
+      ]);
+      const pageRefs = pageAnnotationRefs.get(pageObjectNumber) || [];
+      pageRefs.push(`${annotationObjectNumber} 0 R`);
+      pageAnnotationRefs.set(pageObjectNumber, pageRefs);
+      objects.push(
+        [annotationObjectNumber, annotationObject],
+        [appearanceObjectNumber, appearanceObject],
+        [imageObjectNumber, imageObject],
+      );
+    }
+
+    for (const [pageObjectNumber, annotationRefs] of pageAnnotationRefs) {
+      let updatedPageBody = this.getPdfObjectBody(
+        sourceBuffer,
+        pageObjectNumber,
+      );
+      if (!updatedPageBody) {
+        throw new Error(ErrorCodes.PDF_PAGE_OBJECT_MISSING.message);
+      }
+      for (const annotationRef of annotationRefs) {
+        updatedPageBody = this.replaceOrAppendArrayItem(
+          updatedPageBody,
+          "Annots",
+          annotationRef,
+        );
+      }
+      objects.push([pageObjectNumber, updatedPageBody]);
+    }
+
+    objects.sort((left, right) => left[0] - right[0]);
     const chunks = [Buffer.from("\n", "latin1")];
     const offsets = [];
 
@@ -3628,7 +3873,7 @@ stream
 
     trailer += `trailer
 <<
-/Size ${imageObjectNumber + 1}
+/Size ${nextObjectNumber}
 /Root ${rootObjectNumber} 0 R
 /Prev ${prevStartXref}
 >>
@@ -3667,12 +3912,17 @@ ${xrefOffset}
         details,
       );
       const signatureWidget = signatureWidgets?.[signerType];
+      const signaturePlacements = getSignatureWidgetPlacements(
+        signatureWidget,
+        signerType,
+      );
       const signedBuffer = await this.appendIncrementalHandwrittenSignature({
         sourceBytes: inputBytes,
         signerName,
         signerType,
         widgetRect: signatureWidget?.rect,
         pageIndex: signatureWidget?.pageIndex,
+        placements: signaturePlacements,
         signatureImageBuffer,
         signingTime,
       });
@@ -3700,8 +3950,10 @@ ${xrefOffset}
       details,
     );
     const signatureWidget = signatureWidgets?.[signerType];
-    const targetPage =
-      pages[signatureWidget?.pageIndex] || pages[pages.length - 1];
+    const signaturePlacements = getSignatureWidgetPlacements(
+      signatureWidget,
+      signerType,
+    );
     const widgetRect =
       signatureWidget?.rect || getSignatureWidgetRect(signerType);
     const [fontPath, boldFontPath] = await Promise.all([
@@ -3723,11 +3975,14 @@ ${xrefOffset}
         ),
       ]);
 
-    drawHandwrittenSignatureAppearance(targetPage, widgetRect, {
-      image: signatureImage,
-      font: appearanceFont,
-      signingTime,
-    });
+    for (const placement of signaturePlacements) {
+      const targetPage = pages[placement.pageIndex] || pages[pages.length - 1];
+      drawHandwrittenSignatureAppearance(targetPage, placement.rect, {
+        image: signatureImage,
+        font: appearanceFont,
+        signingTime,
+      });
+    }
 
     const signedBytes = await pdfDoc.save({ useObjectStreams: false });
     const signedBuffer = Buffer.from(signedBytes);

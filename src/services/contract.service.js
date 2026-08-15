@@ -100,9 +100,7 @@ function getPublishContractErrorMessage(status) {
 
 function ensureContractSigningState(contract, signerType) {
   if (contract.status === CONTRACT_STATUS.DRAFT) {
-    throw new BadRequestException(
-      ErrorCodes.CONTRACT_DRAFT_MUST_BE_PUBLISHED,
-    );
+    throw new BadRequestException(ErrorCodes.CONTRACT_DRAFT_MUST_BE_PUBLISHED);
   }
 
   if (contract.status === CONTRACT_STATUS.COMPLETED) {
@@ -117,7 +115,9 @@ function ensureContractSigningState(contract, signerType) {
     contract.status === CONTRACT_STATUS.OWNER_SIGNED &&
     signerType !== "partner"
   ) {
-    throw new BadRequestException(ErrorCodes.CONTRACT_PARTNER_MUST_SIGN_AFTER_OWNER);
+    throw new BadRequestException(
+      ErrorCodes.CONTRACT_PARTNER_MUST_SIGN_AFTER_OWNER,
+    );
   }
 }
 
@@ -133,9 +133,7 @@ function getNextContractStatus(contract, signerType) {
 
 function ensurePartnerSignerTypeSelected(contract) {
   if (!contract.signerType) {
-    throw new BadRequestException(
-      ErrorCodes.CONTRACT_SIGNER_TYPE_REQUIRED,
-    );
+    throw new BadRequestException(ErrorCodes.CONTRACT_SIGNER_TYPE_REQUIRED);
   }
 }
 
@@ -149,9 +147,7 @@ function ensurePartnerCredentialReady(contract) {
       !credential.first_identification_image ||
       !credential.second_identification_image
     ) {
-      throw new BadRequestException(
-        ErrorCodes.CONTRACT_INDIVIDUAL_ID_REQUIRED,
-      );
+      throw new BadRequestException(ErrorCodes.CONTRACT_INDIVIDUAL_ID_REQUIRED);
     }
   }
 
@@ -166,7 +162,10 @@ function ensurePartnerCredentialReady(contract) {
   }
 }
 
-function assertImageOrPdfFile(file, errorCode = ErrorCodes.CONTRACT_IMAGE_OR_PDF_REQUIRED) {
+function assertImageOrPdfFile(
+  file,
+  errorCode = ErrorCodes.CONTRACT_IMAGE_OR_PDF_REQUIRED,
+) {
   const mimeType = String(file?.mimetype || "").toLowerCase();
   const isImage = mimeType.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
@@ -305,7 +304,10 @@ async function uploadPdfBufferToS3({
   description,
   visibility = "private",
 }) {
-  const safeFileName = String(fileName || "contract.pdf").replace(/[\\/]/g, "-");
+  const safeFileName = String(fileName || "contract.pdf").replace(
+    /[\\/]/g,
+    "-",
+  );
   const s3Key = `${folder}/${safeFileName}`;
   const s3Result = await S3Service.upload({
     key: s3Key,
@@ -334,7 +336,10 @@ function buildIndividualCredentialFromImages({ firstImage, secondImage }) {
 
 async function attachParentContractData(input = {}, options = {}) {
   const contractType = ContractTypeRegistry.normalizeType(input.contractType);
-  if (contractType !== "livestream_responsibility_commitment_appendix") {
+  const isLivestreamAppendix =
+    contractType === "livestream_responsibility_commitment_appendix";
+  const isEmploymentAppendix = contractType === "employment_contract_appendix";
+  if (!isLivestreamAppendix && !isEmploymentAppendix) {
     return input;
   }
 
@@ -342,16 +347,72 @@ async function attachParentContractData(input = {}, options = {}) {
     input.contractData && typeof input.contractData === "object"
       ? input.contractData
       : {};
-  const parentContractId = input.parentContractId ?? sourceData.parentContractId;
+  const parentContractId =
+    input.parentContractId ?? sourceData.parentContractId;
   if (!parentContractId) return input;
 
   const parentContract = await Contract.findOne({
     where: { contractId: parentContractId },
-    attributes: ["contractId", "contractNumber"],
+    attributes: [
+      "contractId",
+      "contractNumber",
+      "contractType",
+      "ownerCompanyInfo",
+      "contractData",
+    ],
     transaction: options.transaction,
   });
   if (!parentContract) {
     throw new NotFoundException(ErrorCodes.NOT_FOUND);
+  }
+
+  if (isEmploymentAppendix) {
+    if (
+      ContractTypeRegistry.normalizeType(parentContract.contractType) !==
+      "employment_contract"
+    ) {
+      throw new BadRequestException(ErrorCodes.CONTRACT_PARENT_TYPE_INVALID);
+    }
+
+    const parentData = parentContract.contractData || {};
+    const copyField = (field) =>
+      Object.prototype.hasOwnProperty.call(input, field)
+        ? input[field]
+        : Object.prototype.hasOwnProperty.call(sourceData, field)
+          ? sourceData[field]
+          : (parentData[field] ?? null);
+
+    return {
+      ...input,
+      ownerCompanyInfo: parentContract.ownerCompanyInfo,
+      partnerCompanyInfo: null,
+      personalInfo:
+        input.personalInfo ??
+        sourceData.personalInfo ??
+        parentData.personalInfo ??
+        null,
+      parentContractId: parentContract.contractId,
+      employmentContractNumber: parentContract.contractNumber,
+      contractData: {
+        ...sourceData,
+        ownerCompanyInfo: parentContract.ownerCompanyInfo,
+        partnerCompanyInfo: null,
+        personalInfo:
+          input.personalInfo ??
+          sourceData.personalInfo ??
+          parentData.personalInfo ??
+          null,
+        parentContractId: parentContract.contractId,
+        employmentContractNumber: parentContract.contractNumber,
+        contractDate: copyField("contractDate"),
+        baseSalary: copyField("baseSalary"),
+        mealAllowance: copyField("mealAllowance"),
+        phoneUniformAllowance: copyField("phoneUniformAllowance"),
+        performanceBonus: copyField("performanceBonus"),
+        transportationAllowance: copyField("transportationAllowance"),
+        totalSalary: copyField("totalSalary"),
+      },
+    };
   }
 
   return {
@@ -535,9 +596,7 @@ class ContractService {
       }
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_DRAFT_DOWNLOAD_ONLY,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_DRAFT_DOWNLOAD_ONLY);
       }
 
       const details = await this.getContractDetails(contractId, {
@@ -663,7 +722,8 @@ class ContractService {
     }
 
     const normalizedContractNumber = String(contractNumber || "").trim();
-    const normalizedContractType = ContractTypeRegistry.normalizeType(contractType);
+    const normalizedContractType =
+      ContractTypeRegistry.normalizeType(contractType);
     const existingContract = await Contract.findOne({
       where: { contractNumber: normalizedContractNumber },
       attributes: ["contractId"],
@@ -775,9 +835,7 @@ class ContractService {
       }
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_DRAFT_PUBLISH_ONLY,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_DRAFT_PUBLISH_ONLY);
       }
 
       const details = await this.getContractDetails(contractId, {
@@ -809,9 +867,12 @@ class ContractService {
         sourceFileHash = generatedPdf.pdfHashHex;
       }
 
-      const nextVersion = await this.getNextContractDocumentVersion(contractId, {
-        transaction,
-      });
+      const nextVersion = await this.getNextContractDocumentVersion(
+        contractId,
+        {
+          transaction,
+        },
+      );
       const s3Result = await uploadPdfBufferToS3({
         pdfBuffer: sourceBuffer,
         fileName: sourceFileName,
@@ -955,9 +1016,7 @@ class ContractService {
       });
 
       if (latestDocument.status !== CONTRACT_STATUS.COMPLETED) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_LATEST_NOT_COMPLETED,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_LATEST_NOT_COMPLETED);
       }
 
       const sourceBuffer = await readPdfBufferFromSource(
@@ -1026,9 +1085,7 @@ class ContractService {
       }
 
       if (contract.status !== CONTRACT_STATUS.DRAFT) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_DRAFT_UPDATE_ONLY,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_DRAFT_UPDATE_ONLY);
       }
 
       const currentDetails = await this.getContractDetails(contractId, {
@@ -1041,25 +1098,28 @@ class ContractService {
       const hasDetailsUpdate =
         Object.prototype.hasOwnProperty.call(updateData, "details") ||
         Object.prototype.hasOwnProperty.call(sourceData, "details");
-      const inputWithParent = await attachParentContractData({
-        ...updateData,
-        ownerCompanyInfo:
-          updateData.ownerCompanyInfo ?? contract.ownerCompanyInfo,
-        partnerCompanyInfo:
-          updateData.partnerCompanyInfo ?? contract.partnerCompanyInfo,
-        contractDueDate:
-          updateData.contractDueDate ?? contract.contractDueDate,
-        contractType: updateData.contractType ?? contract.contractType,
-        contractData: {
-          ...(contract.contractData || {}),
-          ...sourceData,
+      const inputWithParent = await attachParentContractData(
+        {
+          ...updateData,
+          ownerCompanyInfo:
+            updateData.ownerCompanyInfo ?? contract.ownerCompanyInfo,
+          partnerCompanyInfo:
+            updateData.partnerCompanyInfo ?? contract.partnerCompanyInfo,
+          contractDueDate:
+            updateData.contractDueDate ?? contract.contractDueDate,
+          contractType: updateData.contractType ?? contract.contractType,
+          contractData: {
+            ...(contract.contractData || {}),
+            ...sourceData,
+          },
+          details: hasDetailsUpdate
+            ? (updateData.details ?? sourceData.details ?? [])
+            : currentDetails,
         },
-        details: hasDetailsUpdate
-          ? (updateData.details ?? sourceData.details ?? [])
-          : currentDetails,
-      }, {
-        transaction,
-      });
+        {
+          transaction,
+        },
+      );
       const normalizedContract =
         ContractTypeRegistry.normalizeInput(inputWithParent);
       validateContractTypeInput(normalizedContract);
@@ -1389,9 +1449,7 @@ class ContractService {
     uploadedBy = null,
   }) {
     if (!firstIdentificationImage || !secondIdentificationImage) {
-      throw new BadRequestException(
-        ErrorCodes.CONTRACT_TWO_ID_IMAGES_REQUIRED,
-      );
+      throw new BadRequestException(ErrorCodes.CONTRACT_TWO_ID_IMAGES_REQUIRED);
     }
 
     const contract = await Contract.findOne({ where: { contractId } });
@@ -1407,9 +1465,7 @@ class ContractService {
     }
 
     if (contract.signerType !== "individual") {
-      throw new BadRequestException(
-        ErrorCodes.CONTRACT_INDIVIDUAL_UPLOAD_ONLY,
-      );
+      throw new BadRequestException(ErrorCodes.CONTRACT_INDIVIDUAL_UPLOAD_ONLY);
     }
 
     const oldCredentialS3Keys = new Set(
@@ -1491,7 +1547,9 @@ class ContractService {
     uploadedBy = null,
   }) {
     if (!businessLicense) {
-      throw new BadRequestException(ErrorCodes.CONTRACT_BUSINESS_LICENSE_REQUIRED);
+      throw new BadRequestException(
+        ErrorCodes.CONTRACT_BUSINESS_LICENSE_REQUIRED,
+      );
     }
 
     const contract = await Contract.findOne({ where: { contractId } });
@@ -1652,7 +1710,10 @@ class ContractService {
     signatureImage,
     uploadedBy = null,
   }) {
-    assertImageFile(signatureImage, ErrorCodes.CONTRACT_HANDWRITTEN_SIGNATURE_INVALID);
+    assertImageFile(
+      signatureImage,
+      ErrorCodes.CONTRACT_HANDWRITTEN_SIGNATURE_INVALID,
+    );
 
     return Contract.sequelize.transaction(async (transaction) => {
       const contract = await Contract.findOne({
@@ -1677,15 +1738,11 @@ class ContractService {
       }
 
       if (!["individual", "organization"].includes(resolvedPartnerSignerType)) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_SIGNER_TYPE_INVALID,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_SIGNER_TYPE_INVALID);
       }
 
       if (contract.signerType !== resolvedPartnerSignerType) {
-        throw new BadRequestException(
-          ErrorCodes.CONTRACT_SIGNER_TYPE_MISMATCH,
-        );
+        throw new BadRequestException(ErrorCodes.CONTRACT_SIGNER_TYPE_MISMATCH);
       }
 
       if (resolvedPartnerSignerType !== "individual") {

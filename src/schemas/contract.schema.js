@@ -174,10 +174,17 @@ const createContractTemplateSchema = [
     .withMessage(
       "contractDate, startDate, probationStartDate và probationEndDate phải là ngày ISO8601 hợp lệ",
     ),
-  body(["contractTerm", "workLocation", "salaryInWords"])
+  body([
+    "contractTerm",
+    "workLocation",
+    "salaryInWords",
+    "employmentContractNumber",
+  ])
     .optional({ nullable: true })
     .isString()
-    .withMessage("contractTerm, workLocation và salaryInWords phải là chuỗi"),
+    .withMessage(
+      "contractTerm, workLocation, salaryInWords và employmentContractNumber phải là chuỗi",
+    ),
   body([
     "baseSalary",
     "mealAllowance",

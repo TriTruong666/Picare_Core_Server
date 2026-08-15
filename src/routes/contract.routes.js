@@ -39,7 +39,7 @@ const credentialUpload = multer({
  * /api/v1/contracts:
  *   post:
  *     summary: Tạo hợp đồng theo loại hợp đồng
- *     description: Tạo hợp đồng ở trạng thái nháp. contractType được resolve qua contract type registry; employment_contract và probation_contract được dựng PDF động hoàn toàn, các type chưa đăng ký dùng generic builder với dữ liệu động trong contractData/details.
+ *     description: Tạo hợp đồng ở trạng thái nháp. contractType được resolve qua contract type registry; employment_contract, employment_contract_appendix và probation_contract được dựng PDF động hoàn toàn, các type chưa đăng ký dùng generic builder với dữ liệu động trong contractData/details.
  *     tags: [Contracts]
  *     security:
  *       - bearerAuth: []
@@ -66,7 +66,7 @@ const credentialUpload = multer({
  *                 description: Thông tin đối tác. Bắt buộc với contractType=principle.
  *               personalInfo:
  *                 type: object
- *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract hoặc probation_contract thay cho partnerCompanyInfo.
+ *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract, employment_contract_appendix hoặc probation_contract thay cho partnerCompanyInfo.
  *               title:
  *                 type: string
  *                 description: Tiêu đề bắt buộc của custom_organization và custom_personal.
@@ -83,7 +83,7 @@ const credentialUpload = multer({
  *               parentContractId:
  *                 type: string
  *                 format: uuid
- *                 description: ID hợp đồng chính. Dùng cho contractType=livestream_responsibility_commitment_appendix để liên kết phụ lục với hợp đồng gốc.
+ *                 description: ID hợp đồng chính. Dùng cho livestream_responsibility_commitment_appendix hoặc employment_contract_appendix để sao chép dữ liệu từ hợp đồng gốc.
  *               contractDueDate:
  *                 type: string
  *                 format: date
@@ -91,7 +91,7 @@ const credentialUpload = multer({
  *               contractDate:
  *                 type: string
  *                 format: date
- *                 description: Ngày lập hợp đồng. Dùng cho employment_contract và probation_contract.
+ *                 description: Ngày lập hợp đồng/phụ lục. Dùng cho employment_contract, employment_contract_appendix và probation_contract.
  *               contractTerm:
  *                 type: string
  *                 description: Loại/thời hạn hợp đồng lao động.
@@ -125,6 +125,9 @@ const credentialUpload = multer({
  *                 type: number
  *               totalSalary:
  *                 type: number
+ *               employmentContractNumber:
+ *                 type: string
+ *                 description: Số HĐLĐ gốc, được hệ thống tự sao chép khi tạo employment_contract_appendix.
  *               details:
  *                 type: array
  *                 items:
@@ -318,6 +321,18 @@ const credentialUpload = multer({
  *                 workLocation: Văn phòng chính của Công ty
  *                 probationSalary: 6000000
  *                 performanceBonus: null
+ *             employmentContractAppendix:
+ *               summary: Phụ lục hợp đồng lao động độc lập
+ *               value:
+ *                 contractType: employment_contract_appendix
+ *                 parentContractId: 11111111-1111-4111-8111-111111111111
+ *                 contractDate: 2026-08-15
+ *                 baseSalary: 8000000
+ *                 mealAllowance: 500000
+ *                 phoneUniformAllowance: 300000
+ *                 performanceBonus: 1000000
+ *                 transportationAllowance: 200000
+ *                 totalSalary: 10000000
  *             appendix:
  *               summary: Phụ lục hợp đồng
  *               value:
@@ -589,7 +604,7 @@ router.delete(
  *                 type: object
  *               personalInfo:
  *                 type: object
- *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract hoặc probation_contract thay cho partnerCompanyInfo.
+ *                 description: Thông tin cá nhân. Dùng cho livestream_responsibility_commitment, custom_personal, employment_contract, employment_contract_appendix hoặc probation_contract thay cho partnerCompanyInfo.
  *               legalRegulation:
  *                 type: string
  *                 nullable: true
@@ -597,14 +612,14 @@ router.delete(
  *               parentContractId:
  *                 type: string
  *                 format: uuid
- *                 description: ID hợp đồng chính. Dùng cho contractType=livestream_responsibility_commitment_appendix; thông tin cá nhân được lấy từ record hợp đồng chính.
+ *                 description: ID hợp đồng chính. Dùng cho livestream_responsibility_commitment_appendix hoặc employment_contract_appendix; dữ liệu được lấy từ record hợp đồng chính.
  *               contractDueDate:
  *                 type: string
  *                 format: date
  *               contractDate:
  *                 type: string
  *                 format: date
- *                 description: Ngày lập hợp đồng. Dùng cho employment_contract và probation_contract.
+ *                 description: Ngày lập hợp đồng/phụ lục. Dùng cho employment_contract, employment_contract_appendix và probation_contract.
  *               contractTerm:
  *                 type: string
  *               startDate:
@@ -634,6 +649,8 @@ router.delete(
  *                 type: number
  *               totalSalary:
  *                 type: number
+ *               employmentContractNumber:
+ *                 type: string
  *               principleContractNumber:
  *                 type: string
  *                 description: Số hợp đồng nguyên tắc đính kèm. Dùng cho contractType=appendix.
