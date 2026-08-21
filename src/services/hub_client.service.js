@@ -2,6 +2,8 @@ const { Op } = require("sequelize");
 const HubClient = require("../models/hub_client.model");
 const { HubClientDTO } = require("../schemas/hub_client.schema");
 const JWTService = require("./jwt.service");
+const S3Service = require("./s3.service");
+const mime = require("mime-types");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const {
   NotFoundException,
@@ -10,6 +12,98 @@ const {
   ForbiddenException,
 } = require("../common/exceptions/BaseException");
 const { ClientStatus } = require("../common/enum/hub_client.enum");
+
+const HUB_CLIENT_S3_FOLDER = "hub_clients";
+
+async function resolveAndUploadImage({
+  file,
+  rawValue,
+  fallbackUrl = null,
+  clientId = null,
+  uploadedBy = null,
+  description = "Hub client image",
+}) {
+  // 1. If multer file is provided (Buffer)
+  if (file && file.buffer) {
+    const originalName = file.originalname || `hub_client_${Date.now()}.png`;
+    const key = S3Service.buildKey(HUB_CLIENT_S3_FOLDER, originalName);
+    const result = await S3Service.upload({
+      key,
+      body: file.buffer,
+      mimeType: file.mimetype || "image/png",
+      originalName,
+      fileSize: file.size || file.buffer.length,
+      folder: HUB_CLIENT_S3_FOLDER,
+      clientId,
+      uploadedBy,
+      description,
+      visibility: "public",
+    });
+    return result.url;
+  }
+
+  // 2. If rawValue is provided as string
+  if (typeof rawValue === "string") {
+    const trimmed = rawValue.trim();
+    if (!trimmed) return null;
+
+    // Check if it is base64 data URI (data:image/...;base64,...)
+    const base64Match = trimmed.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (base64Match && base64Match.length === 3) {
+      const mimeType = base64Match[1];
+      const buffer = Buffer.from(base64Match[2], "base64");
+      const ext = mime.extension(mimeType) || mimeType.split("/")[1] || "png";
+      const originalName = `hub_client_${Date.now()}.${ext}`;
+      const key = S3Service.buildKey(HUB_CLIENT_S3_FOLDER, originalName);
+      const result = await S3Service.upload({
+        key,
+        body: buffer,
+        mimeType,
+        originalName,
+        fileSize: buffer.length,
+        folder: HUB_CLIENT_S3_FOLDER,
+        clientId,
+        uploadedBy,
+        description,
+        visibility: "public",
+      });
+      return result.url;
+    }
+
+    // Check if it is raw base64 string
+    if (
+      trimmed.length > 500 &&
+      !trimmed.startsWith("http://") &&
+      !trimmed.startsWith("https://")
+    ) {
+      try {
+        const buffer = Buffer.from(trimmed, "base64");
+        const originalName = `hub_client_${Date.now()}.png`;
+        const key = S3Service.buildKey(HUB_CLIENT_S3_FOLDER, originalName);
+        const result = await S3Service.upload({
+          key,
+          body: buffer,
+          mimeType: "image/png",
+          originalName,
+          fileSize: buffer.length,
+          folder: HUB_CLIENT_S3_FOLDER,
+          clientId,
+          uploadedBy,
+          description,
+          visibility: "public",
+        });
+        return result.url;
+      } catch (_) {
+        // Fallback to URL
+      }
+    }
+
+    // Already a regular URL
+    return trimmed;
+  }
+
+  return fallbackUrl;
+}
 
 class HubClientService {
   static normalizeRole(role) {
@@ -181,9 +275,10 @@ class HubClientService {
   }
 
   /**
-   * Create a new hub client
+   * Create a new hub client (handles image upload to S3 directly)
    */
-  static async createClient(clientData) {
+  static async createClient(clientData, options = {}) {
+    const { files = {}, uploadedBy = null } = options;
     const safeClientData = clientData || {};
     const existingClient = await HubClient.findOne({
       where: { clientName: safeClientData.clientName },
@@ -192,18 +287,64 @@ class HubClientService {
       throw new BadRequestException(ErrorCodes.HUB_CLIENT_NAME_TAKEN);
     }
 
-    const { clientInternalUrl: _clientInternalUrl, ...createData } = safeClientData;
+    let allowedRoles = safeClientData.allowedRoles;
+    if (typeof allowedRoles === "string") {
+      try {
+        allowedRoles = JSON.parse(allowedRoles);
+      } catch (_) {
+        allowedRoles = allowedRoles.split(",").map((r) => r.trim()).filter(Boolean);
+      }
+    }
+
+    const logoFile =
+      files?.logoFile?.[0] ||
+      files?.clientLogoImage?.[0] ||
+      files?.logo?.[0] ||
+      null;
+    const mockupFile =
+      files?.mockupFile?.[0] ||
+      files?.clientMockupImage?.[0] ||
+      files?.mockup?.[0] ||
+      null;
+
+    const logoUrl = await resolveAndUploadImage({
+      file: logoFile,
+      rawValue: safeClientData.clientLogoImage || safeClientData.logoFile,
+      uploadedBy,
+      description: `Hub client logo - ${safeClientData.clientName || "new-client"}`,
+    });
+
+    const mockupUrl = await resolveAndUploadImage({
+      file: mockupFile,
+      rawValue: safeClientData.clientMockupImage || safeClientData.mockupFile,
+      uploadedBy,
+      description: `Hub client mockup - ${safeClientData.clientName || "new-client"}`,
+    });
+
+    const {
+      clientInternalUrl: _clientInternalUrl,
+      clientLogoImage: _cli,
+      clientMockupImage: _cmi,
+      logoFile: _lf,
+      mockupFile: _mf,
+      ...createData
+    } = safeClientData;
+
     const newClient = await HubClient.create({
       ...createData,
+      clientLogoImage: logoUrl,
+      clientMockupImage: mockupUrl,
+      allowedRoles: Array.isArray(allowedRoles) ? allowedRoles : ["admin"],
       clientInternalUrl: null,
     });
     return HubClientDTO.fromClient(newClient);
   }
 
   /**
-   * Update hub client information
+   * Update hub client information (handles image upload to S3 directly)
    */
-  static async updateClient(clientId, updateData) {
+  static async updateClient(clientId, updateData, options = {}) {
+    const { files = {}, uploadedBy = null } = options;
     const safeUpdateData = updateData || {};
     const client = await HubClient.findOne({ where: { clientId } });
 
@@ -220,10 +361,84 @@ class HubClientService {
       }
     }
 
+    let allowedRoles = safeUpdateData.allowedRoles;
+    if (typeof allowedRoles === "string") {
+      try {
+        allowedRoles = JSON.parse(allowedRoles);
+      } catch (_) {
+        allowedRoles = allowedRoles.split(",").map((r) => r.trim()).filter(Boolean);
+      }
+    }
+
+    const logoFile =
+      files?.logoFile?.[0] ||
+      files?.clientLogoImage?.[0] ||
+      files?.logo?.[0] ||
+      null;
+    const mockupFile =
+      files?.mockupFile?.[0] ||
+      files?.clientMockupImage?.[0] ||
+      files?.mockup?.[0] ||
+      null;
+
+    let logoUrl = client.clientLogoImage;
+    if (
+      logoFile ||
+      Object.prototype.hasOwnProperty.call(safeUpdateData, "clientLogoImage") ||
+      Object.prototype.hasOwnProperty.call(safeUpdateData, "logoFile")
+    ) {
+      logoUrl = await resolveAndUploadImage({
+        file: logoFile,
+        rawValue:
+          safeUpdateData.clientLogoImage !== undefined
+            ? safeUpdateData.clientLogoImage
+            : safeUpdateData.logoFile,
+        fallbackUrl: client.clientLogoImage,
+        clientId,
+        uploadedBy,
+        description: `Hub client logo - ${clientId}`,
+      });
+    }
+
+    let mockupUrl = client.clientMockupImage;
+    if (
+      mockupFile ||
+      Object.prototype.hasOwnProperty.call(safeUpdateData, "clientMockupImage") ||
+      Object.prototype.hasOwnProperty.call(safeUpdateData, "mockupFile")
+    ) {
+      mockupUrl = await resolveAndUploadImage({
+        file: mockupFile,
+        rawValue:
+          safeUpdateData.clientMockupImage !== undefined
+            ? safeUpdateData.clientMockupImage
+            : safeUpdateData.mockupFile,
+        fallbackUrl: client.clientMockupImage,
+        clientId,
+        uploadedBy,
+        description: `Hub client mockup - ${clientId}`,
+      });
+    }
+
+    const {
+      logoFile: _lf,
+      mockupFile: _mf,
+      ...cleanedUpdateData
+    } = safeUpdateData;
+
     const normalizedUpdateData = {
-      ...safeUpdateData,
+      ...cleanedUpdateData,
+      clientLogoImage: logoUrl,
+      clientMockupImage: mockupUrl,
+      ...(allowedRoles !== undefined && {
+        allowedRoles: Array.isArray(allowedRoles)
+          ? allowedRoles
+          : client.allowedRoles,
+      }),
       clientInternalUrl:
-        Object.prototype.hasOwnProperty.call(safeUpdateData, "clientInternalUrl")
+        Object.prototype.hasOwnProperty.call(
+          safeUpdateData,
+          "clientInternalUrl",
+        )
           ? this.normalizeNullableValue(safeUpdateData.clientInternalUrl)
           : safeUpdateData.clientInternalUrl,
     };

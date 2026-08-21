@@ -46,11 +46,22 @@ const createHubClientSchema = [
     .withMessage("Trang thai client khong duoc de trong"),
   body("allowedRoles")
     .optional()
+    .customSanitizer((value) => {
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [value];
+        } catch (_) {
+          return value.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      }
+      return value;
+    })
     .isArray()
     .withMessage("Danh sach role cho phep phai la mot mang"),
   body("clientDescription").optional().trim(),
-  body("clientLogoImage").optional().trim(),
-  body("clientMockupImage").optional().trim(),
+  body("clientLogoImage").optional({ nullable: true }),
+  body("clientMockupImage").optional({ nullable: true }),
   body("note").optional().trim(),
 ];
 
@@ -72,11 +83,22 @@ const updateHubClientSchema = [
     .withMessage("Trang thai client khong duoc de trong"),
   body("allowedRoles")
     .optional()
+    .customSanitizer((value) => {
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [value];
+        } catch (_) {
+          return value.split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      }
+      return value;
+    })
     .isArray()
     .withMessage("Danh sach role cho phep phai la mot mang"),
   body("clientDescription").optional().trim(),
-  body("clientLogoImage").optional().trim(),
-  body("clientMockupImage").optional().trim(),
+  body("clientLogoImage").optional({ nullable: true }),
+  body("clientMockupImage").optional({ nullable: true }),
   body("note").optional().trim(),
 ];
 

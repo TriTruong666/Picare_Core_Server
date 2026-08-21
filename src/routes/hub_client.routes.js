@@ -1,4 +1,5 @@
 const express = require("express");
+const multer = require("multer");
 const router = express.Router();
 const HubClientController = require("../controllers/hub_client.controller");
 const { protect } = require("../middlewares/auth.middleware");
@@ -9,6 +10,21 @@ const {
   checkAccessSchema,
   checkAccessByUrlSchema,
 } = require("../schemas/hub_client.schema");
+const { maxFileUploadBytes } = require("../config/upload.config");
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: maxFileUploadBytes },
+});
+
+const hubClientUpload = upload.fields([
+  { name: "logoFile", maxCount: 1 },
+  { name: "mockupFile", maxCount: 1 },
+  { name: "clientLogoImage", maxCount: 1 },
+  { name: "clientMockupImage", maxCount: 1 },
+  { name: "logo", maxCount: 1 },
+  { name: "mockup", maxCount: 1 },
+]);
 
 /**
  * @swagger
@@ -81,9 +97,6 @@ router.get(
  * /api/v1/hub-clients/{clientId}/check-access:
  *   get:
  *     summary: Kiểm tra quyền truy cập của user hiện tại vào một client
- *     description: |
- *       Dùng khi user đã có session (cookie token). Không cần đăng nhập lại.
- *       API sẽ decode token từ cookie, lấy role và kiểm tra xem role đó có trong allowedRoles của client không.
  *     tags: [HubClients]
  *     parameters:
  *       - in: path
@@ -92,7 +105,6 @@ router.get(
  *         schema:
  *           type: string
  *           format: uuid
- *         description: UUID của client cần kiểm tra quyền
  *     responses:
  *       200:
  *         description: User có quyền truy cập. Trả về thông tin client và user.
@@ -133,44 +145,6 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
  *     tags: [HubClients]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [clientName, clientExternalUrl, clientStatus]
- *             properties:
- *               clientName:
- *                 type: string
- *               clientDescription:
- *                 type: string
- *               clientExternalUrl:
- *                 type: string
- *                 description: URL bên ngoài dùng để truy cập client; có thể tạo trước khi có clientInternalUrl.
- *               clientLogoImage:
- *                 type: string
- *               clientMockupImage:
- *                 type: string
- *               clientStatus:
- *                 type: string
- *               allowedRoles:
- *                 type: array
- *                 items:
- *                   type: string
- *               note:
- *                 type: string
- *           examples:
- *             createClient:
- *               summary: Tạo client mới
- *               value:
- *                 clientName: Mocelux Hub
- *                 clientDescription: Client quản lý cho Mocelux
- *                 clientExternalUrl: https://mocelux.example.com
- *                 clientStatus: active
- *                 allowedRoles:
- *                   - admin
- *                   - staff
  *     responses:
  *       201:
  *         description: Tạo thành công
@@ -178,6 +152,7 @@ router.get("/:clientId", clientIdSchema, HubClientController.getClientById);
 router.post(
   "/",
   protect,
+  hubClientUpload,
   createHubClientSchema,
   HubClientController.createClient,
 );
@@ -190,53 +165,6 @@ router.post(
  *     tags: [HubClients]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: clientId
- *         required: true
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               clientName:
- *                 type: string
- *               clientDescription:
- *                 type: string
- *               clientInternalUrl:
- *                 type: string
- *                 nullable: true
- *                 description: Internal URL được set ở bước edit sau khi client được tạo.
- *               clientExternalUrl:
- *                 type: string
- *               clientLogoImage:
- *                 type: string
- *               clientMockupImage:
- *                 type: string
- *               clientStatus:
- *                 type: string
- *               allowedRoles:
- *                 type: array
- *                 items:
- *                   type: string
- *               note:
- *                 type: string
- *           examples:
- *             updateClient:
- *               summary: Cập nhật client
- *               value:
- *                 clientName: Mocelux Hub
- *                 clientDescription: Client quản lý cho Mocelux
- *                 clientInternalUrl: https://internal.mocelux.local
- *                 clientExternalUrl: https://mocelux.example.com
- *                 clientStatus: active
- *                 allowedRoles:
- *                   - admin
- *                   - staff
  *     responses:
  *       200:
  *         description: Cập nhật thành công
@@ -244,6 +172,7 @@ router.post(
 router.put(
   "/:clientId",
   protect,
+  hubClientUpload,
   updateHubClientSchema,
   HubClientController.updateClient,
 );
@@ -256,12 +185,6 @@ router.put(
  *     tags: [HubClients]
  *     security:
  *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: clientId
- *         required: true
- *         schema:
- *           type: string
  *     responses:
  *       200:
  *         description: Xóa thành công

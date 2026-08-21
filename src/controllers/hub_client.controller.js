@@ -63,7 +63,10 @@ class HubClientController {
         throw new BadRequestException("Dữ liệu không hợp lệ", errors.array());
       }
 
-      const client = await HubClientService.createClient(req.body);
+      const client = await HubClientService.createClient(req.body, {
+        files: req.files || {},
+        uploadedBy: req.user?.userId || null,
+      });
 
       return ResponseHandler.created(
         res,
@@ -86,7 +89,10 @@ class HubClientController {
       }
 
       const { clientId } = req.params;
-      const client = await HubClientService.updateClient(clientId, req.body);
+      const client = await HubClientService.updateClient(clientId, req.body, {
+        files: req.files || {},
+        uploadedBy: req.user?.userId || null,
+      });
 
       return ResponseHandler.success(
         res,
