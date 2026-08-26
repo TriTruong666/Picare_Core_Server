@@ -117,6 +117,17 @@ const appConfig = {
     bucketName: process.env.AWS_S3_BUCKET_NAME || "",
   },
 
+  grpc: {
+    storageServiceToken: process.env.GRPC_STORAGE_SERVICE_TOKEN || "",
+    storageAllowedPrefixes: (
+      process.env.GRPC_STORAGE_ALLOWED_PREFIXES || "picare-intelligent/"
+    )
+      .split(",")
+      .map((prefix) => prefix.trim().replace(/^\/+|\/+$/g, ""))
+      .filter(Boolean)
+      .map((prefix) => `${prefix}/`),
+  },
+
   fptAi: {
     apiKey:
       process.env.FPT_AI_API_KEY || process.env.ID_RECOGNITION_API_KEY || "",

@@ -156,6 +156,9 @@ message ListTicketsResponse {
 service S3Service {
   rpc QueueUpload (S3UploadRequest) returns (S3UploadJobResponse) {}
   rpc GetUploadJob (S3UploadJobRequest) returns (S3UploadJobStatusResponse) {}
+  rpc DownloadObject (S3ObjectRequest) returns (stream S3DownloadChunk) {}
+  rpc GetObjectMetadata (S3ObjectRequest) returns (S3ObjectMetadataResponse) {}
+  rpc DeleteObject (S3ObjectRequest) returns (S3DeleteObjectResponse) {}
 }
 
 message S3UploadRequest {
@@ -199,4 +202,29 @@ message S3UploadJobStatusResponse {
   bool shouldPoll = 6;
   S3UploadResult result = 7;
   string failedReason = 8;
+}
+
+message S3ObjectRequest {
+  string key = 1;
+}
+
+message S3DownloadChunk {
+  bytes data = 1;
+  string contentType = 2;
+  int64 contentLength = 3;
+  string etag = 4;
+}
+
+message S3ObjectMetadataResponse {
+  string key = 1;
+  string contentType = 2;
+  int64 contentLength = 3;
+  string lastModified = 4;
+  map<string, string> metadata = 5;
+  string etag = 6;
+}
+
+message S3DeleteObjectResponse {
+  bool success = 1;
+  bool deletedRecord = 2;
 }

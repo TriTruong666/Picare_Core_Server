@@ -7,6 +7,7 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "test:grpc": "node grpc_client_test.js",
+    "test:grpc-storage": "node tests/grpc_s3.handler.test.js",
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {

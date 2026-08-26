@@ -41,6 +41,19 @@ For backend-to-backend communication, this hub provides gRPC services for:
 1. **Auth Service**: Validate tokens and retrieve user permissions.
 2. **User Service**: Fetch user details across services without database duplication.
 3. **Config Service**: Sync dynamic configurations across the ecosystem.
+4. **S3 Service**: Queue upload, stream download, metadata lookup and delete for other Picare services.
+
+Storage RPCs use metadata `x-service-token`. Configure the same secret on both sides:
+
+```dotenv
+# Picare Core Hub
+GRPC_STORAGE_SERVICE_TOKEN=replace-with-a-long-random-local-secret
+GRPC_STORAGE_ALLOWED_PREFIXES=picare-intelligent/
+```
+
+Picare Intelligent connects to this server with `STORAGE_GRPC_TARGET` and sends the matching `STORAGE_GRPC_SERVICE_TOKEN`. S3 credentials remain only in Core Hub.
+
+Xem contract, dependency và cách chạy test tại [docs/grpc-storage.md](docs/grpc-storage.md).
 
 ---
 

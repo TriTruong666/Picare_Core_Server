@@ -50,8 +50,10 @@ function startGrpcServer(port = 50051) {
   server.addService(authProto.S3Service.service, {
     QueueUpload: grpcS3Handler.queueUpload,
     GetUploadJob: grpcS3Handler.getUploadJob,
+    DownloadObject: grpcS3Handler.downloadObject,
+    GetObjectMetadata: grpcS3Handler.getObjectMetadata,
+    DeleteObject: grpcS3Handler.deleteObject,
   });
-
 
   server.bindAsync(
     `0.0.0.0:${port}`,
