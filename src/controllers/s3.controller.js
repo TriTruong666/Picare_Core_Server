@@ -2,6 +2,10 @@ const { validationResult } = require("express-validator");
 const { randomUUID } = require("crypto");
 const mime = require("mime-types");
 const ResponseHandler = require("../common/response.handler");
+const {
+  parseBase64DataUri,
+  resolveMimeType,
+} = require("../common/s3_upload.helper");
 const S3Service = require("../services/s3.service");
 const UploadStagingService = require("../services/upload_staging.service");
 const { packageVideoQueue, s3UploadQueue } = require("../jobs/queues");
@@ -56,30 +60,33 @@ class S3Controller {
       // 1. Trường hợp 1: Upload qua multipart/form-data (multer)
       if (req.file) {
         fileBuffer = req.file.buffer;
-        mimeType = req.file.mimetype;
         originalName = req.file.originalname;
+        mimeType = resolveMimeType(req.file.mimetype, originalName);
         fileSize = req.file.size;
-      } 
+      }
       // 2. Trường hợp 2: Upload qua JSON (base64 string trong body.file)
       else if (req.body.file && typeof req.body.file === "string") {
         const fileData = req.body.file;
-        
-        // Kiểm tra xem có phải data URI không (vd: data:image/png;base64,...)
-        const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-        
-        if (matches && matches.length === 3) {
-          mimeType = matches[1];
-          fileBuffer = Buffer.from(matches[2], "base64");
+        const parsedDataUri = parseBase64DataUri(fileData);
+        const requestedFilename = req.body.filename || null;
+
+        // Kiểm tra xem có phải data URI không (vd: data:video/mp4;base64,...)
+        if (parsedDataUri) {
+          mimeType = resolveMimeType(
+            parsedDataUri.mimeType,
+            requestedFilename,
+          );
+          fileBuffer = parsedDataUri.buffer;
           fileSize = fileBuffer.length;
         } else {
           // Nếu không phải data URI, giả định là base64 raw (cần mimeType trong body)
           fileBuffer = Buffer.from(fileData, "base64");
           fileSize = fileBuffer.length;
-          mimeType = req.body.mimeType || "application/octet-stream";
+          mimeType = resolveMimeType(req.body.mimeType, requestedFilename);
         }
-        
+
         const ext = mime.extension(mimeType) || mimeType.split("/")[1] || "bin";
-        originalName = req.body.filename || `upload_${Date.now()}.${ext}`;
+        originalName = requestedFilename || `upload_${Date.now()}.${ext}`;
       }
 
       if (!fileBuffer) {

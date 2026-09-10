@@ -17,6 +17,7 @@ const S3Folder = require("../models/s3_folder.model");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
+const { resolveMimeType } = require("../common/s3_upload.helper");
 const fs = require("fs");
 const path = require("path");
 const { pipeline } = require("stream/promises");
@@ -136,6 +137,8 @@ class S3Service {
     s3Metadata = {},
     allowExisting = false,
   }) {
+    const resolvedMimeType = resolveMimeType(mimeType, originalName);
+
     if (allowExisting) {
       const existingAsset = await S3Asset.findOne({
         where: { s3Key: key, s3Bucket: BUCKET },
@@ -157,7 +160,7 @@ class S3Service {
       Bucket: BUCKET,
       Key: key,
       Body: body,
-      ContentType: mimeType,
+      ContentType: resolvedMimeType,
       Metadata: s3Metadata,
     };
 
@@ -188,7 +191,7 @@ class S3Service {
         s3Region: REGION,
         etag: result.ETag,
         originalName,
-        mimeType,
+        mimeType: resolvedMimeType,
         fileSize: fileSize || 0,
         visibility,
         folderId,
