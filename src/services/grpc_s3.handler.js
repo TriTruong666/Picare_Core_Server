@@ -33,6 +33,8 @@ const isAuthorized = (call) => {
 };
 
 const requireAuthorization = (call, callback) => {
+  if (!appConfig.grpc.storageAuthEnabled) return true;
+
   if (!appConfig.grpc.storageServiceToken) {
     fail(
       callback,
@@ -53,6 +55,7 @@ const requireObjectKey = (call, callback) => {
     return null;
   }
   if (
+    appConfig.grpc.storageAuthEnabled &&
     !appConfig.grpc.storageAllowedPrefixes.some((prefix) =>
       key.startsWith(prefix),
     )

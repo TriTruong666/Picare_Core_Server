@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const grpc = require("@grpc/grpc-js");
 
+process.env.GRPC_STORAGE_AUTH_ENABLED = "true";
 process.env.GRPC_STORAGE_SERVICE_TOKEN = "test-storage-token";
 process.env.GRPC_STORAGE_ALLOWED_PREFIXES = "picare-intelligent/";
 
@@ -79,6 +80,7 @@ mockModule("../src/jobs/queues", {
 });
 
 const grpcS3Handler = require("../src/services/grpc_s3.handler");
+const appConfig = require("../src/config/app.config");
 
 const metadata = (token) => ({
   get(name) {
@@ -125,6 +127,14 @@ async function run() {
     ),
     (error) => error.code === grpc.status.PERMISSION_DENIED,
   );
+
+  appConfig.grpc.storageAuthEnabled = false;
+  const unsecuredMetadata = await unary(
+    grpcS3Handler.getObjectMetadata,
+    { key: "contracts/private.pdf" },
+  );
+  assert.equal(unsecuredMetadata.key, "contracts/private.pdf");
+  appConfig.grpc.storageAuthEnabled = true;
 
   const queued = await unary(
     grpcS3Handler.queueUpload,

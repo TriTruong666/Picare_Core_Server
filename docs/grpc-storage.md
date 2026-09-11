@@ -18,7 +18,8 @@ Upload RPC giữ tương thích với client cũ. Download dùng streaming để
 
 ## Xác thực
 
-Mọi storage RPC yêu cầu metadata:
+Xác thực storage RPC được giữ lại nhưng mặc định tắt để tương thích với các
+service cũ. Khi bật, mọi storage RPC yêu cầu metadata:
 
 ```text
 x-service-token: <shared service secret>
@@ -27,11 +28,19 @@ x-service-token: <shared service secret>
 Khai báo trong `.env.development` của Core khi chạy local, hoặc secret injection khi deploy:
 
 ```dotenv
+GRPC_STORAGE_AUTH_ENABLED=true
 GRPC_STORAGE_SERVICE_TOKEN=replace-with-a-long-random-secret
 GRPC_STORAGE_ALLOWED_PREFIXES=picare-intelligent/
 ```
 
-Core trả `FAILED_PRECONDITION` nếu server chưa có token, `UNAUTHENTICATED` nếu token caller không khớp và `PERMISSION_DENIED` nếu object/job key nằm ngoài các prefix cho phép. Có thể khai báo nhiều prefix, phân cách bằng dấu phẩy. Upload qua RPC này luôn được ép `private`; Core dùng kích thước buffer thực tế thay vì tin metadata từ caller. Không commit hoặc ghi token vào log.
+Nếu `GRPC_STORAGE_AUTH_ENABLED` không có hoặc bằng `false`, Core không yêu cầu
+token và không giới hạn prefix, tương đương hành vi trước khi thêm lớp bảo mật.
+Khi bật, Core trả `FAILED_PRECONDITION` nếu server chưa có token,
+`UNAUTHENTICATED` nếu token caller không khớp và `PERMISSION_DENIED` nếu
+object/job key nằm ngoài các prefix cho phép. Có thể khai báo nhiều prefix,
+phân cách bằng dấu phẩy. Upload qua RPC này luôn được ép `private`; Core dùng
+kích thước buffer thực tế thay vì tin metadata từ caller. Không commit hoặc ghi
+token vào log.
 
 ## Kết nối local từ Picare Intelligent
 

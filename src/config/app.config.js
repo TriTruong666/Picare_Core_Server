@@ -118,6 +118,9 @@ const appConfig = {
   },
 
   grpc: {
+    storageAuthEnabled:
+      String(process.env.GRPC_STORAGE_AUTH_ENABLED || "false").toLowerCase() ===
+      "true",
     storageServiceToken: process.env.GRPC_STORAGE_SERVICE_TOKEN || "",
     storageAllowedPrefixes: (
       process.env.GRPC_STORAGE_ALLOWED_PREFIXES || "picare-intelligent/"
