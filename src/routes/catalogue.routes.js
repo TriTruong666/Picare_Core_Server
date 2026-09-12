@@ -36,6 +36,7 @@ const upload = multer({
  *   get:
  *     summary: Lấy danh sách catalogue để quản lý
  *     tags: [Catalogues]
+ *     security: [{ cookieAuth: [] }]
  *     parameters:
  *       - in: query
  *         name: page
@@ -60,7 +61,7 @@ const upload = multer({
  *       200:
  *         description: Danh sách catalogue và chỉ details[0] (ảnh cover theo sortOrder); dùng GET /catalogues/{catalogueId} để lấy toàn bộ ảnh.
  */
-router.get("/", catalogueListSchema, CatalogueController.list);
+router.get("/", protect, catalogueListSchema, CatalogueController.list);
 
 /**
  * @swagger
@@ -77,7 +78,7 @@ router.get("/", catalogueListSchema, CatalogueController.list);
  *       200: { description: Catalogue được tìm thấy }
  *       404: { description: Không tìm thấy catalogue }
  */
-router.get("/:catalogueId", catalogueIdSchema, CatalogueController.get);
+router.get("/:catalogueId", protect, catalogueIdSchema, CatalogueController.get);
 
 /**
  * @swagger
