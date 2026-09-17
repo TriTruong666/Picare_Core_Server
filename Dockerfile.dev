@@ -1,0 +1,22 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Fontconfig and fonts needed for PDF contract generation
+RUN apk add --no-cache fontconfig ttf-dejavu ttf-liberation
+ENV CONTRACT_FONT_PATH=/app/src/assets/fonts/times.ttf
+ENV CONTRACT_BOLD_FONT_PATH=/app/src/assets/fonts/timesbd.ttf
+
+# Install all dependencies (including devDependencies like nodemon)
+COPY package*.json ./
+RUN npm install
+
+# Copy application source code
+COPY . .
+
+# Expose REST (1905) and gRPC (50051) ports
+EXPOSE 1905
+EXPOSE 50051
+
+# Run with nodemon legacy watch for reliable Docker bind mount file reload
+CMD ["npx", "nodemon", "-L", "server.js"]

@@ -1,0 +1,84 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: picare-core-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-picare_core_db_local}
+      POSTGRES_USER: ${DB_USER:-picare_dev}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-M@tkhau123}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - picare-postgres-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-picare_dev} -d ${DB_NAME:-picare_core_db_local}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - picare-dev-network
+
+  # Redis Cache & Event Bus
+  redis:
+    image: redis:7-alpine
+    container_name: picare-core-redis-dev
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-picare_redis_pass}"]
+    ports:
+      - "${REDIS_HOST_PORT:-6381}:6379"
+    volumes:
+      - picare-redis-dev-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-picare_redis_pass}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - picare-dev-network
+
+  # Picare Core Hub Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: picare-core-server-dev
+    restart: unless-stopped
+    env_file:
+      - .env.development
+    environment:
+      - NODE_ENV=development
+      # Ghi đè host kết nối nội bộ giữa các container trong Docker network
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - REDIS_EVENT_BUS_HOST=redis
+      - MAX_FILE_UPLOAD_MB=${MAX_FILE_UPLOAD_MB:-2048}
+      - S3_UPLOAD_STAGING_DIR=/app/tmp/s3-uploads
+      - S3_UPLOAD_CONCURRENCY=${S3_UPLOAD_CONCURRENCY:-1}
+      - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-900000}
+    ports:
+      - "${SERVER_PORT:-1905}:1905"
+      - "${GRPC_PORT:-50051}:50051"
+    volumes:
+      # Mount code nguồn để hot reload (nodemon) khi chỉnh sửa trên máy
+      - .:/app
+      # Giữ node_modules bên trong container riêng biệt, tránh bị ghi đè bởi host
+      - /app/node_modules
+      - picare-dev-s3-upload-staging:/app/tmp/s3-uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - picare-dev-network
+
+networks:
+  picare-dev-network:
+    driver: bridge
+
+volumes:
+  picare-postgres-dev-data:
+  picare-redis-dev-data:
+  picare-dev-s3-upload-staging:
