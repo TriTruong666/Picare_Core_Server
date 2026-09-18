@@ -4,6 +4,7 @@ const path = require("path");
 const grpcAuthHandler = require("./grpc_auth.handler");
 const grpcLicenseHandler = require("./grpc_license.handler");
 const grpcS3Handler = require("./grpc_s3.handler");
+const grpcMailHandler = require("./grpc_mail.handler");
 const { maxGrpcMessageBytes } = require("../config/upload.config");
 
 // Đường dẫn file proto
@@ -53,6 +54,10 @@ function startGrpcServer(port = 50051) {
     DownloadObject: grpcS3Handler.downloadObject,
     GetObjectMetadata: grpcS3Handler.getObjectMetadata,
     DeleteObject: grpcS3Handler.deleteObject,
+  });
+
+  server.addService(authProto.MailService.service, {
+    SendOrderReturnSigningMail: grpcMailHandler.sendOrderReturnSigningMail,
   });
 
   server.bindAsync(

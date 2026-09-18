@@ -22,10 +22,14 @@ function getSenderConfig(sender, overrides = {}) {
 function assertMailConfig(sender, overrides) {
   const { host, port, pass } = appConfig.mail;
   const { user, from } = getSenderConfig(sender, overrides);
+  const userEnvName =
+    sender === "salesforce"
+      ? "SALEFORCE_MAIL_USER"
+      : `${sender.toUpperCase()}_SMTP_USER`;
   const missingFields = [
     !host && "SMTP_HOST",
     !port && "SMTP_PORT",
-    !user && `${sender.toUpperCase()}_SMTP_USER`,
+    !user && userEnvName,
     !pass && "SMTP_PASS",
     !from && `${sender.toUpperCase()}_MAIL_FROM`,
   ].filter(Boolean);
@@ -223,6 +227,43 @@ class MailService {
       html,
       sender: "auth",
     });
+  }
+
+  static async sendOrderReturnSigningMail({
+    to,
+    signerName,
+    returnId,
+    orderId,
+    actionUrl,
+    expiresAt,
+  }) {
+    const escape = this.escapeHtml;
+    const expiresText = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      dateStyle: "full",
+      timeStyle: "short",
+    }).format(new Date(expiresAt));
+    const subject = `Yêu cầu ký biên bản trả hàng ${returnId}`;
+    const text = [
+      `Kính gửi ${signerName},`,
+      `Picare gửi Quý khách biên bản trả hàng ${returnId} của đơn hàng ${orderId}.`,
+      "Vui lòng mở liên kết, kiểm tra danh sách hàng, nhập lý do trả và ký tay để hoàn tất yêu cầu.",
+      `Ký biên bản: ${actionUrl}`,
+      `Liên kết có hiệu lực đến ${expiresText} và chỉ dành cho yêu cầu này.`,
+      "Nếu Quý khách không thực hiện yêu cầu trả hàng, vui lòng bỏ qua email và liên hệ nhân viên phụ trách.",
+    ].join("\n\n");
+    const html = [
+      '<div style="font-family:Arial,sans-serif;line-height:1.65;color:#111827;max-width:680px">',
+      '<h2 style="margin:0 0 16px">Ký biên bản trả hàng</h2>',
+      `<p style="margin:0 0 12px">Kính gửi <strong>${escape(signerName)}</strong>,</p>`,
+      `<p style="margin:0 0 12px">Picare gửi Quý khách biên bản trả hàng <strong>${escape(returnId)}</strong> của đơn hàng <strong>${escape(orderId)}</strong>.</p>`,
+      '<p style="margin:0 0 12px">Vui lòng kiểm tra danh sách hàng, nhập lý do trả và ký tay để hoàn tất yêu cầu.</p>',
+      `<p style="margin:24px 0"><a href="${escape(actionUrl)}" style="display:inline-block;padding:12px 20px;background:#111827;color:#fff;text-decoration:none;border-radius:8px;font-weight:600">Mở và ký biên bản</a></p>`,
+      `<p style="margin:0 0 8px;color:#4b5563">Liên kết có hiệu lực đến <strong>${escape(expiresText)}</strong> và chỉ dành cho yêu cầu này.</p>`,
+      '<p style="margin:20px 0 0;color:#6b7280;font-size:13px">Nếu Quý khách không thực hiện yêu cầu trả hàng, vui lòng bỏ qua email và liên hệ nhân viên phụ trách.</p>',
+      "</div>",
+    ].join("");
+    return this.sendMail({ to, subject, text, html, sender: "salesforce" });
   }
 
   static escapeHtml(value) {

@@ -1,11 +1,17 @@
 const path = require("path");
+const fs = require("fs");
 
+const preferredEnvPath = path.join(
+  __dirname,
+  "../../",
+  process.env.NODE_ENV === "production"
+    ? ".env.production"
+    : ".env.development",
+);
 require("dotenv").config({
-  path: path.join(
-    __dirname,
-    "../../",
-    process.env.NODE_ENV === "production" ? ".env" : ".env.development",
-  ),
+  path: fs.existsSync(preferredEnvPath)
+    ? preferredEnvPath
+    : path.join(__dirname, "../../", ".env"),
 });
 
 const ALLOWED_CLIENT_URL_1 =
@@ -191,6 +197,11 @@ const appConfig = {
         user: process.env.LICENSE_SMTP_USER || "",
         from: process.env.LICENSE_MAIL_FROM || "",
         name: process.env.LICENSE_MAIL_FROM_NAME || "Picare License",
+      },
+      salesforce: {
+        user: process.env.SALEFORCE_MAIL_USER || "",
+        from: process.env.SALEFORCE_MAIL_FROM || "",
+        name: process.env.SALEFORCE_MAIL_FROM_NAME || "Picare Salesforce",
       },
     },
     rejectUnauthorized:

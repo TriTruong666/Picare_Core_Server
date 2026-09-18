@@ -17,6 +17,7 @@ async function seedingUsers() {
           role: u.role,
           email: u.email,
           password: u.password,
+          bypassIpVerification: Boolean(u.bypassIpVerification),
         });
         console.log(`[SEED]: Tài khoản ${u.email} đã được tạo thành công.`);
       } else {
@@ -25,6 +26,7 @@ async function seedingUsers() {
           role: u.role,
           email: u.email,
           password: u.password,
+          bypassIpVerification: Boolean(u.bypassIpVerification),
         });
         console.log(`[SEED]: Tài khoản ${u.email} đã được cập nhật thông tin.`);
       }

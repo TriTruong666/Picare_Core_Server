@@ -9,6 +9,7 @@
     "migrate": "node src/config/database_migration.js",
     "test:grpc": "node grpc_client_test.js",
     "test:grpc-storage": "node tests/grpc_s3.handler.test.js",
+    "test:grpc-mail": "node --test tests/grpc_mail.handler.test.js",
     "test:auth": "node --test tests/auth.security.test.js",
     "deploy": "node scripts/deploy.js"
   },

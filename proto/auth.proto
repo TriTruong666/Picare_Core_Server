@@ -161,6 +161,25 @@ service S3Service {
   rpc DeleteObject (S3ObjectRequest) returns (S3DeleteObjectResponse) {}
 }
 
+service MailService {
+  rpc SendOrderReturnSigningMail (OrderReturnSigningMailRequest) returns (MailSendResponse) {}
+}
+
+message OrderReturnSigningMailRequest {
+  string to = 1;
+  string signerName = 2;
+  string returnId = 3;
+  string orderId = 4;
+  string actionUrl = 5;
+  string expiresAt = 6;
+}
+
+message MailSendResponse {
+  bool success = 1;
+  string message = 2;
+  string messageId = 3;
+}
+
 message S3UploadRequest {
   bytes file = 1;
   string mimeType = 2;
