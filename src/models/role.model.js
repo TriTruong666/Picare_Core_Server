@@ -24,4 +24,18 @@ const Role = sequelize.define(
   }
 );
 
+Role.associate = (models) => {
+  if (models.User) {
+    Role.hasMany(models.User, { foreignKey: "role_id" });
+  }
+  if (models.Permission) {
+    Role.belongsToMany(models.Permission, {
+      through: "role_permissions",
+      foreignKey: "role_id",
+      otherKey: "permission_id",
+    });
+  }
+};
+
 module.exports = Role;
+

@@ -62,4 +62,15 @@ const LicenseTicket = sequelize.define(
   },
 );
 
+LicenseTicket.associate = (models) => {
+  if (models.License) {
+    LicenseTicket.belongsTo(models.License, {
+      foreignKey: "licenseId",
+      targetKey: "licenseId",
+      as: "license",
+    });
+  }
+};
+
 module.exports = LicenseTicket;
+

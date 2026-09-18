@@ -75,4 +75,15 @@ const LicenseSoftware = sequelize.define(
   },
 );
 
+LicenseSoftware.associate = (models) => {
+  if (models.License) {
+    LicenseSoftware.belongsTo(models.License, {
+      foreignKey: "licenseId",
+      targetKey: "licenseId",
+      as: "license",
+    });
+  }
+};
+
 module.exports = LicenseSoftware;
+

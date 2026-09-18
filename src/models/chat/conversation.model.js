@@ -65,4 +65,26 @@ const Conversation = sequelize.define(
   }
 );
 
+Conversation.associate = (models) => {
+  if (models.ConversationMember) {
+    Conversation.hasMany(models.ConversationMember, {
+      foreignKey: "conversationId",
+      as: "members",
+    });
+  }
+  if (models.Message) {
+    Conversation.hasMany(models.Message, {
+      foreignKey: "conversationId",
+      as: "messages",
+    });
+    Conversation.belongsTo(models.Message, {
+      foreignKey: "lastMessageId",
+      as: "lastMessage",
+      constraints: false,
+    });
+  }
+};
+
 module.exports = Conversation;
+
+

@@ -49,28 +49,14 @@ try {
   console.warn("[MODELS]: Failed to load catalogue models.", err.message);
 }
 
+// Execute all associations
 Object.keys(db).forEach((modelName) => {
-  if (db[modelName].associate) {
+  if (db[modelName] && typeof db[modelName].associate === "function") {
     db[modelName].associate(db);
   }
 });
 
-if (db.User && db.Role && db.Permission) {
-  db.Role.hasMany(db.User, { foreignKey: "role_id" });
-  db.User.belongsTo(db.Role, { foreignKey: "role_id" });
-
-  db.Role.belongsToMany(db.Permission, {
-    through: "role_permissions",
-    foreignKey: "role_id",
-    otherKey: "permission_id",
-  });
-  db.Permission.belongsToMany(db.Role, {
-    through: "role_permissions",
-    foreignKey: "permission_id",
-    otherKey: "role_id",
-  });
-}
-
 db.sequelize = sequelize;
 
 module.exports = db;
+

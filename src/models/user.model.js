@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/postgres.config");
 const { UserRoles } = require("../common/enum/role.enum");
+const { USER_STATUS } = require("../common/enum/user.enum");
 const bcrypt = require("bcrypt");
 
 const User = sequelize.define(
@@ -36,6 +37,36 @@ const User = sequelize.define(
     isOnline: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
+    },
+    status: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: USER_STATUS.ACTIVE,
+      validate: {
+        isIn: [[USER_STATUS.ACTIVE, USER_STATUS.INACTIVE]],
+      },
+      field: "status",
+    },
+    loginAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "login_at",
+    },
+    logoutAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "logout_at",
+    },
+    loginIp: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      field: "login_ip",
+    },
+    trustedIps: {
+      type: DataTypes.ARRAY(DataTypes.STRING),
+      defaultValue: [],
+      allowNull: true,
+      field: "trusted_ips",
     },
     role: {
       type: DataTypes.STRING,
@@ -85,4 +116,13 @@ User.prototype.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+User.associate = (models) => {
+  if (models.Role) {
+    User.belongsTo(models.Role, { foreignKey: "role_id" });
+  }
+};
+
 module.exports = User;
+
+
+

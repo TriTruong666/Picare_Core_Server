@@ -94,4 +94,15 @@ const ConversationMember = sequelize.define(
   }
 );
 
+ConversationMember.associate = (models) => {
+  if (models.Conversation) {
+    ConversationMember.belongsTo(models.Conversation, {
+      foreignKey: "conversationId",
+      as: "conversation",
+    });
+  }
+};
+
 module.exports = ConversationMember;
+
+

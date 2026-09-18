@@ -114,4 +114,26 @@ const License = sequelize.define(
 
 License.generateLicenseKey = generateLicenseKey;
 
+License.associate = (models) => {
+  if (models.LicenseSoftware) {
+    License.hasMany(models.LicenseSoftware, {
+      foreignKey: "licenseId",
+      sourceKey: "licenseId",
+      as: "software",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
+  }
+  if (models.LicenseTicket) {
+    License.hasMany(models.LicenseTicket, {
+      foreignKey: "licenseId",
+      sourceKey: "licenseId",
+      as: "tickets",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
+  }
+};
+
 module.exports = License;
+

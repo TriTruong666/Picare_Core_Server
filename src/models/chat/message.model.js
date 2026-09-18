@@ -80,4 +80,29 @@ const Message = sequelize.define(
   }
 );
 
+Message.associate = (models) => {
+  if (models.Conversation) {
+    Message.belongsTo(models.Conversation, {
+      foreignKey: "conversationId",
+      as: "conversation",
+    });
+  }
+  Message.belongsTo(Message, {
+    foreignKey: "replyToId",
+    as: "replyTo",
+  });
+  Message.hasMany(Message, {
+    foreignKey: "replyToId",
+    as: "replies",
+  });
+  if (models.MessageAttachment) {
+    Message.hasMany(models.MessageAttachment, {
+      foreignKey: "messageId",
+      as: "attachments",
+    });
+  }
+};
+
 module.exports = Message;
+
+

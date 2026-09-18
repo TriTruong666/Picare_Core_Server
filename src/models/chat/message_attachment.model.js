@@ -74,4 +74,14 @@ const MessageAttachment = sequelize.define(
   }
 );
 
+MessageAttachment.associate = (models) => {
+  if (models.Message) {
+    MessageAttachment.belongsTo(models.Message, {
+      foreignKey: "messageId",
+      as: "message",
+    });
+  }
+};
+
 module.exports = MessageAttachment;
+

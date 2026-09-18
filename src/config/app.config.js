@@ -75,8 +75,13 @@ const appConfig = {
       "licenses",
       "catalogue",
       "catalogue_detail",
+      "conversations",
+      "conversation_members",
+      "messages",
+      "message_attachments",
     ],
   },
+
 
   redis: {
     host: process.env.REDIS_HOST || "localhost",

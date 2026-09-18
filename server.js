@@ -5,7 +5,9 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const config = require("./src/config/app.config");
 const sequelize = require("./src/config/postgres.config");
+const { runDatabaseMigrations } = require("./src/config/database_migration");
 require("./src/models");
+
 const redis = require("./src/config/redis.config");
 const apiRoutes = require("./src/routes");
 const globalErrorHandler = require("./src/middlewares/error.handler");
@@ -103,7 +105,11 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log("[DATABASE]: Kết nối Database thành công!");
 
+    // Chạy database migrations an toàn trước khi đồng bộ model
+    await runDatabaseMigrations(sequelize);
+
     const isForceReset = config.db.force_reset;
+
     const isReset = config.db.reset;
     const protectedTables = config.db.protectedTables || [];
     const protectedTableSet = getProtectedTableSet(protectedTables);

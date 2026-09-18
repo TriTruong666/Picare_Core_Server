@@ -29,4 +29,15 @@ const Permission = sequelize.define(
   }
 );
 
+Permission.associate = (models) => {
+  if (models.Role) {
+    Permission.belongsToMany(models.Role, {
+      through: "role_permissions",
+      foreignKey: "permission_id",
+      otherKey: "role_id",
+    });
+  }
+};
+
 module.exports = Permission;
+
