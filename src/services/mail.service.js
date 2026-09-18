@@ -197,9 +197,9 @@ class MailService {
     const safeCode = escape(code);
     const safeIpAddress = escape(ipAddress);
     const safeExpiresInMinutes = escape(expiresInMinutes);
-    const subject = "Mã xác thực đăng nhập Picare";
+    const subject = "Mã xác thực đăng nhập Picare Client";
     const text = [
-      "Xác thực đăng nhập Picare",
+      "Xác thực đăng nhập Picare Client",
       `Mã xác thực của bạn là: ${code}`,
       `Mã có hiệu lực trong ${expiresInMinutes} phút.`,
       `Địa chỉ IP đăng nhập: ${ipAddress}`,
@@ -207,7 +207,7 @@ class MailService {
     ].join("\n\n");
     const html = [
       '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:600px">',
-      '<h2 style="margin:0 0 16px">Xác thực đăng nhập Picare</h2>',
+      '<h2 style="margin:0 0 16px">Xác thực đăng nhập Picare Client</h2>',
       '<p style="margin:0 0 16px">Có yêu cầu đăng nhập từ một địa chỉ IP chưa được tin cậy.</p>',
       `<div style="margin:20px 0;padding:16px;text-align:center;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;font-size:32px;font-weight:700;letter-spacing:8px">${safeCode}</div>`,
       `<p style="margin:0 0 8px">Mã có hiệu lực trong <strong>${safeExpiresInMinutes} phút</strong>.</p>`,

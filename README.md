@@ -69,9 +69,9 @@ AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS=60
 AUTH_LOGIN_OTP_MAX_RESENDS=3
 
 # Optional: defaults to the existing E-Contract SMTP account.
-AUTH_SMTP_USER=security@picare.vn
-AUTH_MAIL_FROM=security@picare.vn
-AUTH_MAIL_FROM_NAME=Picare Security
+AUTH_SMTP_USER=verified-sender@gmail.com
+AUTH_MAIL_FROM=verified-sender@gmail.com
+AUTH_MAIL_FROM_NAME=Picare Client
 
 # Set to the exact trusted proxy hop count when deployed behind Nginx/load balancer.
 TRUST_PROXY=1

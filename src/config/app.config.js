@@ -62,12 +62,10 @@ const appConfig = {
     loginVerification: {
       ttlSeconds:
         parseInt(process.env.AUTH_LOGIN_OTP_TTL_SECONDS, 10) || 5 * 60,
-      maxAttempts:
-        parseInt(process.env.AUTH_LOGIN_OTP_MAX_ATTEMPTS, 10) || 5,
+      maxAttempts: parseInt(process.env.AUTH_LOGIN_OTP_MAX_ATTEMPTS, 10) || 5,
       resendCooldownSeconds:
         parseInt(process.env.AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS, 10) || 60,
-      maxResends:
-        parseInt(process.env.AUTH_LOGIN_OTP_MAX_RESENDS, 10) || 3,
+      maxResends: parseInt(process.env.AUTH_LOGIN_OTP_MAX_RESENDS, 10) || 3,
       otpSecret: process.env.AUTH_OTP_SECRET || process.env.JWT_SECRET || "",
     },
   },
@@ -79,7 +77,7 @@ const appConfig = {
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     reset: false,
-    force_reset: false,
+    force_reset: true,
     protectedTables: [
       "users",
       "roles",
@@ -105,7 +103,6 @@ const appConfig = {
       "message_attachments",
     ],
   },
-
 
   redis: {
     host: process.env.REDIS_HOST || "localhost",
@@ -183,7 +180,7 @@ const appConfig = {
           process.env.AUTH_SMTP_USER || process.env.ECONTRACT_SMTP_USER || "",
         from:
           process.env.AUTH_MAIL_FROM || process.env.ECONTRACT_MAIL_FROM || "",
-        name: process.env.AUTH_MAIL_FROM_NAME || "Picare Security",
+        name: process.env.AUTH_MAIL_FROM_NAME || "Picare Client",
       },
       econtract: {
         user: process.env.ECONTRACT_SMTP_USER || "",
@@ -217,7 +214,9 @@ async function loadDynamicConfig() {
       appConfig.jwt.expiresIn = cfg.jwt.expiresIn || appConfig.jwt.expiresIn;
       if (!process.env.AUTH_OTP_SECRET) {
         appConfig.auth.loginVerification.otpSecret =
-          appConfig.auth.loginVerification.otpSecret || appConfig.jwt.secret || "";
+          appConfig.auth.loginVerification.otpSecret ||
+          appConfig.jwt.secret ||
+          "";
       }
     }
 
