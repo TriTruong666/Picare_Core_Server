@@ -65,8 +65,14 @@ const User = sequelize.define(
     trustedIps: {
       type: DataTypes.ARRAY(DataTypes.STRING),
       defaultValue: [],
-      allowNull: true,
+      allowNull: false,
       field: "trusted_ips",
+    },
+    bypassIpVerification: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      field: "bypass_ip_verification",
     },
     role: {
       type: DataTypes.STRING,
@@ -123,6 +129,5 @@ User.associate = (models) => {
 };
 
 module.exports = User;
-
 
 

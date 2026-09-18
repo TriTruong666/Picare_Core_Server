@@ -149,10 +149,13 @@ class UserService {
     const roleRecord = await this.resolveRole(normalizedRole);
 
     const newUser = await User.create({
-      ...userData,
+      name: userData.name,
+      email: userData.email,
+      password: userData.password,
       phone: this.normalizePhone(userData.phone),
       role: normalizedRole,
       roleId: roleRecord?.id ?? null,
+      note: userData.note,
     });
 
     return UserDTO.fromUser(newUser);
@@ -177,7 +180,12 @@ class UserService {
       }
     }
 
-    const nextData = { ...updateData };
+    const allowedFields = ["name", "email", "phone", "role", "isOnline", "note"];
+    const nextData = Object.fromEntries(
+      allowedFields
+        .filter((field) => Object.prototype.hasOwnProperty.call(updateData, field))
+        .map((field) => [field, updateData[field]]),
+    );
 
     if (Object.prototype.hasOwnProperty.call(updateData, "phone")) {
       nextData.phone = this.normalizePhone(updateData.phone);
@@ -199,6 +207,27 @@ class UserService {
 
     await user.update(nextData);
     return UserDTO.fromUser(user);
+  }
+
+  static async updateAuthPolicy(userId, { bypassIpVerification }) {
+    const user = await User.findOne({ where: { userId } });
+    if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
+
+    await user.update({ bypassIpVerification });
+    return {
+      userId: user.userId,
+      bypassIpVerification: user.bypassIpVerification,
+    };
+  }
+
+  static async revokeAllTrustedIps(userId) {
+    const [updated] = await User.update(
+      { trustedIps: [] },
+      { where: { userId } },
+    );
+    if (!updated) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
+
+    return { message: "Đã thu hồi toàn bộ địa chỉ IP tin cậy của người dùng" };
   }
 
   /**

@@ -6,6 +6,7 @@ const {
   createUserSchema,
   updateUserSchema,
   userIdSchema,
+  authPolicySchema,
 } = require("../schemas/user.schema");
 
 /**
@@ -141,7 +142,81 @@ router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.
  *       200:
  *         description: Thành công
  */
-router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
+router.put(
+  "/:userId",
+  protect,
+  restrictTo("admin"),
+  updateUserSchema,
+  UserController.updateUser,
+);
+
+/**
+ * @swagger
+ * /api/v1/users/{userId}/auth-policy:
+ *   patch:
+ *     summary: Cập nhật chính sách bỏ qua xác thực IP của người dùng
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [bypassIpVerification]
+ *             properties:
+ *               bypassIpVerification:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Cập nhật chính sách xác thực thành công
+ *       403:
+ *         description: Chỉ quản trị viên được phép thực hiện
+ */
+router.patch(
+  "/:userId/auth-policy",
+  protect,
+  restrictTo("admin"),
+  authPolicySchema,
+  UserController.updateAuthPolicy,
+);
+
+/**
+ * @swagger
+ * /api/v1/users/{userId}/trusted-ips:
+ *   delete:
+ *     summary: Thu hồi toàn bộ IP tin cậy của người dùng
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Thu hồi thành công
+ *       403:
+ *         description: Chỉ quản trị viên được phép thực hiện
+ */
+router.delete(
+  "/:userId/trusted-ips",
+  protect,
+  restrictTo("admin"),
+  userIdSchema,
+  UserController.revokeAllTrustedIps,
+);
 
 /**
  * @swagger
@@ -161,6 +236,12 @@ router.put("/:userId", protect, updateUserSchema, UserController.updateUser);
  *       200:
  *         description: Thành công
  */
-router.delete("/:userId", protect, userIdSchema, UserController.deleteUser);
+router.delete(
+  "/:userId",
+  protect,
+  restrictTo("admin"),
+  userIdSchema,
+  UserController.deleteUser,
+);
 
 module.exports = router;

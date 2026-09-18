@@ -57,6 +57,29 @@ GRPC_STORAGE_ALLOWED_PREFIXES=picare-intelligent/
 When `GRPC_STORAGE_AUTH_ENABLED` is absent or `false`, storage RPCs behave like
 the legacy version and do not require a service token or enforce prefixes.
 
+Login from a new IP requires a six-digit code sent by email. Configure the
+verification policy with these environment variables:
+
+```dotenv
+# Use a dedicated long random secret in production. JWT_SECRET is only a fallback.
+AUTH_OTP_SECRET=replace-with-a-long-random-secret
+AUTH_LOGIN_OTP_TTL_SECONDS=300
+AUTH_LOGIN_OTP_MAX_ATTEMPTS=5
+AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS=60
+AUTH_LOGIN_OTP_MAX_RESENDS=3
+
+# Optional: defaults to the existing E-Contract SMTP account.
+AUTH_SMTP_USER=security@picare.vn
+AUTH_MAIL_FROM=security@picare.vn
+AUTH_MAIL_FROM_NAME=Picare Security
+
+# Set to the exact trusted proxy hop count when deployed behind Nginx/load balancer.
+TRUST_PROXY=1
+```
+
+`TRUST_PROXY` should remain disabled when clients connect directly to Express;
+an incorrect value can allow a client-supplied forwarded IP to be trusted.
+
 Picare Intelligent connects to this server with `STORAGE_GRPC_TARGET` and sends the matching `STORAGE_GRPC_SERVICE_TOKEN`. S3 credentials remain only in Core Hub.
 
 Xem contract, dependency và cách chạy test tại [docs/grpc-storage.md](docs/grpc-storage.md).

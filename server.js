@@ -24,6 +24,10 @@ const { maxFileUploadBytes } = require("./src/config/upload.config");
 const app = express();
 const server = http.createServer(app);
 
+if (config.server.trustProxy !== false) {
+  app.set("trust proxy", config.server.trustProxy);
+}
+
 socketService.init(server);
 
 function normalizeTableName(table) {

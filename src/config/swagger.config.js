@@ -50,6 +50,7 @@ const swaggerDefinition = {
           fullName: { type: "string" },
           email: { type: "string" },
           role: { type: "string" },
+          bypassIpVerification: { type: "boolean" },
           companyId: { type: "string" },
         },
       },
@@ -124,7 +125,6 @@ const swaggerDefinition = {
           email: { type: "string" },
           password: { type: "string" },
           phone: { type: "string", nullable: true },
-          role: { type: "string" },
         },
       },
       ChangePasswordRequest: {

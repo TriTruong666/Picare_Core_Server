@@ -64,6 +64,56 @@ const ErrorCodes = {
     message: "Mật khẩu mới phải khác mật khẩu cũ",
     statusCode: 400,
   },
+  AUTH_VERIFICATION_REQUIRED: {
+    code: "ERR_AUTH_006",
+    message: "Cần xác thực địa chỉ IP đăng nhập",
+    statusCode: 202,
+  },
+  AUTH_VERIFICATION_INVALID: {
+    code: "ERR_AUTH_007",
+    message: "Mã xác thực không chính xác",
+    statusCode: 400,
+  },
+  AUTH_VERIFICATION_EXPIRED: {
+    code: "ERR_AUTH_008",
+    message: "Phiên xác thực đã hết hạn, vui lòng đăng nhập lại",
+    statusCode: 400,
+  },
+  AUTH_VERIFICATION_ATTEMPTS_EXCEEDED: {
+    code: "ERR_AUTH_009",
+    message: "Đã vượt quá số lần nhập mã, vui lòng đăng nhập lại",
+    statusCode: 429,
+  },
+  AUTH_VERIFICATION_RESEND_TOO_SOON: {
+    code: "ERR_AUTH_010",
+    message: "Vui lòng chờ trước khi yêu cầu gửi lại mã",
+    statusCode: 429,
+  },
+  AUTH_VERIFICATION_RESEND_LIMIT: {
+    code: "ERR_AUTH_011",
+    message: "Đã vượt quá số lần gửi lại mã, vui lòng đăng nhập lại",
+    statusCode: 429,
+  },
+  AUTH_VERIFICATION_IP_MISMATCH: {
+    code: "ERR_AUTH_012",
+    message: "Địa chỉ IP xác thực không khớp với phiên đăng nhập",
+    statusCode: 401,
+  },
+  AUTH_ACCOUNT_INACTIVE: {
+    code: "ERR_AUTH_013",
+    message: "Tài khoản đã bị vô hiệu hóa",
+    statusCode: 403,
+  },
+  AUTH_OTP_CONFIG_MISSING: {
+    code: "ERR_AUTH_014",
+    message: "Máy chủ chưa cấu hình secret cho mã xác thực đăng nhập",
+    statusCode: 500,
+  },
+  AUTH_TRUSTED_IP_NOT_FOUND: {
+    code: "ERR_AUTH_015",
+    message: "Địa chỉ IP tin cậy không tồn tại",
+    statusCode: 404,
+  },
   CLIENT_NOT_FOUND: {
     code: "ERR_CLIENT_001",
     message: "Không tìm thấy client hệ thống",

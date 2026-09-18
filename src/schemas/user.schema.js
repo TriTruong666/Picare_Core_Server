@@ -8,6 +8,7 @@ class UserDTO {
     this.phone = user.phone;
     this.role = user.role;
     this.isOnline = user.isOnline;
+    this.bypassIpVerification = Boolean(user.bypassIpVerification);
     this.note = user.note;
     this.createdAt = user.createdAt;
     this.updatedAt = user.updatedAt;
@@ -63,9 +64,18 @@ const userIdSchema = [
   param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
 ];
 
+const authPolicySchema = [
+  ...userIdSchema,
+  body("bypassIpVerification")
+    .isBoolean()
+    .withMessage("bypassIpVerification phải là boolean")
+    .toBoolean(),
+];
+
 module.exports = {
   UserDTO,
   createUserSchema,
   updateUserSchema,
   userIdSchema,
+  authPolicySchema,
 };

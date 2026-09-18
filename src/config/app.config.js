@@ -23,6 +23,15 @@ const ALLOWED_CLIENT_URL_4 =
 const ALLOWED_CLIENT_URL_5 =
   process.env.ALLOWED_CLIENT_URL_5 || "http://localhost:2345";
 
+const parseTrustProxy = (value) => {
+  if (value === undefined || value === null || value === "") return false;
+  if (String(value).toLowerCase() === "true") return true;
+  if (String(value).toLowerCase() === "false") return false;
+
+  const hopCount = Number(value);
+  return Number.isInteger(hopCount) && hopCount >= 0 ? hopCount : value;
+};
+
 const appConfig = {
   app: {
     name: "Picare Core Hub",
@@ -46,6 +55,21 @@ const appConfig = {
       (process.env.NODE_ENV === "production"
         ? "https://core.picare.vn"
         : "http://localhost:1905"),
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
+  },
+
+  auth: {
+    loginVerification: {
+      ttlSeconds:
+        parseInt(process.env.AUTH_LOGIN_OTP_TTL_SECONDS, 10) || 5 * 60,
+      maxAttempts:
+        parseInt(process.env.AUTH_LOGIN_OTP_MAX_ATTEMPTS, 10) || 5,
+      resendCooldownSeconds:
+        parseInt(process.env.AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS, 10) || 60,
+      maxResends:
+        parseInt(process.env.AUTH_LOGIN_OTP_MAX_RESENDS, 10) || 3,
+      otpSecret: process.env.AUTH_OTP_SECRET || process.env.JWT_SECRET || "",
+    },
   },
 
   db: {
@@ -154,6 +178,13 @@ const appConfig = {
     secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
     pass: process.env.SMTP_PASS || "",
     senders: {
+      auth: {
+        user:
+          process.env.AUTH_SMTP_USER || process.env.ECONTRACT_SMTP_USER || "",
+        from:
+          process.env.AUTH_MAIL_FROM || process.env.ECONTRACT_MAIL_FROM || "",
+        name: process.env.AUTH_MAIL_FROM_NAME || "Picare Security",
+      },
       econtract: {
         user: process.env.ECONTRACT_SMTP_USER || "",
         from: process.env.ECONTRACT_MAIL_FROM || "",
@@ -184,6 +215,10 @@ async function loadDynamicConfig() {
     if (cfg.jwt) {
       appConfig.jwt.secret = cfg.jwt.secret || appConfig.jwt.secret;
       appConfig.jwt.expiresIn = cfg.jwt.expiresIn || appConfig.jwt.expiresIn;
+      if (!process.env.AUTH_OTP_SECRET) {
+        appConfig.auth.loginVerification.otpSecret =
+          appConfig.auth.loginVerification.otpSecret || appConfig.jwt.secret || "";
+      }
     }
 
     console.log("[CONFIG]: Đã load cấu hình động từ DB thành công.");

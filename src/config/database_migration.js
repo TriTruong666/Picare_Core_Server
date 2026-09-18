@@ -27,6 +27,10 @@ async function runDatabaseMigrations(customSequelize = sequelize) {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS logout_at TIMESTAMP WITH TIME ZONE;
         ALTER TABLE users ADD COLUMN IF NOT EXISTS login_ip VARCHAR(100);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS trusted_ips TEXT[] DEFAULT '{}';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS bypass_ip_verification BOOLEAN NOT NULL DEFAULT FALSE;
+        UPDATE users SET trusted_ips = '{}' WHERE trusted_ips IS NULL;
+        ALTER TABLE users ALTER COLUMN trusted_ips SET DEFAULT '{}';
+        ALTER TABLE users ALTER COLUMN trusted_ips SET NOT NULL;
       `);
 
       await customSequelize.query(`

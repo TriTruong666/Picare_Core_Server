@@ -13,12 +13,6 @@ const registerSchema = [
   body("password")
     .isLength({ min: 6 })
     .withMessage("Mật khẩu phải có ít nhất 6 ký tự"),
-  body("role")
-    .optional()
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage("Role không hợp lệ"),
 ];
 
 const logoutSchema = [
@@ -34,9 +28,33 @@ const changePasswordSchema = [
     .withMessage("Mật khẩu mới phải có ít nhất 6 ký tự"),
 ];
 
+const loginVerificationSchema = [
+  body("challengeId")
+    .isUUID(4)
+    .withMessage("challengeId không hợp lệ"),
+  body("code")
+    .matches(/^\d{6}$/)
+    .withMessage("Mã xác thực phải gồm đúng 6 chữ số"),
+];
+
+const resendLoginCodeSchema = [
+  body("challengeId")
+    .isUUID(4)
+    .withMessage("challengeId không hợp lệ"),
+];
+
+const revokeTrustedIpSchema = [
+  body("ipAddress")
+    .isIP()
+    .withMessage("Địa chỉ IP không hợp lệ"),
+];
+
 module.exports = {
   loginSchema,
   registerSchema,
   logoutSchema,
   changePasswordSchema,
+  loginVerificationSchema,
+  resendLoginCodeSchema,
+  revokeTrustedIpSchema,
 };

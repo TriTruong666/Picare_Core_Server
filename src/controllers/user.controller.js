@@ -95,6 +95,34 @@ class UserController {
     }
   }
 
+  static async updateAuthPolicy(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const result = await UserService.updateAuthPolicy(req.params.userId, req.body);
+      return ResponseHandler.success(res, result, "Cập nhật chính sách xác thực thành công");
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async revokeAllTrustedIps(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const result = await UserService.revokeAllTrustedIps(req.params.userId);
+      return ResponseHandler.success(res, null, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async deleteUser(req, res, next) {
     try {
       const errors = validationResult(req);
