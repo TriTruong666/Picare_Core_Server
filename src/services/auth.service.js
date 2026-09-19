@@ -2,6 +2,7 @@ const User = require("../models/user.model");
 const Role = require("../models/role.model");
 const JWTService = require("./jwt.service");
 const LoginVerificationService = require("./login_verification.service");
+const appConfig = require("../config/app.config");
 
 const { UserDTO } = require("../schemas/user.schema");
 const { USER_STATUS } = require("../common/enum/user.enum");
@@ -110,6 +111,7 @@ class AuthService {
       .map(normalizeIpAddress);
 
     if (
+      !appConfig.auth.loginVerification.enabled ||
       user.bypassIpVerification ||
       trustedIps.includes(normalizedIpAddress)
     ) {

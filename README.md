@@ -61,6 +61,9 @@ Login from a new IP requires a six-digit code sent by email. Configure the
 verification policy with these environment variables:
 
 ```dotenv
+# Keep false for the legacy password-only login flow. Set true to enable OTP.
+AUTH_LOGIN_VERIFICATION_ENABLED=false
+
 # Use a dedicated long random secret in production. JWT_SECRET is only a fallback.
 AUTH_OTP_SECRET=replace-with-a-long-random-secret
 AUTH_LOGIN_OTP_TTL_SECONDS=300
@@ -75,6 +78,13 @@ AUTH_MAIL_FROM_NAME=Picare Client
 
 # Set to the exact trusted proxy hop count when deployed behind Nginx/load balancer.
 TRUST_PROXY=1
+```
+
+Database reset flags default to `false`. Never enable them in production:
+
+```dotenv
+DB_RESET=false
+DB_FORCE_RESET=false
 ```
 
 `TRUST_PROXY` should remain disabled when clients connect directly to Express;

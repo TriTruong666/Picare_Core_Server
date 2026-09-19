@@ -115,6 +115,13 @@ const startServer = async () => {
     const isForceReset = config.db.force_reset;
 
     const isReset = config.db.reset;
+
+    if (config.app.isProduction && (isForceReset || isReset)) {
+      throw new Error(
+        "[DATABASE]: DB_RESET và DB_FORCE_RESET bị cấm trong production.",
+      );
+    }
+
     const protectedTables = config.db.protectedTables || [];
     const protectedTableSet = getProtectedTableSet(protectedTables);
     const queryInterface = sequelize.getQueryInterface();

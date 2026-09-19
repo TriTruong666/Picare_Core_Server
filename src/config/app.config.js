@@ -38,6 +38,14 @@ const parseTrustProxy = (value) => {
   return Number.isInteger(hopCount) && hopCount >= 0 ? hopCount : value;
 };
 
+const parseBoolean = (value, defaultValue = false) => {
+  if (value === undefined || value === null || value === "") {
+    return defaultValue;
+  }
+
+  return String(value).toLowerCase() === "true";
+};
+
 const appConfig = {
   app: {
     name: "Picare Core Hub",
@@ -66,6 +74,7 @@ const appConfig = {
 
   auth: {
     loginVerification: {
+      enabled: parseBoolean(process.env.AUTH_LOGIN_VERIFICATION_ENABLED),
       ttlSeconds:
         parseInt(process.env.AUTH_LOGIN_OTP_TTL_SECONDS, 10) || 5 * 60,
       maxAttempts: parseInt(process.env.AUTH_LOGIN_OTP_MAX_ATTEMPTS, 10) || 5,
@@ -82,8 +91,8 @@ const appConfig = {
     name: process.env.DB_NAME,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
-    reset: false,
-    force_reset: true,
+    reset: parseBoolean(process.env.DB_RESET),
+    force_reset: parseBoolean(process.env.DB_FORCE_RESET),
     protectedTables: [
       "users",
       "roles",
