@@ -61,8 +61,8 @@ Login from a new IP requires a six-digit code sent by email. Configure the
 verification policy with these environment variables:
 
 ```dotenv
-# Keep false for the legacy password-only login flow. Set true to enable OTP.
-AUTH_LOGIN_VERIFICATION_ENABLED=false
+# Enabled by default. Set false only for an emergency legacy-login rollback.
+AUTH_LOGIN_VERIFICATION_ENABLED=true
 
 # Use a dedicated long random secret in production. JWT_SECRET is only a fallback.
 AUTH_OTP_SECRET=replace-with-a-long-random-secret

@@ -69,6 +69,10 @@ const buildUser = (overrides = {}) => ({
   ...overrides,
 });
 
+test("login verification is enabled in the active environment", () => {
+  assert.equal(appConfig.auth.loginVerification.enabled, true);
+});
+
 test("normalizes IPv4-mapped and loopback IPv6 addresses", () => {
   assert.equal(normalizeIpAddress("::ffff:203.0.113.10"), "203.0.113.10");
   assert.equal(normalizeIpAddress("::1"), "127.0.0.1");

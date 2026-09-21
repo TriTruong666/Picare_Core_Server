@@ -74,7 +74,7 @@ const appConfig = {
 
   auth: {
     loginVerification: {
-      enabled: parseBoolean(process.env.AUTH_LOGIN_VERIFICATION_ENABLED),
+      enabled: parseBoolean(process.env.AUTH_LOGIN_VERIFICATION_ENABLED, true),
       ttlSeconds:
         parseInt(process.env.AUTH_LOGIN_OTP_TTL_SECONDS, 10) || 5 * 60,
       maxAttempts: parseInt(process.env.AUTH_LOGIN_OTP_MAX_ATTEMPTS, 10) || 5,
