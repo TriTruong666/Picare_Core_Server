@@ -233,7 +233,7 @@ class AuthService {
   static async getTrustedIps({ userId }) {
     const user = await User.findOne({
       where: { userId },
-      attributes: ["trustedIps", "trustedIpRecords", "loginIp"],
+      attributes: ["trustedIps", "trustedIpRecords", "loginIp", "loginAt", "bypassIpVerification"],
     });
     if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
@@ -242,6 +242,8 @@ class AuthService {
       trustedIps: trustedIpRecords.map((record) => record.ipAddress),
       trustedIpRecords,
       currentLoginIp: user.loginIp,
+      lastLoginAt: user.loginAt ?? null,
+      bypassIpVerification: Boolean(user.bypassIpVerification),
       policy: {
         ttlDays: appConfig.auth.loginVerification.trustedIpTtlDays,
         maxRecords: appConfig.auth.loginVerification.maxTrustedIps,

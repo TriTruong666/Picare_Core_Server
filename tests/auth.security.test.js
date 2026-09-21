@@ -88,6 +88,22 @@ test("normalizes IPv4-mapped and loopback IPv6 addresses", () => {
   assert.equal(normalizeIpAddress("::1"), "127.0.0.1");
 });
 
+test("trusted IP details include login metadata without exposing credentials", async () => {
+  currentUser = buildUser({
+    loginIp: "203.0.113.10",
+    loginAt: "2026-09-21T00:00:00.000Z",
+    bypassIpVerification: true,
+    password: "must-not-be-returned",
+  });
+  const result = await AuthService.getTrustedIps({ userId: currentUser.userId });
+  assert.equal(result.currentLoginIp, currentUser.loginIp);
+  assert.equal(result.lastLoginAt, currentUser.loginAt);
+  assert.equal(result.bypassIpVerification, true);
+  assert.deepEqual(result.trustedIpRecords, []);
+  assert.equal(result.password, undefined);
+  assert.equal(result.sessionVersion, undefined);
+});
+
 test("login from an unknown IP creates a verification challenge without a token", async () => {
   appConfig.auth.loginVerification.enabled = true;
   currentUser = buildUser();

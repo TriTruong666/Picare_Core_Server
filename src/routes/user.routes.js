@@ -213,6 +213,53 @@ router.patch(
  *     responses:
  *       200:
  *         description: Danh sách IP, thiết bị, lần sử dụng gần nhất và hạn tin cậy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     currentLoginIp:
+ *                       type: string
+ *                       nullable: true
+ *                       description: IP đăng nhập gần nhất của tài khoản được xem
+ *                     lastLoginAt:
+ *                       type: string
+ *                       format: date-time
+ *                       nullable: true
+ *                     bypassIpVerification:
+ *                       type: boolean
+ *                     trustedIps:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     trustedIpRecords:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           ipAddress:
+ *                             type: string
+ *                           device:
+ *                             type: string
+ *                           trustedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           lastUsedAt:
+ *                             type: string
+ *                             format: date-time
+ *                           expiresAt:
+ *                             type: string
+ *                             format: date-time
+ *                     policy:
+ *                       type: object
+ *                       properties:
+ *                         ttlDays:
+ *                           type: integer
+ *                         maxRecords:
+ *                           type: integer
  *       403:
  *         description: Chỉ quản trị viên được phép thực hiện
  */
