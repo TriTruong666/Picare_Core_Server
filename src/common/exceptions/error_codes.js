@@ -114,6 +114,11 @@ const ErrorCodes = {
     message: "Địa chỉ IP tin cậy không tồn tại",
     statusCode: 404,
   },
+  AUTH_LOGIN_RATE_LIMITED: {
+    code: "ERR_AUTH_016",
+    message: "Đăng nhập thất bại quá nhiều lần, vui lòng thử lại sau",
+    statusCode: 429,
+  },
   CLIENT_NOT_FOUND: {
     code: "ERR_CLIENT_001",
     message: "Không tìm thấy client hệ thống",

@@ -10,7 +10,11 @@ class UserController {
       const token = req.cookies.token;
       const user = await UserService.getMe(token);
 
-      return ResponseHandler.success(res, user, "Xác thực người dùng thành công");
+      return ResponseHandler.success(
+        res,
+        user,
+        "Xác thực người dùng thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -32,7 +36,7 @@ class UserController {
         result.count,
         result.page,
         result.limit,
-        "Lấy danh sách người dùng thành công"
+        "Lấy danh sách người dùng thành công",
       );
     } catch (error) {
       next(error);
@@ -42,7 +46,11 @@ class UserController {
   static async getAllUsers(req, res, next) {
     try {
       const users = await UserService.getAllUsers();
-      return ResponseHandler.success(res, users, "Lấy danh sách người dùng thành công");
+      return ResponseHandler.success(
+        res,
+        users,
+        "Lấy danh sách người dùng thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -58,7 +66,11 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.getUserByUserId(userId);
 
-      return ResponseHandler.success(res, user, "Lấy thông tin người dùng thành công");
+      return ResponseHandler.success(
+        res,
+        user,
+        "Lấy thông tin người dùng thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -73,7 +85,11 @@ class UserController {
 
       const user = await UserService.createUser(req.body, req.user);
 
-      return ResponseHandler.created(res, user, "Tạo người dùng mới thành công");
+      return ResponseHandler.created(
+        res,
+        user,
+        "Tạo người dùng mới thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -89,7 +105,11 @@ class UserController {
       const { userId } = req.params;
       const user = await UserService.updateUser(userId, req.body);
 
-      return ResponseHandler.success(res, user, "Cập nhật người dùng thành công");
+      return ResponseHandler.success(
+        res,
+        user,
+        "Cập nhật người dùng thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -102,8 +122,15 @@ class UserController {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
       }
 
-      const result = await UserService.updateAuthPolicy(req.params.userId, req.body);
-      return ResponseHandler.success(res, result, "Cập nhật chính sách xác thực thành công");
+      const result = await UserService.updateAuthPolicy(
+        req.params.userId,
+        req.body,
+      );
+      return ResponseHandler.success(
+        res,
+        result,
+        "Cập nhật chính sách xác thực thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -118,6 +145,24 @@ class UserController {
 
       const result = await UserService.revokeAllTrustedIps(req.params.userId);
       return ResponseHandler.success(res, null, result.message);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getTrustedIps(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException(ErrorCodes.BAD_REQUEST, errors.array());
+      }
+
+      const result = await UserService.getTrustedIps(req.params.userId);
+      return ResponseHandler.success(
+        res,
+        result,
+        "Lấy danh sách IP tin cậy thành công",
+      );
     } catch (error) {
       next(error);
     }

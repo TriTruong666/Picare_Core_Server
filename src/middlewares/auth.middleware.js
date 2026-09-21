@@ -44,7 +44,7 @@ const protect = async (req, res, next) => {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    const decoded = JWTService.verify(token);
+    const decoded = await JWTService.verifyUserSession(token);
     if (!decoded) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
@@ -67,7 +67,7 @@ const protectContractAccess = async (req, res, next) => {
     // 1. Kiểm tra session đăng nhập thông thường (Cookie)
     const cookieToken = req.cookies?.token;
     if (cookieToken) {
-      const decoded = JWTService.verify(cookieToken);
+      const decoded = await JWTService.verifyUserSession(cookieToken);
       if (decoded) {
         req.user = decoded;
         return next();
@@ -127,4 +127,3 @@ module.exports = {
   protectContractAccess,
   restrictTo,
 };
-

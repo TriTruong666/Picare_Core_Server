@@ -68,11 +68,23 @@ const User = sequelize.define(
       allowNull: false,
       field: "trusted_ips",
     },
+    trustedIpRecords: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+      allowNull: false,
+      field: "trusted_ip_records",
+    },
     bypassIpVerification: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       allowNull: false,
       field: "bypass_ip_verification",
+    },
+    sessionVersion: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      allowNull: false,
+      field: "session_version",
     },
     role: {
       type: DataTypes.STRING,
@@ -113,9 +125,22 @@ const User = sequelize.define(
           const salt = await bcrypt.genSalt(12);
           user.password = await bcrypt.hash(user.password, salt);
         }
+
+        const invalidatesSessions = [
+          "password",
+          "status",
+          "role",
+          "roleId",
+          "email",
+          "bypassIpVerification",
+        ].some((field) => user.changed(field));
+
+        if (invalidatesSessions && !user.changed("sessionVersion")) {
+          user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+        }
       },
     },
-  }
+  },
 );
 
 User.prototype.comparePassword = async function (candidatePassword) {
@@ -129,5 +154,3 @@ User.associate = (models) => {
 };
 
 module.exports = User;
-
-

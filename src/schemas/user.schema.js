@@ -8,6 +8,7 @@ class UserDTO {
     this.phone = user.phone;
     this.role = user.role;
     this.isOnline = user.isOnline;
+    this.status = user.status;
     this.bypassIpVerification = Boolean(user.bypassIpVerification);
     this.note = user.note;
     this.createdAt = user.createdAt;
@@ -26,7 +27,8 @@ class UserDTO {
 const phoneValidator = body("phone")
   .optional({ values: "null" })
   .custom(
-    (value) => value === null || value === "" || /^[0-9+\-\s().]{8,20}$/.test(value)
+    (value) =>
+      value === null || value === "" || /^[0-9+\-\s().]{8,20}$/.test(value),
   )
   .withMessage("Số điện thoại không hợp lệ");
 
@@ -47,8 +49,16 @@ const createUserSchema = [
 
 const updateUserSchema = [
   param("userId").isUUID(4).withMessage("ID người dùng không hợp lệ"),
-  body("name").optional().trim().notEmpty().withMessage("Tên không được để trống"),
-  body("email").optional().isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+  body("name")
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage("Tên không được để trống"),
+  body("email")
+    .optional()
+    .isEmail()
+    .withMessage("Email không hợp lệ")
+    .normalizeEmail(),
   phoneValidator,
   body("role")
     .optional()
@@ -56,7 +66,14 @@ const updateUserSchema = [
     .trim()
     .notEmpty()
     .withMessage("Role không hợp lệ"),
-  body("isOnline").optional().isBoolean().withMessage("isOnline phải là boolean"),
+  body("isOnline")
+    .optional()
+    .isBoolean()
+    .withMessage("isOnline phải là boolean"),
+  body("status")
+    .optional()
+    .isIn(["ACTIVE", "INACTIVE"])
+    .withMessage("Trạng thái tài khoản không hợp lệ"),
   body("note").optional().trim(),
 ];
 

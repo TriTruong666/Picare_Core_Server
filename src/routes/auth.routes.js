@@ -38,6 +38,8 @@ const {
  *         description: Invalid email or password
  *       403:
  *         description: Account is inactive
+ *       429:
+ *         description: Too many failed login attempts; inspect the Retry-After header
  */
 router.post("/login", loginSchema, AuthController.login);
 

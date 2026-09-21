@@ -21,13 +21,15 @@ async function seedingUsers() {
         });
         console.log(`[SEED]: Tài khoản ${u.email} đã được tạo thành công.`);
       } else {
-        await isExisted.update({
+        const passwordMatches = await isExisted.comparePassword(u.password);
+        const nextData = {
           name: u.name,
           role: u.role,
           email: u.email,
-          password: u.password,
           bypassIpVerification: Boolean(u.bypassIpVerification),
-        });
+          ...(!passwordMatches ? { password: u.password } : {}),
+        };
+        await isExisted.update(nextData);
         console.log(`[SEED]: Tài khoản ${u.email} đã được cập nhật thông tin.`);
       }
     }

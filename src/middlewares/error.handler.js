@@ -7,10 +7,15 @@ const { BaseException } = require("../common/exceptions/BaseException");
  */
 const globalErrorHandler = (err, req, res, next) => {
   // 1. Phân loại lỗi
-  let { statusCode = 500, message = "Internal Server Error", errorCode = "ERR_INTERNAL_001", details = null } = err;
+  let {
+    statusCode = 500,
+    message = "Internal Server Error",
+    errorCode = "ERR_INTERNAL_001",
+    details = null,
+  } = err;
 
   // 2. Xử lý các loại lỗi hệ thống khác nhau
-  
+
   // A. Trường hợp là lỗi tùy chỉnh (BaseException) của chúng ta
   if (err instanceof BaseException) {
     statusCode = err.statusCode;
@@ -55,6 +60,10 @@ const globalErrorHandler = (err, req, res, next) => {
     });
   }
 
+  if (errorCode === "ERR_AUTH_016" && details?.retryAfter) {
+    res.set("Retry-After", String(details.retryAfter));
+  }
+
   // 4. Trả về Response chuẩn qua ResponseHandler
   if (statusCode >= 500) {
     return ResponseHandler.internalError(res, message, err, errorCode, details);
@@ -64,4 +73,3 @@ const globalErrorHandler = (err, req, res, next) => {
 };
 
 module.exports = globalErrorHandler;
-

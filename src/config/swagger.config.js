@@ -51,6 +51,7 @@ const swaggerDefinition = {
           email: { type: "string" },
           role: { type: "string" },
           bypassIpVerification: { type: "boolean" },
+          status: { type: "string", enum: ["ACTIVE", "INACTIVE"] },
           companyId: { type: "string" },
         },
       },
@@ -74,7 +75,10 @@ const swaggerDefinition = {
       Integration: {
         type: "object",
         properties: {
-          platform: { type: "string", enum: ["HARAVAN", "MISA", "SHOPEE", "TIKTOK"] },
+          platform: {
+            type: "string",
+            enum: ["HARAVAN", "MISA", "SHOPEE", "TIKTOK"],
+          },
           configData: { type: "object" },
           isActive: { type: "boolean" },
           companyId: { type: "string" },
@@ -201,9 +205,16 @@ const swaggerDefinition = {
         type: "object",
         required: ["platform", "companyId", "companyName"],
         properties: {
-          shopId: { type: "string", description: "ID shop từ platform (ví dụ: SHOPEE ID)" },
+          shopId: {
+            type: "string",
+            description: "ID shop từ platform (ví dụ: SHOPEE ID)",
+          },
           shopName: { type: "string", description: "Tên shop hiển thị" },
-          platform: { type: "string", enum: ["shopee", "tiktok"], description: "Nền tảng (shopee/tiktok)" },
+          platform: {
+            type: "string",
+            enum: ["shopee", "tiktok"],
+            description: "Nền tảng (shopee/tiktok)",
+          },
           companyId: { type: "string", description: "Mã công ty liên kết" },
           companyName: { type: "string", description: "Tên công ty" },
           isActive: { type: "boolean", default: true },

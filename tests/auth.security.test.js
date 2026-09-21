@@ -11,6 +11,7 @@ const mockModule = (path, exports) => {
 let currentUser = null;
 let createdUserPayload = null;
 let createdChallengePayload = null;
+let rateLimitFailures = [];
 
 const User = {
   async findOne() {
@@ -50,6 +51,13 @@ mockModule("../src/services/login_verification.service", {
     return { userId: "5e104bc8-a5cf-470b-a700-6af22ae7da0c" };
   },
 });
+mockModule("../src/services/login_rate_limit.service", {
+  async assertAllowed() {},
+  async recordFailure(context) {
+    rateLimitFailures.push(context);
+  },
+  async clearAccountFailures() {},
+});
 
 const AuthService = require("../src/services/auth.service");
 const appConfig = require("../src/config/app.config");
@@ -62,7 +70,9 @@ const buildUser = (overrides = {}) => ({
   role: "default",
   status: "ACTIVE",
   trustedIps: [],
+  trustedIpRecords: [],
   bypassIpVerification: false,
+  sessionVersion: 0,
   async comparePassword() {
     return true;
   },
@@ -93,6 +103,27 @@ test("login from an unknown IP creates a verification challenge without a token"
   assert.equal(result.token, undefined);
   assert.equal(createdChallengePayload.ipAddress, "203.0.113.10");
   assert.equal(createdChallengePayload.user.userId, currentUser.userId);
+});
+
+test("invalid credentials are recorded against account and IP", async () => {
+  currentUser = null;
+  rateLimitFailures = [];
+
+  await assert.rejects(
+    AuthService.login({
+      email: "Missing.User@Picare.vn",
+      password: "secret123",
+      ipAddress: "::ffff:198.51.100.30",
+    }),
+    (error) => error.errorCode === "ERR_AUTH_001",
+  );
+
+  assert.deepEqual(rateLimitFailures, [
+    {
+      email: "missing.user@picare.vn",
+      ipAddress: "198.51.100.30",
+    },
+  ]);
 });
 
 test("trusted IP and admin bypass complete login without creating a challenge", async () => {

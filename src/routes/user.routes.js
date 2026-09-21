@@ -116,7 +116,13 @@ router.get("/:userId", protect, userIdSchema, UserController.getUserById);
  *       201:
  *         description: Đã tạo thành công
  */
-router.post("/", protect, restrictTo("admin"), createUserSchema, UserController.createUser);
+router.post(
+  "/",
+  protect,
+  restrictTo("admin"),
+  createUserSchema,
+  UserController.createUser,
+);
 
 /**
  * @swagger
@@ -187,6 +193,35 @@ router.patch(
   restrictTo("admin"),
   authPolicySchema,
   UserController.updateAuthPolicy,
+);
+
+/**
+ * @swagger
+ * /api/v1/users/{userId}/trusted-ips:
+ *   get:
+ *     summary: Lấy metadata các IP tin cậy của người dùng
+ *     tags: [Users]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Danh sách IP, thiết bị, lần sử dụng gần nhất và hạn tin cậy
+ *       403:
+ *         description: Chỉ quản trị viên được phép thực hiện
+ */
+router.get(
+  "/:userId/trusted-ips",
+  protect,
+  restrictTo("admin"),
+  userIdSchema,
+  UserController.getTrustedIps,
 );
 
 /**

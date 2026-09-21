@@ -13,33 +13,39 @@ class SocketService {
 
   /**
    * Khởi tạo Socket.io với server HTTP
-   * @param {Object} httpServer 
+   * @param {Object} httpServer
    */
   init(httpServer) {
     this.io = new Server(httpServer, {
       cors: {
         origin: config.cors,
         methods: ["GET", "POST"],
-        credentials: true
+        credentials: true,
       },
       pingTimeout: 60000,
     });
 
     // Middleware xác thực JWT
-    this.io.use((socket, next) => {
-      const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(" ")[1];
-      
-      if (!token) {
-        return next(new Error("Authentication error: No token provided"));
-      }
+    this.io.use(async (socket, next) => {
+      try {
+        const token =
+          socket.handshake.auth?.token ||
+          socket.handshake.headers?.authorization?.split(" ")[1];
 
-      const decoded = JWTService.verify(token);
-      if (!decoded) {
+        if (!token) {
+          return next(new Error("Authentication error: No token provided"));
+        }
+
+        const decoded = await JWTService.verifyUserSession(token);
+        if (!decoded) {
+          return next(new Error("Authentication error: Invalid token"));
+        }
+
+        socket.user = decoded; // { userId, name, role, ... }
+        return next();
+      } catch (_error) {
         return next(new Error("Authentication error: Invalid token"));
       }
-
-      socket.user = decoded; // { userId, name, role, ... }
-      next();
     });
 
     this.io.on("connection", (socket) => {
@@ -52,7 +58,7 @@ class SocketService {
 
   /**
    * Xử lý sự kiện khi có client kết nối
-   * @param {Socket} socket 
+   * @param {Socket} socket
    */
   _handleConnection(socket) {
     const userId = socket.user.userId;
@@ -68,7 +74,9 @@ class SocketService {
     socket.join(`user:${userId}`);
 
     socket.on("disconnect", () => {
-      console.log(`[SOCKET]: Client disconnected: ${socket.id} (User: ${userId})`);
+      console.log(
+        `[SOCKET]: Client disconnected: ${socket.id} (User: ${userId})`,
+      );
       const userSockets = this.connectedUsers.get(userId);
       if (userSockets) {
         userSockets.delete(socket.id);
@@ -82,7 +90,9 @@ class SocketService {
     socket.on("join_conversation", ({ conversationId }) => {
       if (!conversationId) return;
       socket.join(`conversation:${conversationId}`);
-      console.log(`[SOCKET]: ${socket.id} joined conversation:${conversationId}`);
+      console.log(
+        `[SOCKET]: ${socket.id} joined conversation:${conversationId}`,
+      );
     });
 
     // Client rời khỏi room của một conversation
@@ -100,8 +110,8 @@ class SocketService {
 
   /**
    * Gửi event cho tất cả client
-   * @param {string} event 
-   * @param {any} data 
+   * @param {string} event
+   * @param {any} data
    */
   emitToAll(event, data) {
     if (this.io) {
@@ -111,9 +121,9 @@ class SocketService {
 
   /**
    * Gửi event cho một user cụ thể (tất cả các socket của user đó)
-   * @param {string} userId 
-   * @param {string} event 
-   * @param {any} data 
+   * @param {string} userId
+   * @param {string} event
+   * @param {any} data
    */
   emitToUser(userId, event, data) {
     if (this.io) {
@@ -123,14 +133,31 @@ class SocketService {
 
   /**
    * Gửi event tới một room
-   * @param {string} room 
-   * @param {string} event 
-   * @param {any} data 
+   * @param {string} room
+   * @param {string} event
+   * @param {any} data
    */
   emitToRoom(room, event, data) {
     if (this.io) {
       this.io.to(room).emit(event, data);
     }
+  }
+
+  /**
+   * Immediately close every active socket for a user after their session is revoked.
+   */
+  disconnectUser(userId, reason = "session_revoked") {
+    if (!this.io || !userId) return 0;
+
+    const socketIds = [...(this.connectedUsers.get(userId) || [])];
+    for (const socketId of socketIds) {
+      const socket = this.io.sockets.sockets.get(socketId);
+      if (!socket) continue;
+      socket.emit("session_revoked", { reason });
+      socket.disconnect(true);
+    }
+
+    return socketIds.length;
   }
 
   /**

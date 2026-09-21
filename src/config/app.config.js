@@ -73,6 +73,16 @@ const appConfig = {
   },
 
   auth: {
+    loginRateLimit: {
+      enabled: parseBoolean(process.env.AUTH_LOGIN_RATE_LIMIT_ENABLED, true),
+      windowSeconds:
+        parseInt(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS, 10) ||
+        15 * 60,
+      maxAttemptsPerIp:
+        parseInt(process.env.AUTH_LOGIN_RATE_LIMIT_MAX_PER_IP, 10) || 50,
+      maxAttemptsPerAccount:
+        parseInt(process.env.AUTH_LOGIN_RATE_LIMIT_MAX_PER_ACCOUNT, 10) || 10,
+    },
     loginVerification: {
       enabled: parseBoolean(process.env.AUTH_LOGIN_VERIFICATION_ENABLED, true),
       ttlSeconds:
@@ -82,6 +92,10 @@ const appConfig = {
         parseInt(process.env.AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS, 10) || 60,
       maxResends: parseInt(process.env.AUTH_LOGIN_OTP_MAX_RESENDS, 10) || 3,
       otpSecret: process.env.AUTH_OTP_SECRET || process.env.JWT_SECRET || "",
+      trustedIpTtlDays:
+        parseInt(process.env.AUTH_TRUSTED_IP_TTL_DAYS, 10) || 30,
+      maxTrustedIps:
+        parseInt(process.env.AUTH_TRUSTED_IP_MAX_RECORDS, 10) || 10,
     },
   },
 

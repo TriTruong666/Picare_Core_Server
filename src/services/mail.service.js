@@ -203,21 +203,36 @@ class MailService {
     const safeExpiresInMinutes = escape(expiresInMinutes);
     const subject = "Mã xác thực đăng nhập Picare Client";
     const text = [
-      "Xác thực đăng nhập Picare Client",
-      `Mã xác thực của bạn là: ${code}`,
-      `Mã có hiệu lực trong ${expiresInMinutes} phút.`,
-      `Địa chỉ IP đăng nhập: ${ipAddress}`,
-      "Không chia sẻ mã này. Nếu bạn không thực hiện đăng nhập, hãy đổi mật khẩu ngay.",
+      "Xác thực đăng nhập Picare",
+      `Mã xác thực của bạn: ${code}`,
+      `Thời gian hiệu lực: ${expiresInMinutes} phút`,
+      `Địa chỉ IP yêu cầu: ${ipAddress}`,
+      "Lưu ý: Không chia sẻ mã xác thực này. Nếu bạn không thực hiện yêu cầu đăng nhập, vui lòng đổi mật khẩu ngay.",
     ].join("\n\n");
+
     const html = [
-      '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#111827;max-width:600px">',
-      '<h2 style="margin:0 0 16px">Xác thực đăng nhập Picare Client</h2>',
-      '<p style="margin:0 0 16px">Có yêu cầu đăng nhập từ một địa chỉ IP chưa được tin cậy.</p>',
-      `<div style="margin:20px 0;padding:16px;text-align:center;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;font-size:32px;font-weight:700;letter-spacing:8px">${safeCode}</div>`,
-      `<p style="margin:0 0 8px">Mã có hiệu lực trong <strong>${safeExpiresInMinutes} phút</strong>.</p>`,
-      `<p style="margin:0 0 16px">Địa chỉ IP đăng nhập: <strong>${safeIpAddress}</strong></p>`,
-      '<p style="margin:0;color:#b91c1c">Không chia sẻ mã này. Nếu bạn không thực hiện đăng nhập, hãy đổi mật khẩu ngay.</p>',
-      "</div>",
+      '<div style="background-color:#f8fafc;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#334155;line-height:1.5">',
+      '<div style="max-width:460px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:36px 32px;box-shadow:0 1px 3px rgba(0,0,0,0.04)">',
+      '<div style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#64748b;margin-bottom:12px">Picare Security</div>',
+      '<h1 style="margin:0 0 10px;font-size:20px;font-weight:600;color:#0f172a;letter-spacing:-0.2px">Xác thực đăng nhập</h1>',
+      '<p style="margin:0 0 24px;font-size:14px;color:#64748b;line-height:22px">Sử dụng mã OTP dưới đây để hoàn tất đăng nhập vào hệ thống Picare:</p>',
+      `<div style="margin:0 0 24px;padding:16px 20px;text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:#0f172a">${safeCode}</div>`,
+      '<table style="width:100%;border-collapse:collapse;margin-bottom:24px;font-size:13px">',
+      '<tr>',
+      '<td style="padding:7px 0;color:#64748b">Thời gian hiệu lực</td>',
+      `<td style="padding:7px 0;text-align:right;font-weight:600;color:#0f172a">${safeExpiresInMinutes} phút</td>`,
+      '</tr>',
+      '<tr>',
+      '<td style="padding:7px 0;color:#64748b;border-top:1px solid #f1f5f9">Địa chỉ IP</td>',
+      `<td style="padding:7px 0;text-align:right;font-weight:500;font-family:ui-monospace,SFMono-Regular,monospace;color:#0f172a;border-top:1px solid #f1f5f9">${safeIpAddress}</td>`,
+      '</tr>',
+      '</table>',
+      '<div style="padding:12px 14px;background:#fefce8;border:1px solid #fef08a;border-radius:6px;font-size:12px;line-height:18px;color:#854d0e">',
+      '<strong>Lưu ý:</strong> Không chia sẻ mã này với bất kỳ ai. Nếu bạn không thực hiện đăng nhập, hãy đổi mật khẩu ngay để bảo vệ tài khoản.',
+      '</div>',
+      '</div>',
+      '<div style="text-align:center;margin-top:20px;font-size:12px;color:#94a3b8">© Picare • Email tự động, vui lòng không phản hồi</div>',
+      '</div>',
     ].join("");
 
     return this.sendMail({

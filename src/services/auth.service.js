@@ -1,13 +1,21 @@
 const User = require("../models/user.model");
 const Role = require("../models/role.model");
+const bcrypt = require("bcrypt");
 const JWTService = require("./jwt.service");
 const LoginVerificationService = require("./login_verification.service");
+const LoginRateLimitService = require("./login_rate_limit.service");
+const SocketService = require("./socket.service");
 const appConfig = require("../config/app.config");
 
 const { UserDTO } = require("../schemas/user.schema");
 const { USER_STATUS } = require("../common/enum/user.enum");
 const { UserRoles } = require("../common/enum/role.enum");
 const { normalizeIpAddress } = require("../utils/ip.util");
+const {
+  createTrustedIpRecord,
+  normalizeTrustedIpRecords,
+  sanitizeDevice,
+} = require("../utils/trusted_ip.util");
 
 const {
   UnauthorizedException,
@@ -17,9 +25,24 @@ const {
 } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
+const INVALID_PASSWORD_HASH =
+  "$2b$12$tOw8wGFPGISwIZEiuQYj/em5OAo2TMLkJpMIoi3Jz3gTgAVYIA0Kq";
+
 class AuthService {
+  static normalizeTrustedIpRecords(user, now = new Date()) {
+    return normalizeTrustedIpRecords({
+      records: user.trustedIpRecords,
+      legacyIps: user.trustedIps,
+      now,
+      ttlDays: appConfig.auth.loginVerification.trustedIpTtlDays,
+      maxRecords: appConfig.auth.loginVerification.maxTrustedIps,
+    });
+  }
+
   static async resolveRole(roleName) {
-    const normalizedRole = String(roleName || "").trim().toLowerCase();
+    const normalizedRole = String(roleName || "")
+      .trim()
+      .toLowerCase();
 
     if (!normalizedRole) {
       return null;
@@ -36,7 +59,13 @@ class AuthService {
   /**
    * Complete a login after all authentication factors have passed.
    */
-  static async completeLogin({ userId, ipAddress, trustIp = false }) {
+  static async completeLogin({
+    userId,
+    ipAddress,
+    trustIp = false,
+    touchTrustedIp = false,
+    device,
+  }) {
     const transaction = await User.sequelize.transaction();
     let user;
 
@@ -55,21 +84,42 @@ class AuthService {
         throw new ForbiddenException(ErrorCodes.AUTH_ACCOUNT_INACTIVE);
       }
 
-      const trustedIps = [...new Set(
-        (Array.isArray(user.trustedIps) ? user.trustedIps : [])
-          .map(normalizeIpAddress)
-          .filter((ip) => ip && ip !== "unknown"),
-      )];
+      const now = new Date();
+      let trustedIpRecords = this.normalizeTrustedIpRecords(user, now);
+      const recordIndex = trustedIpRecords.findIndex(
+        (record) => record.ipAddress === ipAddress,
+      );
 
-      if (trustIp && !trustedIps.includes(ipAddress)) {
-        trustedIps.push(ipAddress);
+      if (trustIp && ipAddress !== "unknown") {
+        const trustedRecord = createTrustedIpRecord({
+          ipAddress,
+          device,
+          now,
+          ttlDays: appConfig.auth.loginVerification.trustedIpTtlDays,
+        });
+        if (recordIndex >= 0) trustedIpRecords[recordIndex] = trustedRecord;
+        else trustedIpRecords.unshift(trustedRecord);
+      } else if (touchTrustedIp && recordIndex >= 0) {
+        trustedIpRecords[recordIndex] = {
+          ...trustedIpRecords[recordIndex],
+          lastUsedAt: now.toISOString(),
+          device: sanitizeDevice(
+            device || trustedIpRecords[recordIndex].device,
+          ),
+        };
       }
+
+      trustedIpRecords = trustedIpRecords
+        .sort((a, b) => b.lastUsedAt.localeCompare(a.lastUsedAt))
+        .slice(0, appConfig.auth.loginVerification.maxTrustedIps);
+      const trustedIps = trustedIpRecords.map((record) => record.ipAddress);
 
       await user.update(
         {
-          ...(trustIp ? { trustedIps } : {}),
+          trustedIps,
+          trustedIpRecords,
           loginIp: ipAddress,
-          loginAt: new Date(),
+          loginAt: now,
           isOnline: true,
         },
         { transaction },
@@ -83,41 +133,64 @@ class AuthService {
     return {
       message: "Đăng nhập thành công",
       requiresVerification: false,
-      token: JWTService.signUser(user.name, user.role, user.userId),
+      token: JWTService.signUser(
+        user.name,
+        user.role,
+        user.userId,
+        user.sessionVersion,
+      ),
     };
   }
 
   /**
    * Login with password, then require an email OTP for an unknown IP.
    */
-  static async login({ email, password, ipAddress }) {
-    const user = await User.findOne({ where: { email } });
+  static async login({ email, password, ipAddress, device }) {
+    const normalizedEmail = String(email || "")
+      .trim()
+      .toLowerCase();
+    const normalizedIpAddress = normalizeIpAddress(ipAddress);
+    const rateLimitContext = {
+      email: normalizedEmail,
+      ipAddress: normalizedIpAddress,
+    };
+    await LoginRateLimitService.assertAllowed(rateLimitContext);
+
+    const user = await User.findOne({ where: { email: normalizedEmail } });
 
     if (!user) {
+      await bcrypt.compare(password, INVALID_PASSWORD_HASH);
+      await LoginRateLimitService.recordFailure(rateLimitContext);
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS);
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      await LoginRateLimitService.recordFailure(rateLimitContext);
       throw new UnauthorizedException(ErrorCodes.AUTH_INVALID_CREDENTIALS);
     }
+
+    await LoginRateLimitService.clearAccountFailures(rateLimitContext);
 
     if (user.status !== USER_STATUS.ACTIVE) {
       throw new ForbiddenException(ErrorCodes.AUTH_ACCOUNT_INACTIVE);
     }
 
-    const normalizedIpAddress = normalizeIpAddress(ipAddress);
-    const trustedIps = (Array.isArray(user.trustedIps) ? user.trustedIps : [])
-      .map(normalizeIpAddress);
+    const trustedIpRecords = this.normalizeTrustedIpRecords(user);
+    const isTrustedIp = trustedIpRecords.some(
+      (record) => record.ipAddress === normalizedIpAddress,
+    );
 
     if (
       !appConfig.auth.loginVerification.enabled ||
       user.bypassIpVerification ||
-      trustedIps.includes(normalizedIpAddress)
+      isTrustedIp
     ) {
       return this.completeLogin({
         userId: user.userId,
         ipAddress: normalizedIpAddress,
+        touchTrustedIp: isTrustedIp,
+        device,
       });
     }
 
@@ -133,7 +206,7 @@ class AuthService {
     };
   }
 
-  static async verifyLogin({ challengeId, code, ipAddress }) {
+  static async verifyLogin({ challengeId, code, ipAddress, device }) {
     const normalizedIpAddress = normalizeIpAddress(ipAddress);
     const { userId } = await LoginVerificationService.verifyChallenge({
       challengeId,
@@ -145,6 +218,7 @@ class AuthService {
       userId,
       ipAddress: normalizedIpAddress,
       trustIp: true,
+      device,
     });
   }
 
@@ -159,13 +233,19 @@ class AuthService {
   static async getTrustedIps({ userId }) {
     const user = await User.findOne({
       where: { userId },
-      attributes: ["trustedIps", "loginIp"],
+      attributes: ["trustedIps", "trustedIpRecords", "loginIp"],
     });
     if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
+    const trustedIpRecords = this.normalizeTrustedIpRecords(user);
     return {
-      trustedIps: Array.isArray(user.trustedIps) ? user.trustedIps : [],
+      trustedIps: trustedIpRecords.map((record) => record.ipAddress),
+      trustedIpRecords,
       currentLoginIp: user.loginIp,
+      policy: {
+        ttlDays: appConfig.auth.loginVerification.trustedIpTtlDays,
+        maxRecords: appConfig.auth.loginVerification.maxTrustedIps,
+      },
     };
   }
 
@@ -174,21 +254,28 @@ class AuthService {
     if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
     const normalizedIpAddress = normalizeIpAddress(ipAddress);
-    const trustedIps = (Array.isArray(user.trustedIps) ? user.trustedIps : [])
-      .map(normalizeIpAddress);
-    if (!trustedIps.includes(normalizedIpAddress)) {
+    const trustedIpRecords = this.normalizeTrustedIpRecords(user);
+    if (
+      !trustedIpRecords.some(
+        (record) => record.ipAddress === normalizedIpAddress,
+      )
+    ) {
       throw new NotFoundException(ErrorCodes.AUTH_TRUSTED_IP_NOT_FOUND);
     }
 
+    const nextRecords = trustedIpRecords.filter(
+      (record) => record.ipAddress !== normalizedIpAddress,
+    );
     await user.update({
-      trustedIps: trustedIps.filter((ip) => ip !== normalizedIpAddress),
+      trustedIps: nextRecords.map((record) => record.ipAddress),
+      trustedIpRecords: nextRecords,
     });
     return { message: "Đã thu hồi địa chỉ IP tin cậy" };
   }
 
   static async revokeAllTrustedIps({ userId }) {
     const [updated] = await User.update(
-      { trustedIps: [] },
+      { trustedIps: [], trustedIpRecords: [] },
       { where: { userId } },
     );
     if (!updated) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
@@ -212,7 +299,7 @@ class AuthService {
     const roleRecord = await this.resolveRole(normalizedRole);
     const normalizedPhone =
       userData.phone === undefined || userData.phone === null
-        ? userData.phone ?? null
+        ? (userData.phone ?? null)
         : String(userData.phone).trim() || null;
 
     const user = await User.create({
@@ -261,10 +348,13 @@ class AuthService {
     }
 
     if (oldPassword === newPassword) {
-      throw new BadRequestException(ErrorCodes.AUTH_NEW_PASSWORD_MUST_DIFFERENT);
+      throw new BadRequestException(
+        ErrorCodes.AUTH_NEW_PASSWORD_MUST_DIFFERENT,
+      );
     }
 
     await user.update({ password: newPassword });
+    SocketService.disconnectUser(user.userId, "password_changed");
 
     return { message: "Đổi mật khẩu thành công" };
   }

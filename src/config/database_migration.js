@@ -7,7 +7,9 @@ const sequelize = require("./postgres.config");
  * @param {import("sequelize").Sequelize} [customSequelize=sequelize]
  */
 async function runDatabaseMigrations(customSequelize = sequelize) {
-  console.log("[MIGRATION]: Checking database schema and running migrations...");
+  console.log(
+    "[MIGRATION]: Checking database schema and running migrations...",
+  );
 
   try {
     // 1. Enable pgcrypto extension for UUID generation if needed
@@ -28,9 +30,33 @@ async function runDatabaseMigrations(customSequelize = sequelize) {
         ALTER TABLE users ADD COLUMN IF NOT EXISTS login_ip VARCHAR(100);
         ALTER TABLE users ADD COLUMN IF NOT EXISTS trusted_ips TEXT[] DEFAULT '{}';
         ALTER TABLE users ADD COLUMN IF NOT EXISTS bypass_ip_verification BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS trusted_ip_records JSONB NOT NULL DEFAULT '[]'::jsonb;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
         UPDATE users SET trusted_ips = '{}' WHERE trusted_ips IS NULL;
         ALTER TABLE users ALTER COLUMN trusted_ips SET DEFAULT '{}';
         ALTER TABLE users ALTER COLUMN trusted_ips SET NOT NULL;
+      `);
+
+      await customSequelize.query(`
+        UPDATE users AS u
+        SET trusted_ip_records = COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'ipAddress', trusted_ip,
+                'trustedAt', COALESCE(u.login_at, NOW()),
+                'lastUsedAt', COALESCE(u.login_at, NOW()),
+                'expiresAt', NOW() + INTERVAL '30 days',
+                'device', 'Migrated trusted IP'
+              )
+            )
+            FROM unnest(u.trusted_ips) AS trusted_ip
+            WHERE trusted_ip IS NOT NULL AND trusted_ip <> ''
+          ),
+          '[]'::jsonb
+        )
+        WHERE jsonb_array_length(u.trusted_ip_records) = 0
+          AND cardinality(u.trusted_ips) > 0;
       `);
 
       await customSequelize.query(`
@@ -79,7 +105,10 @@ async function runDatabaseMigrations(customSequelize = sequelize) {
 
     console.log("[MIGRATION]: Database migrations completed successfully.");
   } catch (error) {
-    console.error("[MIGRATION_ERROR]: Failed to run database migrations:", error);
+    console.error(
+      "[MIGRATION_ERROR]: Failed to run database migrations:",
+      error,
+    );
     throw error;
   }
 }

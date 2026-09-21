@@ -63,6 +63,10 @@ verification policy with these environment variables:
 ```dotenv
 # Enabled by default. Set false only for an emergency legacy-login rollback.
 AUTH_LOGIN_VERIFICATION_ENABLED=true
+AUTH_LOGIN_RATE_LIMIT_ENABLED=true
+AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS=900
+AUTH_LOGIN_RATE_LIMIT_MAX_PER_IP=50
+AUTH_LOGIN_RATE_LIMIT_MAX_PER_ACCOUNT=10
 
 # Use a dedicated long random secret in production. JWT_SECRET is only a fallback.
 AUTH_OTP_SECRET=replace-with-a-long-random-secret
@@ -70,6 +74,8 @@ AUTH_LOGIN_OTP_TTL_SECONDS=300
 AUTH_LOGIN_OTP_MAX_ATTEMPTS=5
 AUTH_LOGIN_OTP_RESEND_COOLDOWN_SECONDS=60
 AUTH_LOGIN_OTP_MAX_RESENDS=3
+AUTH_TRUSTED_IP_TTL_DAYS=30
+AUTH_TRUSTED_IP_MAX_RECORDS=10
 
 # Optional: defaults to the existing E-Contract SMTP account.
 AUTH_SMTP_USER=verified-sender@gmail.com

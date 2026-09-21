@@ -4,6 +4,7 @@ const { validationResult } = require("express-validator");
 const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const { getRequestIp } = require("../utils/ip.util");
+const { getRequestDevice } = require("../utils/trusted_ip.util");
 
 class AuthController {
   static setAuthCookie(res, token) {
@@ -15,6 +16,17 @@ class AuthController {
       path: "/",
       ...(isProduction ? { domain: ".picare.vn" } : {}),
       maxAge: 24 * 60 * 60 * 1000,
+    });
+  }
+
+  static clearAuthCookie(res) {
+    const isProduction = process.env.NODE_ENV === "production";
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
+      path: "/",
+      ...(isProduction ? { domain: ".picare.vn" } : {}),
     });
   }
 
@@ -34,6 +46,7 @@ class AuthController {
         email,
         password,
         ipAddress: getRequestIp(req),
+        device: getRequestDevice(req),
       });
 
       if (result.token) AuthController.setAuthCookie(res, result.token);
@@ -52,6 +65,7 @@ class AuthController {
       const result = await AuthService.verifyLogin({
         ...req.body,
         ipAddress: getRequestIp(req),
+        device: getRequestDevice(req),
       });
       AuthController.setAuthCookie(res, result.token);
 
@@ -80,8 +94,14 @@ class AuthController {
 
   static async getTrustedIps(req, res, next) {
     try {
-      const result = await AuthService.getTrustedIps({ userId: req.user.userId });
-      return ResponseHandler.success(res, result, "Lấy danh sách IP tin cậy thành công");
+      const result = await AuthService.getTrustedIps({
+        userId: req.user.userId,
+      });
+      return ResponseHandler.success(
+        res,
+        result,
+        "Lấy danh sách IP tin cậy thành công",
+      );
     } catch (error) {
       next(error);
     }
@@ -120,7 +140,11 @@ class AuthController {
 
       const result = await AuthService.register(req.body);
 
-      return ResponseHandler.created(res, result, "Ghi danh tai khoan thanh cong");
+      return ResponseHandler.created(
+        res,
+        result,
+        "Ghi danh tai khoan thanh cong",
+      );
     } catch (error) {
       next(error);
     }
@@ -135,14 +159,7 @@ class AuthController {
 
       const { email } = req.body || {};
 
-      const isProduction = process.env.NODE_ENV === "production";
-      res.clearCookie("token", {
-        httpOnly: true,
-        secure: isProduction,
-        sameSite: isProduction ? "none" : "lax",
-        path: "/",
-        ...(isProduction ? { domain: ".picare.vn" } : {}),
-      });
+      AuthController.clearAuthCookie(res);
 
       const result = await AuthService.logout({ email });
 
@@ -165,6 +182,8 @@ class AuthController {
         oldPassword,
         newPassword,
       });
+
+      AuthController.clearAuthCookie(res);
 
       return ResponseHandler.success(res, null, result.message);
     } catch (error) {

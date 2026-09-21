@@ -10,6 +10,9 @@ const {
   ForbiddenException,
 } = require("../common/exceptions/BaseException");
 const { UserDTO } = require("../schemas/user.schema");
+const { USER_STATUS } = require("../common/enum/user.enum");
+const AuthService = require("./auth.service");
+const SocketService = require("./socket.service");
 
 class UserService {
   static normalizePhone(phone) {
@@ -26,7 +29,9 @@ class UserService {
   }
 
   static async resolveRole(roleName) {
-    const normalizedRole = String(roleName || "").trim().toLowerCase();
+    const normalizedRole = String(roleName || "")
+      .trim()
+      .toLowerCase();
 
     if (!normalizedRole) {
       return null;
@@ -48,7 +53,11 @@ class UserService {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    const decoded = await JWTService.verify(token);
+    const decoded = await JWTService.verifyUserSession(token);
+
+    if (!decoded) {
+      throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
+    }
 
     const user = await User.findOne({
       where: { userId: decoded.userId },
@@ -145,7 +154,9 @@ class UserService {
       throw new BadRequestException(ErrorCodes.AUTH_EMAIL_TAKEN);
     }
 
-    const normalizedRole = String(userData.role || "default").trim().toLowerCase();
+    const normalizedRole = String(userData.role || "default")
+      .trim()
+      .toLowerCase();
     const roleRecord = await this.resolveRole(normalizedRole);
 
     const newUser = await User.create({
@@ -180,10 +191,20 @@ class UserService {
       }
     }
 
-    const allowedFields = ["name", "email", "phone", "role", "isOnline", "note"];
+    const allowedFields = [
+      "name",
+      "email",
+      "phone",
+      "role",
+      "status",
+      "isOnline",
+      "note",
+    ];
     const nextData = Object.fromEntries(
       allowedFields
-        .filter((field) => Object.prototype.hasOwnProperty.call(updateData, field))
+        .filter((field) =>
+          Object.prototype.hasOwnProperty.call(updateData, field),
+        )
         .map((field) => [field, updateData[field]]),
     );
 
@@ -192,7 +213,9 @@ class UserService {
     }
 
     if (updateData.role !== undefined) {
-      const normalizedRole = String(updateData.role || "").trim().toLowerCase();
+      const normalizedRole = String(updateData.role || "")
+        .trim()
+        .toLowerCase();
 
       if (!normalizedRole) {
         throw new BadRequestException(ErrorCodes.BAD_REQUEST, [
@@ -205,7 +228,25 @@ class UserService {
       nextData.roleId = roleRecord?.id ?? null;
     }
 
+    if (
+      updateData.status !== undefined &&
+      !Object.values(USER_STATUS).includes(updateData.status)
+    ) {
+      throw new BadRequestException(ErrorCodes.BAD_REQUEST, [
+        { path: "status", msg: "Trạng thái tài khoản không hợp lệ" },
+      ]);
+    }
+
+    const invalidatesActiveSession = ["email", "role", "status"].some(
+      (field) =>
+        Object.prototype.hasOwnProperty.call(nextData, field) &&
+        nextData[field] !== user[field],
+    );
+
     await user.update(nextData);
+    if (invalidatesActiveSession) {
+      SocketService.disconnectUser(user.userId, "account_security_changed");
+    }
     return UserDTO.fromUser(user);
   }
 
@@ -213,7 +254,12 @@ class UserService {
     const user = await User.findOne({ where: { userId } });
     if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
+    const policyChanged =
+      Boolean(user.bypassIpVerification) !== Boolean(bypassIpVerification);
     await user.update({ bypassIpVerification });
+    if (policyChanged) {
+      SocketService.disconnectUser(user.userId, "auth_policy_changed");
+    }
     return {
       userId: user.userId,
       bypassIpVerification: user.bypassIpVerification,
@@ -222,12 +268,16 @@ class UserService {
 
   static async revokeAllTrustedIps(userId) {
     const [updated] = await User.update(
-      { trustedIps: [] },
+      { trustedIps: [], trustedIpRecords: [] },
       { where: { userId } },
     );
     if (!updated) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
     return { message: "Đã thu hồi toàn bộ địa chỉ IP tin cậy của người dùng" };
+  }
+
+  static async getTrustedIps(userId) {
+    return AuthService.getTrustedIps({ userId });
   }
 
   /**

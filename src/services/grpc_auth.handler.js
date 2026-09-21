@@ -19,25 +19,30 @@ const grpcAuthHandler = {
   /**
    * RPC: VerifyToken
    */
-  verifyToken: (call, callback) => {
-    const { token } = call.request;
+  verifyToken: async (call, callback) => {
+    try {
+      const { token } = call.request;
 
-    if (!token) {
+      if (!token) {
+        return callback(null, { valid: false });
+      }
+
+      const decoded = await JWTService.verifyUserSession(token);
+
+      if (!decoded) {
+        return callback(null, { valid: false });
+      }
+
+      return callback(null, {
+        valid: true,
+        userId: decoded.userId,
+        name: decoded.name,
+        role: decoded.role,
+      });
+    } catch (error) {
+      console.error("[gRPC Auth]: Token verification failed:", error.message);
       return callback(null, { valid: false });
     }
-
-    const decoded = JWTService.verify(token);
-
-    if (!decoded) {
-      return callback(null, { valid: false });
-    }
-
-    return callback(null, {
-      valid: true,
-      userId: decoded.userId,
-      name: decoded.name,
-      role: decoded.role,
-    });
   },
 
   /**
@@ -99,7 +104,10 @@ const grpcAuthHandler = {
   listUsers: async (call, callback) => {
     try {
       const page = Math.max(Number(call.request.page) || 1, 1);
-      const limit = Math.min(Math.max(Number(call.request.limit) || 20, 1), 100);
+      const limit = Math.min(
+        Math.max(Number(call.request.limit) || 20, 1),
+        100,
+      );
       const search = String(call.request.search || "").trim();
       const role = String(call.request.role || "").trim();
       const where = {};
@@ -151,11 +159,23 @@ const grpcAuthHandler = {
   /** RPC: GetUsersByIds - batched safe user references for other services. */
   getUsersByIds: async (call, callback) => {
     try {
-      const userIds = [...new Set((call.request.userIds || []).map((userId) => String(userId).trim()).filter(Boolean))];
-      if (!userIds.length) return callback(null, { users: [], missingUserIds: [] });
-      const users = await User.findAll({ where: { userId: { [Op.in]: userIds } } });
+      const userIds = [
+        ...new Set(
+          (call.request.userIds || [])
+            .map((userId) => String(userId).trim())
+            .filter(Boolean),
+        ),
+      ];
+      if (!userIds.length)
+        return callback(null, { users: [], missingUserIds: [] });
+      const users = await User.findAll({
+        where: { userId: { [Op.in]: userIds } },
+      });
       const foundUserIds = new Set(users.map((user) => user.userId));
-      return callback(null, { users: users.map(toHubUser), missingUserIds: userIds.filter((userId) => !foundUserIds.has(userId)) });
+      return callback(null, {
+        users: users.map(toHubUser),
+        missingUserIds: userIds.filter((userId) => !foundUserIds.has(userId)),
+      });
     } catch (error) {
       return callback(error);
     }

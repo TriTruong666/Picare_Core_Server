@@ -107,7 +107,9 @@ async function resolveAndUploadImage({
 
 class HubClientService {
   static normalizeRole(role) {
-    return String(role || "").trim().toLowerCase();
+    return String(role || "")
+      .trim()
+      .toLowerCase();
   }
 
   static normalizeUrl(url) {
@@ -148,7 +150,9 @@ class HubClientService {
 
   static ensureRoleAllowed(role, allowedRoles = []) {
     const normalizedRole = this.normalizeRole(role);
-    const normalizedAllowedRoles = allowedRoles.map((item) => this.normalizeRole(item));
+    const normalizedAllowedRoles = allowedRoles.map((item) =>
+      this.normalizeRole(item),
+    );
 
     if (!normalizedAllowedRoles.includes(normalizedRole)) {
       throw new ForbiddenException(ErrorCodes.AUTH_ROLE_NOT_ALLOWED);
@@ -167,7 +171,9 @@ class HubClientService {
 
     const matchingClients = clients.filter((item) => {
       try {
-        return this.extractOrigin(item.clientExternalUrl) === normalizedTargetOrigin;
+        return (
+          this.extractOrigin(item.clientExternalUrl) === normalizedTargetOrigin
+        );
       } catch (error) {
         return false;
       }
@@ -180,7 +186,9 @@ class HubClientService {
     if (role) {
       const normalizedRole = this.normalizeRole(role);
       const matchedByRole = matchingClients.find((item) => {
-        const allowedRoles = (item.allowedRoles || []).map((r) => this.normalizeRole(r));
+        const allowedRoles = (item.allowedRoles || []).map((r) =>
+          this.normalizeRole(r),
+        );
         return allowedRoles.includes(normalizedRole);
       });
 
@@ -209,7 +217,9 @@ class HubClientService {
       if (clientId || externalUrl) {
         throw new NotFoundException(ErrorCodes.CLIENT_NOT_FOUND);
       }
-      throw new BadRequestException(ErrorCodes.HUB_CLIENT_PERMISSION_INPUT_MISSING);
+      throw new BadRequestException(
+        ErrorCodes.HUB_CLIENT_PERMISSION_INPUT_MISSING,
+      );
     }
 
     this.ensureClientActive(client);
@@ -292,7 +302,10 @@ class HubClientService {
       try {
         allowedRoles = JSON.parse(allowedRoles);
       } catch (_) {
-        allowedRoles = allowedRoles.split(",").map((r) => r.trim()).filter(Boolean);
+        allowedRoles = allowedRoles
+          .split(",")
+          .map((r) => r.trim())
+          .filter(Boolean);
       }
     }
 
@@ -352,7 +365,10 @@ class HubClientService {
       throw new NotFoundException(ErrorCodes.HUB_CLIENT_NOT_FOUND);
     }
 
-    if (safeUpdateData.clientName && safeUpdateData.clientName !== client.clientName) {
+    if (
+      safeUpdateData.clientName &&
+      safeUpdateData.clientName !== client.clientName
+    ) {
       const existingName = await HubClient.findOne({
         where: { clientName: safeUpdateData.clientName },
       });
@@ -366,7 +382,10 @@ class HubClientService {
       try {
         allowedRoles = JSON.parse(allowedRoles);
       } catch (_) {
-        allowedRoles = allowedRoles.split(",").map((r) => r.trim()).filter(Boolean);
+        allowedRoles = allowedRoles
+          .split(",")
+          .map((r) => r.trim())
+          .filter(Boolean);
       }
     }
 
@@ -403,7 +422,10 @@ class HubClientService {
     let mockupUrl = client.clientMockupImage;
     if (
       mockupFile ||
-      Object.prototype.hasOwnProperty.call(safeUpdateData, "clientMockupImage") ||
+      Object.prototype.hasOwnProperty.call(
+        safeUpdateData,
+        "clientMockupImage",
+      ) ||
       Object.prototype.hasOwnProperty.call(safeUpdateData, "mockupFile")
     ) {
       mockupUrl = await resolveAndUploadImage({
@@ -434,13 +456,12 @@ class HubClientService {
           ? allowedRoles
           : client.allowedRoles,
       }),
-      clientInternalUrl:
-        Object.prototype.hasOwnProperty.call(
-          safeUpdateData,
-          "clientInternalUrl",
-        )
-          ? this.normalizeNullableValue(safeUpdateData.clientInternalUrl)
-          : safeUpdateData.clientInternalUrl,
+      clientInternalUrl: Object.prototype.hasOwnProperty.call(
+        safeUpdateData,
+        "clientInternalUrl",
+      )
+        ? this.normalizeNullableValue(safeUpdateData.clientInternalUrl)
+        : safeUpdateData.clientInternalUrl,
     };
 
     await client.update(normalizedUpdateData);
@@ -469,7 +490,7 @@ class HubClientService {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    const decoded = JWTService.verify(token);
+    const decoded = await JWTService.verifyUserSession(token);
     if (!decoded) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
@@ -481,17 +502,25 @@ class HubClientService {
   /**
    * Check access by external URL (and optional clientId) for the current token.
    */
-  static async checkClientAccessByExternalUrl(token, externalUrl, clientId = null) {
+  static async checkClientAccessByExternalUrl(
+    token,
+    externalUrl,
+    clientId = null,
+  ) {
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    const decoded = JWTService.verify(token);
+    const decoded = await JWTService.verifyUserSession(token);
     if (!decoded) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
     }
 
-    await this.validateAccessToClient({ role: decoded.role, clientId, externalUrl });
+    await this.validateAccessToClient({
+      role: decoded.role,
+      clientId,
+      externalUrl,
+    });
     return null;
   }
 }
