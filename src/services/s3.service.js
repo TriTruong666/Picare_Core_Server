@@ -28,6 +28,8 @@ const { randomUUID } = require("crypto");
 const BUCKET = appConfig.s3.bucketName;
 const REGION = appConfig.s3.region;
 const MAX_MERGE_OVERLAY_TEXT_LENGTH = 160;
+const S3_UPLOAD_TIMEOUT_MS =
+  Number.parseInt(process.env.S3_UPLOAD_TIMEOUT_MS || "600000", 10) || 600000;
 
 const normalizeMergeOverlayText = (text) => {
   if (typeof text !== "string") return null;
@@ -100,7 +102,23 @@ class S3Service {
       client: s3Client,
       params,
     });
-    return uploader.done();
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        uploader.abort().catch(() => {});
+        reject(
+          new Error(
+            `S3 upload quá thời gian ${Math.ceil(S3_UPLOAD_TIMEOUT_MS / 1000)} giây`,
+          ),
+        );
+      }, S3_UPLOAD_TIMEOUT_MS);
+    });
+
+    try {
+      return await Promise.race([uploader.done(), timeoutPromise]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
   // ─── UPLOAD ─────────────────────────────────────────────────────────────────
 

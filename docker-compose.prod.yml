@@ -16,8 +16,9 @@ services:
       - AUTH_TRUSTED_IP_MAX_RECORDS=${AUTH_TRUSTED_IP_MAX_RECORDS:-10}
       - TRUST_PROXY=${TRUST_PROXY:-1}
       - S3_UPLOAD_STAGING_DIR=/app/tmp/s3-uploads
-      - S3_UPLOAD_CONCURRENCY=${S3_UPLOAD_CONCURRENCY:-1}
-      - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-900000}
+      - S3_UPLOAD_CONCURRENCY=${S3_UPLOAD_CONCURRENCY:-4}
+      - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-120000}
+      - S3_UPLOAD_TIMEOUT_MS=${S3_UPLOAD_TIMEOUT_MS:-600000}
     volumes:
       - ./src/seeds/local_data:/app/src/seeds/local_data
       - picare-s3-upload-staging:/app/tmp/s3-uploads

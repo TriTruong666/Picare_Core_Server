@@ -8,10 +8,10 @@ let packageVideoWorker;
 let s3UploadWorker;
 
 const s3UploadConcurrency =
-  Number.parseInt(process.env.S3_UPLOAD_CONCURRENCY || "1", 10) || 1;
+  Number.parseInt(process.env.S3_UPLOAD_CONCURRENCY || "4", 10) || 4;
 const s3UploadLockDurationMs =
-  Number.parseInt(process.env.S3_UPLOAD_LOCK_DURATION_MS || "900000", 10) ||
-  900000;
+  Number.parseInt(process.env.S3_UPLOAD_LOCK_DURATION_MS || "120000", 10) ||
+  120000;
 
 const getLegacyJobBuffer = (body) => {
   if (Buffer.isBuffer(body)) return body;
@@ -200,6 +200,10 @@ function startJobs() {
         });
       });
     }
+  });
+
+  s3UploadWorker.on("stalled", (jobId) => {
+    console.error("[S3]: upload job stalled", { jobId });
   });
 
   s3UploadWorker.on("error", (error) => {
