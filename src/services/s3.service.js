@@ -5,6 +5,7 @@ const {
   DeleteObjectsCommand,
   ListObjectsV2Command,
   HeadObjectCommand,
+  CopyObjectCommand,
 } = require("@aws-sdk/client-s3");
 const { Upload } = require("@aws-sdk/lib-storage");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
@@ -154,6 +155,7 @@ class S3Service {
     visibility = AssetVisibility.PRIVATE,
     s3Metadata = {},
     allowExisting = false,
+    stagingKey = null,
   }) {
     const resolvedMimeType = resolveMimeType(mimeType, originalName);
 
@@ -182,7 +184,19 @@ class S3Service {
       Metadata: s3Metadata,
     };
 
-    const result = await this.uploadToS3(uploadParams);
+    if (stagingKey && !stagingKey.startsWith("_upload_staging/")) {
+      throw new Error("Invalid S3 staging key");
+    }
+    const result = stagingKey
+      ? await s3Client.send(
+          new CopyObjectCommand({
+            Bucket: BUCKET,
+            Key: key,
+            CopySource: `${BUCKET}/${stagingKey.split("/").map(encodeURIComponent).join("/")}`,
+          }),
+        )
+      : await this.uploadToS3(uploadParams);
+    const etag = stagingKey ? result.CopyObjectResult?.ETag : result.ETag;
     const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`;
 
     // 2. Resolve Folder
@@ -207,7 +221,7 @@ class S3Service {
         s3Url: url,
         s3Bucket: BUCKET,
         s3Region: REGION,
-        etag: result.ETag,
+        etag,
         originalName,
         mimeType: resolvedMimeType,
         fileSize: fileSize || 0,
@@ -220,7 +234,7 @@ class S3Service {
       return {
         key,
         url,
-        etag: result.ETag,
+        etag,
         record,
       };
     } catch (error) {

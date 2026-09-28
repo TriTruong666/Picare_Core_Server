@@ -19,12 +19,60 @@ services:
       - S3_UPLOAD_CONCURRENCY=${S3_UPLOAD_CONCURRENCY:-4}
       - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-120000}
       - S3_UPLOAD_TIMEOUT_MS=${S3_UPLOAD_TIMEOUT_MS:-600000}
+      - CORE_STORAGE_WORKERS_EXTERNAL=true
     volumes:
       - ./src/seeds/local_data:/app/src/seeds/local_data
       - picare-s3-upload-staging:/app/tmp/s3-uploads
     networks:
       - picare-network
       - web_network
+
+  picare-storage-small-worker:
+    image: ghcr.io/tritruong666/picare-hub-server:latest
+    container_name: picare-storage-small-worker
+    restart: always
+    command: ["node", "worker.js"]
+    env_file:
+      - .env
+    environment:
+      - CORE_STORAGE_WORKER_MODE=small
+      - S3_UPLOAD_CONCURRENCY=${S3_UPLOAD_CONCURRENCY:-4}
+      - S3_UPLOAD_TIMEOUT_MS=${S3_UPLOAD_TIMEOUT_MS:-600000}
+      - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-120000}
+      - S3_UPLOAD_STAGING_DIR=/app/tmp/s3-uploads
+    volumes:
+      - picare-s3-upload-staging:/app/tmp/s3-uploads
+    networks:
+      - picare-network
+
+  picare-storage-video-worker:
+    image: ghcr.io/tritruong666/picare-hub-server:latest
+    container_name: picare-storage-video-worker
+    restart: always
+    command: ["node", "worker.js"]
+    env_file:
+      - .env
+    environment:
+      - CORE_STORAGE_WORKER_MODE=video
+      - S3_VIDEO_UPLOAD_CONCURRENCY=${S3_VIDEO_UPLOAD_CONCURRENCY:-2}
+      - S3_UPLOAD_TIMEOUT_MS=${S3_UPLOAD_TIMEOUT_MS:-600000}
+      - S3_UPLOAD_LOCK_DURATION_MS=${S3_UPLOAD_LOCK_DURATION_MS:-120000}
+    networks:
+      - picare-network
+
+  picare-storage-merge-worker:
+    image: ghcr.io/tritruong666/picare-hub-server:latest
+    container_name: picare-storage-merge-worker
+    restart: always
+    command: ["node", "worker.js"]
+    env_file:
+      - .env
+    environment:
+      - CORE_STORAGE_WORKER_MODE=merge
+      - S3_MERGE_CONCURRENCY=${S3_MERGE_CONCURRENCY:-1}
+      - S3_UPLOAD_TIMEOUT_MS=${S3_UPLOAD_TIMEOUT_MS:-600000}
+    networks:
+      - picare-network
 
 networks:
   picare-network:

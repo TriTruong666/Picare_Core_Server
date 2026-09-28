@@ -40,19 +40,20 @@ mockModule("../src/services/s3.service", {
   },
 });
 mockModule("../src/services/upload_staging.service", {
-  async stageBuffer(buffer) {
+  async stageBufferToS3(buffer) {
     assert.equal(buffer.toString(), "knowledge");
-    return "/tmp/staged-upload";
+    return "_upload_staging/test-upload";
   },
-  async remove() {},
+  async removeStagedS3Object() {},
 });
-mockModule("../src/jobs/queues", {
-  s3UploadQueue: {
+const uploadQueue = {
     async add(name, data) {
       assert.equal(name, "upload-file");
       assert.equal(data.folder, "picare-intelligent/knowledge");
       assert.equal(data.fileSize, 9);
       assert.equal(data.visibility, "private");
+      assert.equal(data.stagingKey, "_upload_staging/test-upload");
+      assert.equal(data.tempFilePath, undefined);
       return { id: "job-1" };
     },
     async getJob(jobId) {
@@ -76,7 +77,22 @@ mockModule("../src/jobs/queues", {
         },
       };
     },
+};
+const videoQueue = {
+  async add(name, data) {
+    assert.equal(name, "upload-file");
+    assert.equal(data.mimeType, "video/mp4");
+    assert.equal(data.stagingKey, "_upload_staging/test-upload");
+    return { id: "video-job-1" };
   },
+};
+mockModule("../src/jobs/queues", {
+  getUploadQueue(mimeType) {
+    if (mimeType === "video/mp4") return videoQueue;
+    assert.equal(mimeType, "text/plain");
+    return uploadQueue;
+  },
+  getUploadJob: uploadQueue.getJob,
 });
 
 const grpcS3Handler = require("../src/services/grpc_s3.handler");
@@ -149,6 +165,18 @@ async function run() {
   );
   assert.equal(queued.success, true);
   assert.equal(queued.jobId, "job-1");
+
+  const queuedVideo = await unary(
+    grpcS3Handler.queueUpload,
+    {
+      file: Buffer.from("knowledge"),
+      originalName: "camera.mp4",
+      mimeType: "video/mp4",
+      folder: "picare-intelligent/knowledge",
+    },
+    "test-storage-token",
+  );
+  assert.equal(queuedVideo.jobId, "video-job-1");
 
   const uploadJob = await unary(
     grpcS3Handler.getUploadJob,

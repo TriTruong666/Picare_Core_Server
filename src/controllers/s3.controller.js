@@ -8,7 +8,7 @@ const {
 } = require("../common/s3_upload.helper");
 const S3Service = require("../services/s3.service");
 const UploadStagingService = require("../services/upload_staging.service");
-const { packageVideoQueue, s3UploadQueue } = require("../jobs/queues");
+const { packageVideoQueue, getUploadQueue, getUploadJob } = require("../jobs/queues");
 const {
   BadRequestException,
   NotFoundException,
@@ -102,15 +102,14 @@ class S3Controller {
       const key = S3Service.buildKey(folder, originalName);
 
       const jobId = `s3-upload-${Date.now()}-${randomUUID()}`;
-      const tempFilePath =
-        await UploadStagingService.stageBuffer(fileBuffer);
+      const stagingKey = await UploadStagingService.stageBufferToS3(fileBuffer, mimeType);
       let job;
       try {
-        job = await s3UploadQueue.add(
+        job = await getUploadQueue(mimeType, originalName).add(
           "upload-file",
           {
             key,
-            tempFilePath,
+            stagingKey,
             mimeType,
             originalName,
             fileSize,
@@ -125,7 +124,7 @@ class S3Controller {
           { jobId },
         );
       } catch (error) {
-        await UploadStagingService.remove(tempFilePath).catch(() => {});
+        await UploadStagingService.removeStagedS3Object(stagingKey).catch(() => {});
         throw error;
       }
 
@@ -149,7 +148,7 @@ class S3Controller {
    */
   static async getUploadJobStatus(req, res, next) {
     try {
-      const job = await s3UploadQueue.getJob(req.params.jobId);
+      const job = await getUploadJob(req.params.jobId);
       if (!job) {
         throw new NotFoundException("Không tìm thấy job upload");
       }

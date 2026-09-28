@@ -182,7 +182,9 @@ const startServer = async () => {
     await loadDynamicConfig();
 
     startGrpcServer(config.app.grpc_port);
-    startJobs();
+    if (process.env.CORE_STORAGE_WORKERS_EXTERNAL !== "true") {
+      startJobs();
+    }
 
     const { port, name, version, env } = config.app;
 

@@ -2,6 +2,12 @@ const fs = require("fs");
 const fsPromises = require("fs/promises");
 const path = require("path");
 const { randomUUID } = require("crypto");
+const { DeleteObjectCommand } = require("@aws-sdk/client-s3");
+const s3Client = require("../config/s3.config");
+const appConfig = require("../config/app.config");
+const S3Service = require("./s3.service");
+
+const STAGING_PREFIX = "_upload_staging/";
 
 const stagingDirectory = path.resolve(
   process.env.S3_UPLOAD_STAGING_DIR ||
@@ -20,6 +26,29 @@ const resolveStagedPath = (filePath) => {
 };
 
 const UploadStagingService = {
+  async stageBufferToS3(buffer, mimeType = "application/octet-stream") {
+    const stagingKey = `${STAGING_PREFIX}${Date.now()}-${randomUUID()}`;
+    await S3Service.uploadToS3({
+      Bucket: appConfig.s3.bucketName,
+      Key: stagingKey,
+      Body: buffer,
+      ContentType: mimeType,
+    });
+    return stagingKey;
+  },
+
+  async removeStagedS3Object(stagingKey) {
+    if (!stagingKey?.startsWith(STAGING_PREFIX)) {
+      throw new Error("Invalid S3 staging key");
+    }
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: appConfig.s3.bucketName,
+        Key: stagingKey,
+      }),
+    );
+  },
+
   async stageBuffer(buffer) {
     await fsPromises.mkdir(stagingDirectory, { recursive: true });
 

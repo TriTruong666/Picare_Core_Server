@@ -31,6 +31,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/proto ./proto
 COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/worker.js ./worker.js
 COPY --from=builder /app/picare_logo_light.svg ./picare_logo_light.svg
 COPY --from=builder /app/dermacoon_logo.svg ./dermacoon_logo.svg
 COPY --from=builder /app/trunghanh_qr_product_logo.svg ./trunghanh_qr_product_logo.svg

@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 const JWTService = require("./jwt.service");
 const config = require("../config/app.config");
+const { subscribeToUserEvents } = require("./storage_worker_events.service");
 
 /**
  * SocketService quản lý việc khởi tạo và tương tác với Socket.io
@@ -51,6 +52,8 @@ class SocketService {
     this.io.on("connection", (socket) => {
       this._handleConnection(socket);
     });
+
+    subscribeToUserEvents(this);
 
     console.log("[SOCKET]: Socket.io đã được khởi tạo.");
     return this.io;

@@ -3,7 +3,7 @@ const { randomUUID, timingSafeEqual } = require("crypto");
 const S3Service = require("./s3.service");
 const appConfig = require("../config/app.config");
 const UploadStagingService = require("./upload_staging.service");
-const { s3UploadQueue } = require("../jobs/queues");
+const { getUploadQueue, getUploadJob } = require("../jobs/queues");
 const {
   maxFileUploadMb,
   maxFileUploadBytes,
@@ -104,18 +104,17 @@ const grpcS3Handler = {
       const key = S3Service.buildKey(folder, originalName);
       if (!requireObjectKey({ request: { key } }, callback)) return;
       const jobId = `s3-upload-${Date.now()}-${randomUUID()}`;
-      const tempFilePath = await UploadStagingService.stageBuffer(file);
+      const mimeType = (request.mimeType || "application/octet-stream").slice(0, 128);
+      const stagingKey = await UploadStagingService.stageBufferToS3(file, mimeType);
 
       let job;
       try {
-        job = await s3UploadQueue.add(
+        job = await getUploadQueue(mimeType, originalName).add(
           "upload-file",
           {
             key,
-            tempFilePath,
-            mimeType: (
-              request.mimeType || "application/octet-stream"
-            ).slice(0, 128),
+            stagingKey,
+            mimeType,
             originalName,
             fileSize: file.length,
             folder,
@@ -129,7 +128,7 @@ const grpcS3Handler = {
           { jobId },
         );
       } catch (error) {
-        await UploadStagingService.remove(tempFilePath).catch(() => {});
+        await UploadStagingService.removeStagedS3Object(stagingKey).catch(() => {});
         throw error;
       }
 
@@ -148,7 +147,7 @@ const grpcS3Handler = {
   async getUploadJob(call, callback) {
     try {
       if (!requireAuthorization(call, callback)) return;
-      const job = await s3UploadQueue.getJob(call.request?.jobId);
+      const job = await getUploadJob(call.request?.jobId);
       if (!job) {
         return fail(
           callback,

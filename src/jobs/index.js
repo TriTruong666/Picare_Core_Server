@@ -2,16 +2,11 @@ const { Worker, UnrecoverableError } = require("bullmq");
 const bullMQConfig = require("../config/bullmq.config");
 const S3Service = require("../services/s3.service");
 const UploadStagingService = require("../services/upload_staging.service");
-const socketService = require("../services/socket.service");
+const { publishToUser } = require("../services/storage_worker_events.service");
 
-let packageVideoWorker;
-let s3UploadWorker;
-
-const s3UploadConcurrency =
-  Number.parseInt(process.env.S3_UPLOAD_CONCURRENCY || "4", 10) || 4;
-const s3UploadLockDurationMs =
-  Number.parseInt(process.env.S3_UPLOAD_LOCK_DURATION_MS || "120000", 10) ||
-  120000;
+const workers = [];
+const uploadLockDurationMs =
+  Number.parseInt(process.env.S3_UPLOAD_LOCK_DURATION_MS || "120000", 10) || 120000;
 
 const getLegacyJobBuffer = (body) => {
   if (Buffer.isBuffer(body)) return body;
@@ -23,209 +18,158 @@ const formatJobError = (error) => ({
   name: error?.name || "Error",
   message: error?.message || String(error),
   validationErrors: Array.isArray(error?.errors)
-    ? error.errors.map((item) => ({
-        path: item.path,
-        message: item.message,
-        value: item.value,
-      }))
+    ? error.errors.map((item) => ({ path: item.path, message: item.message, value: item.value }))
     : undefined,
 });
 
-function startJobs() {
-  if (packageVideoWorker) {
-    return { packageVideoWorker, s3UploadWorker };
-  }
-
-  packageVideoWorker = new Worker(
+function startMergeWorker() {
+  const worker = new Worker(
     "package-video-queue",
     async (job) => {
       if (job.name !== "merge-videos") {
         throw new Error(`Unsupported package video job: ${job.name}`);
       }
-
-      console.log("[JOBS]: merge-videos started", {
-        jobId: job.id,
-        mainVideoKey: job.data.mainVideoKey,
-        secondVideoKey: job.data.secondVideoKey,
-        hasOverlayText: Boolean(job.data.overlayText),
-        overlayText: job.data.overlayText || null,
-      });
-
       await job.updateProgress(10);
       const result = await S3Service.mergeVideos(job.data);
       await job.updateProgress(100);
-
-      let presignedUrl = result.url;
-      if (job.data.visibility === "private") {
-        presignedUrl = await S3Service.getPresignedUrl(result.key, 86400);
-      }
-
       return {
         key: result.key,
         url: result.url,
-        presignedUrl,
+        presignedUrl: job.data.visibility === "private"
+          ? await S3Service.getPresignedUrl(result.key, 86400)
+          : result.url,
         etag: result.etag,
         recordId: result.record?.assetId || result.record?.id || null,
       };
     },
     {
       connection: bullMQConfig.connection,
-      concurrency: 2,
+      concurrency: Number.parseInt(process.env.S3_MERGE_CONCURRENCY || "1", 10) || 1,
     },
   );
-
-  packageVideoWorker.on("completed", (job, result) => {
-    console.log("[JOBS]: merge-videos completed", {
-      jobId: job.id,
-      key: result?.key,
-    });
-
+  worker.on("completed", (job, result) => {
+    console.log("[S3]: merge completed", { jobId: job.id, key: result?.key });
     if (job.data.uploadedBy) {
-      socketService.emitToUser(job.data.uploadedBy, "s3_merge_video_completed", {
-        jobId: job.id,
-        status: "completed",
-        result,
-      });
+      publishToUser(job.data.uploadedBy, "s3_merge_video_completed", {
+        jobId: job.id, status: "completed", result,
+      }).catch((error) => console.error("[S3]: completion event failed:", error));
     }
   });
-
-  packageVideoWorker.on("failed", (job, error) => {
-    console.error("[JOBS]: merge-videos failed", {
-      jobId: job?.id,
-      message: error.message,
-    });
-
+  worker.on("failed", (job, error) => {
+    console.error("[S3]: merge failed", { jobId: job?.id, error: formatJobError(error) });
     if (job?.data?.uploadedBy) {
-      socketService.emitToUser(job.data.uploadedBy, "s3_merge_video_failed", {
-        jobId: job.id,
-        status: "failed",
-        message: error.message,
-      });
+      publishToUser(job.data.uploadedBy, "s3_merge_video_failed", {
+        jobId: job.id, status: "failed", message: error.message,
+      }).catch((publishError) => console.error("[S3]: failure event failed:", publishError));
     }
   });
+  worker.on("error", (error) => console.error("[S3]: merge worker error", error));
+  workers.push(worker);
+}
 
-  packageVideoWorker.on("error", (error) => {
-    console.error("[JOBS]: package-video worker error", error.message);
-  });
-
-  UploadStagingService.cleanupStaleFiles()
-    .then((removedCount) => {
-      if (removedCount > 0) {
-        console.log("[S3]: removed stale staging files", { removedCount });
-      }
-    })
-    .catch((error) => {
-      console.error("[S3]: staging cleanup failed", error.message);
+async function processUpload(job) {
+  if (job.name !== "upload-file") {
+    throw new Error(`Unsupported S3 upload job: ${job.name}`);
+  }
+  const { stagingKey, tempFilePath } = job.data;
+  try {
+    await job.updateProgress(10);
+    const result = await S3Service.upload({
+      ...job.data,
+      body: stagingKey
+        ? null
+        : tempFilePath
+          ? UploadStagingService.createReadStream(tempFilePath)
+          : getLegacyJobBuffer(job.data.body),
+      allowExisting: true,
     });
+    await job.updateProgress(100);
+    // Cleanup failure must not turn a committed asset into a failed retry.
+    if (stagingKey) {
+      await UploadStagingService.removeStagedS3Object(stagingKey).catch((error) => {
+        console.error("[S3]: staging cleanup failed", { jobId: job.id, message: error.message });
+      });
+    }
+    if (tempFilePath) {
+      await UploadStagingService.remove(tempFilePath).catch((error) => {
+        console.error("[S3]: legacy staging cleanup failed", { jobId: job.id, message: error.message });
+      });
+    }
+    return {
+      key: result.key,
+      url: result.url,
+      etag: result.etag,
+      recordId: result.record?.assetId || result.record?.id || null,
+      reused: Boolean(result.reused),
+    };
+  } catch (error) {
+    if (error?.name === "SequelizeValidationError") {
+      const details = formatJobError(error);
+      throw new UnrecoverableError(
+        `${details.message}: ${JSON.stringify(details.validationErrors || [])}`,
+      );
+    }
+    throw error;
+  }
+}
 
-  s3UploadWorker = new Worker(
-    "s3-upload-queue",
-    async (job) => {
-      if (job.name !== "upload-file") {
-        throw new Error(`Unsupported S3 upload job: ${job.name}`);
-      }
-
-      const tempFilePath = job.data.tempFilePath || null;
-
-      try {
-        await job.updateProgress(10);
-        const result = await S3Service.upload({
-          ...job.data,
-          body: tempFilePath
-            ? UploadStagingService.createReadStream(tempFilePath)
-            : getLegacyJobBuffer(job.data.body),
-          allowExisting: true,
-        });
-        await job.updateProgress(100);
-
-        if (tempFilePath) {
-          await UploadStagingService.remove(tempFilePath).catch((error) => {
-            console.error("[S3]: staging file cleanup failed", {
-              jobId: job.id,
-              message: error.message,
-            });
-          });
-        }
-
-        return {
-          key: result.key,
-          url: result.url,
-          etag: result.etag,
-          recordId: result.record?.assetId || result.record?.id || null,
-          reused: Boolean(result.reused),
-        };
-      } catch (error) {
-        if (error?.name === "SequelizeValidationError") {
-          if (tempFilePath) {
-            await UploadStagingService.remove(tempFilePath).catch(() => {});
-          }
-          const validationDetails = formatJobError(error);
-          throw new UnrecoverableError(
-            `${validationDetails.message}: ${JSON.stringify(
-              validationDetails.validationErrors || [],
-            )}`,
-          );
-        }
-        throw error;
-      }
-    },
-    {
-      connection: bullMQConfig.connection,
-      concurrency: s3UploadConcurrency,
-      lockDuration: s3UploadLockDurationMs,
-    },
-  );
-
-  s3UploadWorker.on("completed", (job, result) => {
-    console.log("[S3]: upload completed", { jobId: job.id, key: result?.key });
+function startUploadWorker(queueName, concurrency) {
+  const worker = new Worker(queueName, processUpload, {
+    connection: bullMQConfig.connection,
+    concurrency,
+    lockDuration: uploadLockDurationMs,
   });
-
-  s3UploadWorker.on("failed", (job, error) => {
+  worker.on("completed", (job, result) => {
+    console.log("[S3]: upload completed", { queueName, jobId: job.id, key: result?.key });
+  });
+  worker.on("failed", (job, error) => {
     console.error("[S3]: upload failed", {
+      queueName,
       jobId: job?.id,
       key: job?.data?.key,
       attempt: job?.attemptsMade,
       maxAttempts: job?.opts?.attempts || 1,
       error: formatJobError(error),
     });
-
-    const isFinalAttempt =
-      error?.name === "UnrecoverableError" ||
+    const isFinalAttempt = error?.name === "UnrecoverableError" ||
       (job?.attemptsMade || 0) >= (job?.opts?.attempts || 1);
     if (isFinalAttempt && job?.data?.tempFilePath) {
-      UploadStagingService.remove(job.data.tempFilePath).catch((cleanupError) => {
-        console.error("[S3]: final staging cleanup failed", {
-          jobId: job.id,
-          message: cleanupError.message,
-        });
-      });
+      UploadStagingService.remove(job.data.tempFilePath).catch(() => {});
     }
+    // Preserve failed S3 staging objects for investigation or manual retry.
   });
-
-  s3UploadWorker.on("stalled", (jobId) => {
-    console.error("[S3]: upload job stalled", { jobId });
+  worker.on("stalled", (jobId) => {
+    console.error("[S3]: upload stalled", { queueName, jobId });
   });
-
-  s3UploadWorker.on("error", (error) => {
-    console.error("[JOBS]: s3-upload worker error", error.message);
+  worker.on("error", (error) => {
+    console.error("[S3]: upload worker error", { queueName, message: error.message });
   });
+  workers.push(worker);
+}
 
-  console.log("[JOBS]: package-video and s3-upload workers started");
-  return { packageVideoWorker, s3UploadWorker };
+function startJobs(mode = "all") {
+  if (workers.length) return workers;
+  if (mode === "all" || mode === "small") {
+    // Existing upload jobs remain in this queue during rollout.
+    startUploadWorker(
+      "s3-upload-queue",
+      Number.parseInt(process.env.S3_UPLOAD_CONCURRENCY || "4", 10) || 4,
+    );
+  }
+  if (mode === "all" || mode === "video") {
+    startUploadWorker(
+      "s3-video-upload-queue",
+      Number.parseInt(process.env.S3_VIDEO_UPLOAD_CONCURRENCY || "2", 10) || 2,
+    );
+  }
+  if (mode === "all" || mode === "merge") startMergeWorker();
+  if (!workers.length) throw new Error(`Unknown storage worker mode: ${mode}`);
+  console.log("[S3]: storage workers started", { mode });
+  return workers;
 }
 
 async function stopJobs() {
-  if (packageVideoWorker) {
-    await packageVideoWorker.close();
-    packageVideoWorker = null;
-  }
-  if (s3UploadWorker) {
-    await s3UploadWorker.close();
-    s3UploadWorker = null;
-  }
+  await Promise.all(workers.splice(0).map((worker) => worker.close()));
 }
 
-module.exports = {
-  startJobs,
-  stopJobs,
-};
+module.exports = { startJobs, stopJobs };
