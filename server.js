@@ -174,10 +174,13 @@ const startServer = async () => {
     }
 
     // await logDatabaseSchema(queryInterface);
+    const isDev = process.env.NODE_ENV === "development";
 
-    // await seedingRBAC();
-    // await seedingUsers();
-    // await seedingHubClients();
+    if (isDev) {
+      await seedingRBAC();
+      await seedingUsers();
+      await seedingHubClients();
+    }
     await seedAppConfig();
     await loadDynamicConfig();
 
