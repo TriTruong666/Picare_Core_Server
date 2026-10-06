@@ -58,11 +58,79 @@ def strip_label(text, field):
     return value.strip(" :/.-")
 
 
+def plausible_name(value, score):
+    # A two-letter OCR fragment such as "SN" is not a person's full name.
+    # Reject uncertain suggestions instead of overwriting the member's name.
+    if score < .80 or re.search(r"\d", value) or label_for(value) or is_header(value):
+        return False
+    words = re.findall(r"[^\W\d_]+", value, re.UNICODE)
+    return len(words) >= 2 and sum(map(len, words)) >= 4 and all(len(word) >= 2 for word in words)
+
+
+def plausible_address(value, minimum_letters=8):
+    # A few isolated glyphs are commonly produced by OCR on a busy card.
+    return len(re.findall(r"[^\W\d_]", value, re.UNICODE)) >= minimum_letters
+
+
+def plausible_vietnamese_place(value):
+    # Reject recognizer artifacts such as cedillas or isolated accent glyphs;
+    # OCR confidence can still be high for those wrong characters.
+    allowed_marks = {"\u0300", "\u0301", "\u0303", "\u0309", "\u0323", "\u0302", "\u0306", "\u031b"}
+    for char in unicodedata.normalize("NFD", value):
+        if unicodedata.category(char) == "Mn" and char not in allowed_marks:
+            return False
+    words = re.findall(r"[^\W\d_]+", value, re.UNICODE)
+    return len(words) >= 2 and all(len(word) >= 2 for word in words)
+
+
+def is_header(value):
+    norm = folded(value)
+    return any(mark in norm for mark in (
+        "socialist republic", "cong hoa xa hoi", "independence", "freedom",
+        "doc lap", "hanh phuc", "identity card", "can cuoc cong dan",
+    ))
+
+
 class IdentityCardHandler:
     required_sides = ("front", "back")
 
-    def extract(self, lines):
+    @staticmethod
+    def refine_regions(fields, confidence, regions, warnings):
+        origin = regions.get("placeOfOrigin", "")
+        origin_lines = [line.strip(" \t'\"`_.,;:-") for line in origin.splitlines()]
+        label_index = next((index for index, line in enumerate(origin_lines)
+                            if "que quan" in folded(line)), None)
+        if "placeOfOrigin" not in fields and label_index is not None:
+            # Only the first text line after the printed label is the origin;
+            # the following line already belongs to the residence address.
+            for candidate in origin_lines[label_index + 1:label_index + 3]:
+                if not candidate:
+                    continue
+                if label_for(candidate) or is_header(candidate) or date_value(candidate):
+                    break
+                candidate = candidate.strip(" \t'\"`_.,;:-")
+                if ("," in candidate and plausible_vietnamese_place(candidate)
+                        and plausible_address(candidate, 10)):
+                    fields["placeOfOrigin"] = candidate[:500]
+                    confidence["placeOfOrigin"] = .86
+                    warnings.append("Quê quán được đọc từ vùng chữ trên thẻ; vui lòng đối chiếu lại dấu và địa danh.")
+                break
+
+        issuer = folded(regions.get("issuedPlace", ""))
+        if ("issuedPlace" not in fields and "cuc truong cuc" in issuer
+                and "canh sat" in issuer and "quan ly hanh chinh" in issuer
+                and "trat tu xa hoi" in issuer):
+            # All parts must be visible. This normalizes OCR diacritic errors
+            # against the complete agency title printed on the reverse side.
+            fields["issuedPlace"] = (
+                "Cục trưởng Cục Cảnh sát quản lý hành chính về trật tự xã hội"
+            )
+            confidence["issuedPlace"] = .86
+            warnings.append("Nơi cấp được chuẩn hóa từ dòng cơ quan trên mặt sau; vui lòng đối chiếu với thẻ.")
+
+    def extract(self, lines, qr_fields=None, regions=None):
         fields, confidence, warnings = {}, {}, []
+        rejected_fields = set()
         front = [line for line in lines if line.side == "front"]
         back = [line for line in lines if line.side == "back"]
         front_text = " ".join(line.text for line in front)
@@ -83,10 +151,30 @@ class IdentityCardHandler:
                 if not any(label in folded(line.text) for label in LABELS[field]):
                     continue
                 value, scores = strip_label(line.text, field), [line.score]
+                if field in ("fullName", "birthdate", "issuedDate", "expiryDate"):
+                    candidates = [(value, line.score)]
+                    for following in source[index + 1:index + 4]:
+                        if label_for(following.text) or is_header(following.text):
+                            break
+                        candidates.append((following.text.strip(), following.score))
+                    for candidate, score in candidates:
+                        if field == "fullName":
+                            parsed = candidate if plausible_name(candidate, score) else None
+                        else:
+                            parsed = date_value(candidate)
+                        if parsed:
+                            fields[field], confidence[field] = parsed[:500], round(score, 4)
+                            break
+                    if field in fields:
+                        break
+                    rejected_fields.add(field)
+                    continue
                 # Addresses may span lines. Stop at the next label/header/date.
                 for following in source[index + 1:index + 4]:
                     other = label_for(following.text)
                     if other and other != field:
+                        break
+                    if is_header(following.text):
                         break
                     if other == field:
                         fragment = strip_label(following.text, field)
@@ -100,16 +188,17 @@ class IdentityCardHandler:
                         break
                     value = f"{value} {fragment}".strip()
                     scores.append(following.score)
-                if field.endswith("Date") or field == "birthdate":
-                    value = date_value(value)
-                elif field == "gender":
+                if field == "gender":
                     norm = folded(value or "")
                     value = "FEMALE" if re.search(r"\b(nu|female)\b", norm) else "MALE" if re.search(r"\b(nam|male)\b", norm) else None
-                elif field == "fullName" and (not value or re.search(r"\d", value)):
+                elif field in ("address", "placeOfOrigin") and not plausible_address(
+                    value or "", 5 if field == "placeOfOrigin" else 8
+                ):
                     value = None
                 if value:
-                    fields[field], confidence[field] = value[:500], round(min(scores), 4)
+                    fields[field], confidence[field] = value.strip(" '\".,:;-")[:500], round(min(scores), 4)
                     break
+                rejected_fields.add(field)
 
         # The issue date is commonly printed as 'Ngày ... tháng ... năm ...' on the reverse.
         if "issuedDate" not in fields:
@@ -126,9 +215,43 @@ class IdentityCardHandler:
         reverse_numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", " ".join(line.text for line in back)))
         if fields.get("number") and reverse_numbers and fields["number"] not in reverse_numbers:
             warnings.append("Số nhận diện ở hai mặt không khớp. Vui lòng kiểm tra lại hai ảnh.")
+        if qr_fields:
+            if fields.get("number") != qr_fields["number"]:
+                warnings.append("Không đối chiếu được số căn cước với mã QR; không dùng dữ liệu QR.")
+            else:
+                for key in ("fullName", "address", "birthdate", "gender", "issuedDate"):
+                    value = qr_fields[key]
+                    if key in ("birthdate", "gender", "issuedDate") and fields.get(key) and fields[key] != value:
+                        fields.pop(key)
+                        confidence.pop(key, None)
+                        label = {"birthdate": "ngày sinh", "gender": "giới tính", "issuedDate": "ngày cấp"}[key]
+                        warnings.append(f"Thông tin {label} giữa chữ in và mã QR không khớp; vui lòng nhập tay.")
+                        continue
+                    fields[key], confidence[key] = value, 1.0
+                warnings.append("Họ tên và địa chỉ được gợi ý từ mã QR; vui lòng đối chiếu với thẻ trước khi tiếp tục.")
+
+        if "nationality" in fields:
+            if folded(fields["nationality"]).strip() in ("viet nam", "vit nam"):
+                fields["nationality"] = "Việt Nam"
+            else:
+                fields.pop("nationality")
+                confidence.pop("nationality", None)
+        for key, label in (("placeOfOrigin", "quê quán"), ("issuedPlace", "nơi cấp")):
+            if key in fields and (confidence.get(key, 0) < .85 or not plausible_vietnamese_place(fields[key])):
+                fields.pop(key)
+                confidence.pop(key, None)
+                warnings.append(f"Chưa đọc rõ {label}; vui lòng kiểm tra hoặc nhập tay.")
+        if regions:
+            self.refine_regions(fields, confidence, regions, warnings)
+            if "placeOfOrigin" in fields:
+                warnings = [warning for warning in warnings if not warning.startswith("Chưa đọc rõ quê quán")]
+            if "issuedPlace" in fields:
+                warnings = [warning for warning in warnings if not warning.startswith("Chưa đọc rõ nơi cấp")]
         for key, label in (("number", "số căn cước"), ("fullName", "họ tên"), ("birthdate", "ngày sinh"), ("issuedDate", "ngày cấp")):
             if key not in fields:
                 warnings.append(f"Chưa đọc được {label}; bạn có thể nhập tay.")
+        if "address" in rejected_fields and "address" not in fields:
+            warnings.append("Địa chỉ trong ảnh chưa đủ rõ; vui lòng nhập hoặc kiểm tra lại.")
         if any(value < .85 for value in confidence.values()):
             warnings.append("Một số thông tin có độ tin cậy thấp; vui lòng kiểm tra trước khi tiếp tục.")
         return OcrResult(documentType="vn_identity_card", fields=fields, confidence=confidence, warnings=warnings)

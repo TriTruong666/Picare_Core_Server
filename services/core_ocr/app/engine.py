@@ -2,6 +2,7 @@ import io
 import os
 import warnings
 import csv
+import re
 import subprocess
 from pathlib import Path
 from PIL import Image, ImageOps
@@ -49,8 +50,14 @@ class PaddleEngine:
         except Exception:
             raise ApiError("Ảnh không hợp lệ. Dùng JPEG, PNG hoặc WEBP, tối đa 20 megapixel.") from None
 
-    def read(self, data, side):
+    def read(self, data, side, rotation=0):
         image = self.decode(data)
+        if rotation not in (0, 90, 180, 270):
+            raise ValueError("Unsupported image rotation")
+        if rotation:
+            # Rotate the pixels once for both Paddle and local Tesseract.
+            # EXIF orientation was already applied in decode().
+            image = np.rot90(image, k=rotation // 90).copy()
         items = []
         for result in self.model.predict(image):
             scores, texts = result.get("rec_scores", []), result.get("rec_texts", [])
@@ -61,14 +68,67 @@ class PaddleEngine:
         # accents by guessing names. Paddle remains the detector/fallback reader.
         vietnamese = self.read_vietnamese(image)
         if vietnamese:
-            combined = list(vietnamese)
-            for text, score, box in items:
-                if not any(self.overlaps(box, other[2]) for other in vietnamese):
-                    combined.append((text, score, box))
-            items = combined
+            items = self.merge_readers(items, vietnamese)
         items.sort(key=lambda item: (round(float(item[2][1]) / 12), float(item[2][0])))
         return [TextLine(str(text).strip(), float(score), side)
                 for text, score, _ in items if str(text).strip()]
+
+    def read_identity_regions(self, data, side, rotation=0):
+        """Re-read small, known text areas only after the card orientation is chosen.
+
+        This is a fallback for the two fields that the full-card detector often
+        merges with neighbouring labels. It does not replace the main OCR pass.
+        """
+        image = self.decode(data)
+        if rotation:
+            image = np.rot90(image, k=rotation // 90).copy()
+        height, width = image.shape[:2]
+        if not 1.4 <= width / height <= 1.8:
+            return {}
+        regions = ({"placeOfOrigin": (.27, .72, .88, .91)} if side == "front"
+                   else {"issuedPlace": (.11, .15, .49, .32)})
+        output = {}
+        for field, (left, top, right, bottom) in regions.items():
+            crop = image[int(top * height):int(bottom * height),
+                         int(left * width):int(right * width)]
+            encoded = io.BytesIO()
+            Image.fromarray(crop[:, :, ::-1]).save(encoded, "PNG")
+            try:
+                result = subprocess.run(
+                    ["tesseract", "stdin", "stdout", "-l", "vie+eng", "--psm", "6"],
+                    input=encoded.getvalue(), capture_output=True, timeout=10, check=True,
+                )
+                output[field] = result.stdout.decode("utf-8", errors="replace")
+            except (subprocess.SubprocessError, OSError):
+                continue
+        return output
+
+    @classmethod
+    def merge_readers(cls, paddle, vietnamese):
+        # A sparse Tesseract fragment must not erase a fuller Paddle line.
+        # Tesseract still wins for complete Vietnamese text with diacritics.
+        accepted = []
+        for text, score, box in vietnamese:
+            covered = [item for item in paddle if cls.overlaps(item[2], box)]
+            paddle_letters = sum(char.isalnum() for item in covered for char in str(item[0]))
+            vietnamese_letters = sum(char.isalnum() for char in str(text))
+            full_date = r"\b\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{4}\b"
+            if re.search(full_date, " ".join(str(item[0]) for item in covered)) and not re.search(full_date, str(text)):
+                continue
+            if paddle_letters and vietnamese_letters < .6 * paddle_letters:
+                continue
+            if len(covered) == 1:
+                paddle_box = tuple(map(float, covered[0][2]))
+                viet_box = tuple(map(float, box))
+                paddle_width = max(1.0, paddle_box[2] - paddle_box[0])
+                if viet_box[0] - paddle_box[0] > .2 * paddle_width:
+                    # The Vietnamese reader missed the start of this line.
+                    # Do not report its otherwise high OCR score as a reliable
+                    # complete name or other personal field.
+                    score = min(float(score), .79)
+            accepted.append((text, score, box))
+        return accepted + [item for item in paddle
+                           if not any(cls.overlaps(item[2], other[2]) for other in accepted)]
 
     @staticmethod
     def overlaps(a, b):

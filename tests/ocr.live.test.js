@@ -37,7 +37,7 @@ test(
         )
           .png()
           .toBuffer();
-      const front = await render([
+      const frontUpright = await render([
         "OCR TEST DATA",
         "IDENTITY CARD",
         "No.: 012345678901",
@@ -45,11 +45,13 @@ test(
         "Date of birth: 02/03/1990",
         "Sex: Male",
       ]);
-      const back = await render([
+      const backUpright = await render([
         "OCR TEST DATA",
         "Date of issue: 05/06/2021",
         "Place of issue: TEST OFFICE",
       ]);
+      const front = await sharp(frontUpright).rotate(90).png().toBuffer();
+      const back = await sharp(backUpright).rotate(270).png().toBuffer();
       const metadata = new grpc.Metadata();
       metadata.set(
         "x-service-token",
@@ -74,6 +76,7 @@ test(
       assert.equal(data.fields.number, "012345678901");
       assert.equal(data.fields.birthdate, "1990-03-02");
       assert.equal(data.fields.issuedDate, "2021-06-05");
+      assert.equal(data.extractorVersion, "1.3.1");
     } finally {
       client.close();
       server.forceShutdown();

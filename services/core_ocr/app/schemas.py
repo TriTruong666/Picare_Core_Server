@@ -20,4 +20,4 @@ class OcrResult(BaseModel):
     fields: dict[str, str]
     confidence: dict[str, float]
     warnings: list[str]
-    extractorVersion: str = "1.1.0"
+    extractorVersion: str = "1.3.1"
