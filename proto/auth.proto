@@ -162,7 +162,17 @@ service S3Service {
 }
 
 service MailService {
+  rpc SendOfficeInvitationMail (OfficeInvitationMailRequest) returns (MailSendResponse) {}
   rpc SendOrderReturnSigningMail (OrderReturnSigningMailRequest) returns (MailSendResponse) {}
+}
+
+message OfficeInvitationMailRequest {
+  string to = 1;
+  string recipientName = 2;
+  string companyName = 3;
+  string accountEmail = 4;
+  string actionUrl = 5;
+  string expiresAt = 6;
 }
 
 message OrderReturnSigningMailRequest {

@@ -294,6 +294,35 @@ class MailService {
     );
   }
 
+  static async sendOfficeInvitationMail({ to, recipientName, companyName, accountEmail, actionUrl, expiresAt }) {
+    const escape = this.escapeHtml;
+    const expires = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh", dateStyle: "long", timeStyle: "short",
+    }).format(new Date(expiresAt));
+    const subject = "Lời mời tham gia Picare Office";
+    const paragraphs = [
+      `Kính gửi Anh/Chị ${recipientName},`,
+      `${companyName} trân trọng mời Anh/Chị tham gia hệ thống Picare Office để sử dụng các tiện ích và phối hợp công việc trong đơn vị.`,
+      `Lời mời này được cấp riêng cho tài khoản ${accountEmail}. Vui lòng đăng nhập bằng đúng tài khoản này, kiểm tra thông tin hồ sơ, cập nhật thông tin cá nhân nếu cần và nhấn “Tham gia Picare Office” để hoàn tất. Việc thiết lập chỉ cần thực hiện một lần.`,
+      `Liên kết có hiệu lực trong 03 ngày, đến ${expires} (giờ Việt Nam). Sau thời điểm này, Anh/Chị vui lòng liên hệ người quản lý để được gửi lại lời mời.`,
+      "Để bảo mật tài khoản, vui lòng không chia sẻ hoặc chuyển tiếp liên kết này. Nếu Anh/Chị không phải người nhận dự kiến, vui lòng bỏ qua email và thông báo cho người quản lý của đơn vị.",
+    ];
+    const footer = `© ${new Date().getFullYear()} Picare Office. Bảo lưu mọi quyền. Đây là email tự động từ địa chỉ noreply; vui lòng không trả lời email này.`;
+    const html = [
+      '<!doctype html><html lang="vi"><head><meta charset="utf-8"></head><body style="margin:0;background:#fff">',
+      '<div style="max-width:640px;margin:0 auto;padding:32px 24px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.75;color:#374151">',
+      `<h1 style="margin:0 0 24px;font-size:18px;font-weight:500;color:#111827">${subject}</h1>`,
+      ...paragraphs.slice(0, 3).map((line) => `<p style="margin:0 0 16px">${escape(line)}</p>`),
+      `<p style="margin:24px 0"><a href="${escape(actionUrl)}" style="color:#2563eb;text-decoration:underline">Thiết lập tài khoản và tham gia Picare Office</a></p>`,
+      ...paragraphs.slice(3).map((line) => `<p style="margin:0 0 16px">${escape(line)}</p>`),
+      '<p style="margin:24px 0">Trân trọng,<br>Picare Office</p>',
+      `<p style="margin:28px 0 0;font-size:11px;line-height:1.6;color:#9ca3af">${escape(footer)}</p>`,
+      '</div></body></html>',
+    ].join("");
+    const text = [...paragraphs.slice(0, 3), `Thiết lập tài khoản và tham gia Picare Office: ${actionUrl}`, ...paragraphs.slice(3), "Trân trọng,\nPicare Office", footer].join("\n\n");
+    return this.sendMail({ to, subject, html, text, sender: "office", mailFromName: "Picare Office" });
+  }
+
   static async sendLicenseActivationMail({
     to,
     cc,

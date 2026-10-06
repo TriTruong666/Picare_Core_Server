@@ -57,6 +57,7 @@ function startGrpcServer(port = 50051) {
   });
 
   server.addService(authProto.MailService.service, {
+    SendOfficeInvitationMail: grpcMailHandler.sendOfficeInvitationMail,
     SendOrderReturnSigningMail: grpcMailHandler.sendOrderReturnSigningMail,
   });
 

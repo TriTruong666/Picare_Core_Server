@@ -204,6 +204,11 @@ const appConfig = {
     secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
     pass: process.env.SMTP_PASS || "",
     senders: {
+      office: {
+        user: process.env.OFFICE_SMTP_USER || "",
+        from: process.env.OFFICE_MAIL_FROM || "noreply@picare.vn",
+        name: "Picare Office",
+      },
       auth: {
         user:
           process.env.AUTH_SMTP_USER || process.env.ECONTRACT_SMTP_USER || "",
