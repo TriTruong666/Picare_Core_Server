@@ -30,6 +30,18 @@ function startGrpcServer(port = 50051) {
     "grpc.max_send_message_length": maxGrpcMessageBytes,
   });
 
+  const ocrDefinition = protoLoader.loadSync(
+    path.join(__dirname, "../../proto/ocr.proto"),
+    {
+      keepCase: true,
+      defaults: true,
+    },
+  );
+  const ocrProto = grpc.loadPackageDefinition(ocrDefinition).ocr;
+  server.addService(ocrProto.OcrService.service, {
+    Recognize: require("../controllers/ocr.controller").recognize,
+  });
+
   // Đăng ký service Auth
   server.addService(authProto.AuthService.service, {
     VerifyToken: grpcAuthHandler.verifyToken,
@@ -70,7 +82,7 @@ function startGrpcServer(port = 50051) {
         return;
       }
       console.log(`[gRPC]: Service Hub đang chạy tại port: ${port}`);
-    }
+    },
   );
 
   return server;

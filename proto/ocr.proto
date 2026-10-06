@@ -1,0 +1,17 @@
+syntax = "proto3";
+package ocr;
+
+service OcrService {
+  rpc Recognize (RecognizeRequest) returns (RecognizeResponse);
+}
+message RecognizeRequest {
+  string documentType = 1;
+  bytes front = 2;
+  bytes back = 3;
+  string userId = 4;
+}
+message RecognizeResponse {
+  bool success = 1;
+  string message = 2;
+  string dataJson = 3;
+}

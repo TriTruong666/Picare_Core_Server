@@ -1,4 +1,24 @@
 services:
+  core-ocr:
+    image: ghcr.io/tritruong666/picare-core-ocr:latest
+    restart: unless-stopped
+    environment:
+      CORE_OCR_SERVICE_TOKEN: ${CORE_OCR_SERVICE_TOKEN:-}
+      GRPC_STORAGE_SERVICE_TOKEN: ${GRPC_STORAGE_SERVICE_TOKEN:-}
+      OCR_CPU_THREADS: ${OCR_CPU_THREADS:-2}
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /home/ocr/.paddlex:size=32m,uid=10001,gid=10001
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    networks:
+      - picare-network
+
   picare-hub-server:
     image: ghcr.io/tritruong666/picare-hub-server:latest
     container_name: picare-hub-server
@@ -8,6 +28,7 @@ services:
     environment:
       - MAX_FILE_UPLOAD_MB=${MAX_FILE_UPLOAD_MB:-2048}
       - AUTH_LOGIN_VERIFICATION_ENABLED=${AUTH_LOGIN_VERIFICATION_ENABLED:-true}
+      - CORE_OCR_URL=http://core-ocr:8010
       - AUTH_LOGIN_RATE_LIMIT_ENABLED=${AUTH_LOGIN_RATE_LIMIT_ENABLED:-true}
       - AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS=${AUTH_LOGIN_RATE_LIMIT_WINDOW_SECONDS:-900}
       - AUTH_LOGIN_RATE_LIMIT_MAX_PER_IP=${AUTH_LOGIN_RATE_LIMIT_MAX_PER_IP:-50}

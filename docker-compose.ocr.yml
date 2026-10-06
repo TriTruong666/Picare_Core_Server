@@ -1,0 +1,16 @@
+# For Core running on the host: docker compose --env-file .env.development -f docker-compose.ocr.yml up -d --build
+services:
+  core-ocr:
+    build:
+      context: ./services/core_ocr
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8010:8010"
+    environment:
+      CORE_OCR_SERVICE_TOKEN: ${CORE_OCR_SERVICE_TOKEN:-}
+      GRPC_STORAGE_SERVICE_TOKEN: ${GRPC_STORAGE_SERVICE_TOKEN:-}
+      OCR_CPU_THREADS: ${OCR_CPU_THREADS:-2}
+    mem_limit: 3g
+    cpus: 2
+    pids_limit: 128

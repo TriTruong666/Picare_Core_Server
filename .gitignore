@@ -33,6 +33,7 @@ logs/
 !.env.template
 
 # IDE - VS Code
+.venv/
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -70,6 +71,10 @@ storage/contracts/
 # Testing
 coverage/
 .nyc_output/
+
+# Python cache
+__pycache__/
+*.py[cod]
 
 # Documentation
 # Documentation artifacts often shouldn't be in git

@@ -39,6 +39,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build OCR Image (models included)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/core_ocr
+          platforms: linux/amd64
+          load: true
+          tags: ghcr.io/tritruong666/picare-core-ocr:latest
+          cache-from: type=gha,scope=core-ocr
+          cache-to: type=gha,mode=max,scope=core-ocr
+
+      - name: Test OCR offline before publishing
+        run: |
+          docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m unittest discover -s tests -v
+          docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m tests.smoke_inference
+
+      - name: Publish tested OCR Image
+        run: docker push ghcr.io/tritruong666/picare-core-ocr:latest
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest

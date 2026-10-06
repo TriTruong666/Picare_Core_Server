@@ -1,0 +1,4 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/services/core_ocr/.venv/bin/python",
+  "pyrefly.pyreflyExecutable": "from-environment"
+}

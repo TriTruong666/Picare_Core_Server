@@ -1,4 +1,16 @@
 services:
+  core-ocr:
+    build:
+      context: ./services/core_ocr
+    platform: linux/amd64
+    restart: unless-stopped
+    env_file:
+      - .env.development
+    mem_limit: 3g
+    cpus: 2
+    networks:
+      - picare-dev-network
+
   # PostgreSQL Database
   postgres:
     image: postgres:16-alpine
@@ -49,6 +61,7 @@ services:
       - .env.development
     environment:
       - NODE_ENV=development
+      - CORE_OCR_URL=http://core-ocr:8010
       # Ghi đè host kết nối nội bộ giữa các container trong Docker network
       - DB_HOST=postgres
       - REDIS_HOST=redis
