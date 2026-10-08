@@ -19,7 +19,7 @@ LABELS = {
     "placeOfOrigin": ("que quan", "place of origin"),
     "address": ("noi thuong tru", "noi cu tru", "place of residence"),
     "issuedDate": ("ngay cap", "date of issue"),
-    "expiryDate": ("co gia tri den", "ngay het han", "date of expiry"),
+    "expiryDate": ("co gia tri den", "co gia tr den", "ngay het han", "date of expiry"),
     "issuedPlace": ("noi cap", "issuing authority", "place of issue"),
 }
 

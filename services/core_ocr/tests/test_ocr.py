@@ -87,6 +87,13 @@ class ParserTests(unittest.TestCase):
         ]))
         self.assertEqual(result.fields["birthdate"], "1990-03-02")
 
+    def test_expiry_date_accepts_dropped_character_in_label(self):
+        result = IdentityCardHandler().extract(lines([
+            "CĂN CƯỚC CÔNG DÂN", "Số: 012345678901",
+            "Co giá tr dén 26/03/2029", "Date of expiry",
+        ]))
+        self.assertEqual(result.fields["expiryDate"], "2029-03-26")
+
     def test_region_refinement_reads_origin_and_complete_issuing_authority(self):
         data = lines(["CĂN CƯỚC CÔNG DÂN", "Số: 012345678901", "Ngày sinh: 02/03/1990"])
         data += lines(["Ngày cấp: 05/06/2021"], "back")
