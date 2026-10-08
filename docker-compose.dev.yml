@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.development
+    environment:
+      OCR_REQUEST_TIMEOUT_SECONDS: ${OCR_REQUEST_TIMEOUT_SECONDS:-75}
     mem_limit: 3g
     cpus: 2
     networks:

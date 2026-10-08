@@ -1,5 +1,6 @@
 const { BaseException } = require("../common/exceptions/BaseException");
 const { imageMime } = require("../schemas/ocr.schema");
+const { randomUUID } = require("node:crypto");
 const limits = new Map();
 let active = 0;
 const fail = (message, statusCode, code) =>
@@ -7,6 +8,8 @@ const fail = (message, statusCode, code) =>
 
 class OcrService {
   static async recognize(input) {
+    const requestId = randomUUID().replaceAll("-", "");
+    const started = Date.now();
     const secret =
       process.env.CORE_OCR_SERVICE_TOKEN ||
       process.env.GRPC_STORAGE_SERVICE_TOKEN;
@@ -25,6 +28,9 @@ class OcrService {
     limit.count++;
     limits.set(input.userId, limit);
     active++;
+    console.info(
+      `[ocr] request_id=${requestId} status=start document_type=${input.documentType} front_bytes=${input.front?.length || 0} back_bytes=${input.back?.length || 0} timeout_ms=90000`,
+    );
     try {
       const form = new FormData();
       form.set("document_type", input.documentType);
@@ -42,7 +48,7 @@ class OcrService {
         {
           method: "POST",
           body: form,
-          headers: { "x-service-token": secret },
+          headers: { "x-service-token": secret, "x-request-id": requestId },
           signal: AbortSignal.timeout(90_000),
           redirect: "error",
         },
@@ -59,6 +65,12 @@ class OcrService {
           400,
           "ERR_BAD_REQUEST_001",
         );
+      if (response.status === 504)
+        throw fail(
+          "OCR đã quá thời gian xử lý. Vui lòng thử lại hoặc nhập tay.",
+          504,
+          "ERR_OCR_TIMEOUT",
+        );
       if (!response.ok)
         throw fail(
           "Dịch vụ OCR chưa sẵn sàng. Bạn vẫn có thể nhập thông tin thủ công.",
@@ -72,9 +84,21 @@ class OcrService {
         body.data.documentType !== input.documentType
       )
         throw fail("Kết quả OCR không hợp lệ", 503, "ERR_OCR_UNAVAILABLE");
+      console.info(
+        `[ocr] request_id=${requestId} status=ok elapsed_ms=${Date.now() - started} fields=${Object.keys(body.data.fields).length} warnings=${body.data.warnings?.length || 0}`,
+      );
       return body.data;
     } catch (error) {
+      console.warn(
+        `[ocr] request_id=${requestId} status=error code=${error.errorCode || (error?.name === "TimeoutError" ? "ERR_OCR_TIMEOUT" : "ERR_OCR_UNAVAILABLE")} elapsed_ms=${Date.now() - started}`,
+      );
       if (error instanceof BaseException) throw error;
+      if (error?.name === "TimeoutError")
+        throw fail(
+          "OCR đã quá thời gian xử lý. Vui lòng thử lại hoặc nhập tay.",
+          504,
+          "ERR_OCR_TIMEOUT",
+        );
       throw fail(
         "Không kết nối được OCR hoặc đã quá thời gian chờ. Bạn có thể thử lại hoặc nhập tay.",
         503,

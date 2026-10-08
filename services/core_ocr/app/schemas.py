@@ -13,6 +13,8 @@ class TextLine:
     text: str
     score: float
     side: str
+    image_sideways: bool = False
+    box: tuple[int, int, int, int] | None = None
 
 
 class OcrResult(BaseModel):
@@ -20,4 +22,4 @@ class OcrResult(BaseModel):
     fields: dict[str, str]
     confidence: dict[str, float]
     warnings: list[str]
-    extractorVersion: str = "1.3.1"
+    extractorVersion: str = "1.4.3"

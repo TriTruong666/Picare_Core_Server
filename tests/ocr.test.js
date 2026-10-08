@@ -47,6 +47,7 @@ test("internal HTTP uses standard result and private service authentication", as
   process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
   global.fetch = async (url, options) => {
     assert.equal(options.headers["x-service-token"], "test-secret");
+    assert.match(options.headers["x-request-id"], /^[0-9a-f]{32}$/);
     assert.equal(options.body.get("document_type"), "vn_identity_card");
     return {
       ok: true,
@@ -69,6 +70,7 @@ test("busy, invalid image and network failures are sanitized", async () => {
   for (const [status, expected] of [
     [429, 429],
     [400, 400],
+    [504, 504],
     [503, 503],
   ]) {
     global.fetch = async () => ({ status, ok: false });
@@ -83,4 +85,21 @@ test("busy, invalid image and network failures are sanitized", async () => {
     service.recognize(input("network")),
     (error) => error.statusCode === 503 && !error.message.includes("secret"),
   );
+});
+
+test("OCR timeout propagates as gRPC deadline exceeded", async () => {
+  process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
+  process.env.GRPC_OCR_SERVICE_TOKEN = "test-secret";
+  global.fetch = async () => ({ status: 504, ok: false });
+  const error = await new Promise((resolve) =>
+    controller.recognize(
+      {
+        metadata: { get: () => ["test-secret"] },
+        request: input("timeout-grpc"),
+      },
+      resolve,
+    ),
+  );
+  assert.equal(error.code, 4);
+  assert.match(error.details, /quá thời gian/);
 });

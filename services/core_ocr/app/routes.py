@@ -1,4 +1,6 @@
 from typing import Annotated
+import re
+import uuid
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from . import controllers
 from .schemas import OcrInput
@@ -17,4 +19,7 @@ def ready(request: Request):
 @router.post("/api/v1/ocr/recognize")
 def recognize(request: Request, document_type: Annotated[str, Form()],
               front: Annotated[UploadFile, File()], back: Annotated[UploadFile | None, File()] = None):
-    return controllers.recognize(request.app.state.ocr, OcrInput.model_validate({"document_type": document_type}), front, back)
+    provided = request.headers.get("x-request-id", "")
+    request_id = provided if re.fullmatch(r"[0-9a-f]{32}", provided) else uuid.uuid4().hex
+    return controllers.recognize(request.app.state.ocr, OcrInput.model_validate({"document_type": document_type}),
+                                 front, back, request_id)

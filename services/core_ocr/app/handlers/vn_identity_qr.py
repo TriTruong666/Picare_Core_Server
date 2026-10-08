@@ -54,8 +54,18 @@ def read_identity_qr(data):
             if source.format not in ("JPEG", "PNG", "WEBP") or source.width * source.height > 20_000_000:
                 return None
             image = ImageOps.exif_transpose(source).convert("RGB")
-            image.thumbnail((2200, 2200))
-            barcodes = zxingcpp.read_barcodes(np.asarray(image))
+            preview = image.copy()
+            preview.thumbnail((2200, 2200))
+            barcodes = zxingcpp.read_barcodes(np.asarray(preview))
+            if not barcodes:
+                # Fine printed QR codes can vanish in the 2200px preview. A
+                # bounded high-resolution retry recovers them without making
+                # every request pay for a much larger image scan.
+                width, height = image.size
+                scale = min(2.0, 5200 / max(width, height), (24_000_000 / (width * height)) ** .5)
+                if scale >= 1.5:
+                    image = image.resize((round(width * scale), round(height * scale)), Image.Resampling.LANCZOS)
+                barcodes = zxingcpp.read_barcodes(np.asarray(image))
     except (OSError, ValueError, RuntimeError, Image.DecompressionBombError):
         return None
     parsed = [parse_identity_qr(barcode.text) for barcode in barcodes

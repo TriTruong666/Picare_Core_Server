@@ -1,5 +1,8 @@
 import io
 import os
+import subprocess
+import sys
+import time
 import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
@@ -104,6 +107,14 @@ class ParserTests(unittest.TestCase):
         self.assertNotIn("placeOfOrigin", result.fields)
         self.assertNotIn("issuedPlace", result.fields)
 
+    def test_region_refinement_accepts_complete_agency_with_ocr_punctuation(self):
+        result = IdentityCardHandler().extract(lines(["CĂN CƯỚC"]), regions={
+            "issuedPlace": "CỤC TRƯỜNG CỤC CANH SÁT\n"
+                           "UÄN LÝ HÀNH'CHÍNH VE TRAT TỰ XA HỘI",
+        })
+        self.assertEqual(result.fields["issuedPlace"],
+                         "Cục trưởng Cục Cảnh sát quản lý hành chính về trật tự xã hội")
+
     def test_identity_qr_parser_and_decoder(self):
         import numpy as np
         import zxingcpp
@@ -122,7 +133,21 @@ class ParserTests(unittest.TestCase):
         image.rotate(90, expand=True).save(output, "PNG")
         self.assertEqual(read_identity_qr(output.getvalue()), parsed)
 
-    def test_qr_requires_visible_number_match_and_drops_conflicting_dates(self):
+    def test_small_printed_qr_survives_high_resolution_retry(self):
+        import numpy as np
+        import zxingcpp
+        from PIL import Image
+        payload = ("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
+                   "Phường Mẫu, Thành phố Thử Nghiệm|05062021")
+        barcode = zxingcpp.create_barcode(payload, zxingcpp.BarcodeFormat.QRCode)
+        qr = Image.fromarray(np.asarray(zxingcpp.write_barcode_to_image(barcode, size_hint=600)))
+        card = Image.new("RGB", (1920, 2560), "white")
+        card.paste(qr.resize((80, 80), Image.Resampling.NEAREST), (1300, 1900))
+        output = io.BytesIO()
+        card.save(output, "JPEG", quality=85)
+        self.assertEqual(read_identity_qr(output.getvalue()), parse_identity_qr(payload))
+
+    def test_qr_requires_visible_number_match_and_flags_conflicting_dates(self):
         qr = parse_identity_qr("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
                                "Phường Mẫu, Thành phố Thử Nghiệm|05062021")
         data = lines(["CĂN CƯỚC CÔNG DÂN", "Số: 012345678901",
@@ -138,7 +163,35 @@ class ParserTests(unittest.TestCase):
         conflicted = IdentityCardHandler().extract(
             lines(["CĂN CƯỚC", "Số: 012345678901", "Ngày sinh: 03/03/1990"]),
             qr_fields=qr)
-        self.assertNotIn("birthdate", conflicted.fields)
+        self.assertEqual(conflicted.fields["birthdate"], "1990-03-02")
+        self.assertTrue(any("ngày sinh" in warning and "không khớp" in warning
+                            for warning in conflicted.warnings))
+
+    def test_qr_can_use_matching_reverse_number_when_front_number_is_unreadable(self):
+        qr = parse_identity_qr("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
+                               "Phường Mẫu, Thành phố Thử Nghiệm|05062021")
+        front = lines(["CĂN CƯỚC", "Số: 01234567890?", "Ngày sinh: 02/03/1990"])
+        back = lines(["Số: 012345678901", "Ngày cấp: 05/06/2021"], "back")
+        result = IdentityCardHandler().extract(front + back, qr_fields=qr)
+        self.assertEqual(result.fields["number"], "012345678901")
+        self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN MẪU")
+        self.assertTrue(any("mặt sau" in warning for warning in result.warnings))
+        # A conflicting printed number, including one of several numbers on
+        # the front, must never authorize QR suggestions.
+        conflict = IdentityCardHandler().extract(front + lines(["Số: 012345678902"], "back"), qr_fields=qr)
+        self.assertNotIn("number", conflict.fields)
+        ambiguous = IdentityCardHandler().extract(
+            lines(["CĂN CƯỚC", "012345678901 012345678902"]) + back, qr_fields=qr)
+        self.assertNotIn("fullName", ambiguous.fields)
+
+    def test_confirmed_qr_recovers_card_when_header_is_unreadable(self):
+        qr = parse_identity_qr("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
+                               "Phường Mẫu, Thành phố Thử Nghiệm|05062021")
+        result = IdentityCardHandler().extract(
+            lines(["Số: 012345678901", "Ngày sinh: 02/03/1990"]), qr_fields=qr)
+        self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN MẪU")
+        self.assertEqual(IdentityCardHandler().extract(
+            lines(["Số: 012345678901", "Ngày sinh: 02/03/1990"])).fields, {})
 
     def test_qr_is_merged_through_service_only_after_visible_number(self):
         qr = parse_identity_qr("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
@@ -181,6 +234,36 @@ class ParserTests(unittest.TestCase):
             service.recognize(OcrInput(document_type="document"), {"front": b"test"})
         self.assertFalse(service.lock.locked())
 
+    def test_soft_deadline_returns_timeout_and_releases_lock(self):
+        class Engine:
+            def read(self, data, side, rotation=0):
+                time.sleep(.06)
+                return []
+        service = OcrService(Engine())
+        service.timeout_seconds = .02
+        with self.assertRaises(ApiError) as ctx:
+            service.recognize(OcrInput(document_type="document"), {"front": b"test"})
+        self.assertEqual(ctx.exception.status, 504)
+        self.assertEqual(ctx.exception.code, "ERR_OCR_TIMEOUT")
+        self.assertFalse(service.lock.locked())
+
+    def test_hard_watchdog_exits_a_stuck_worker(self):
+        script = """
+import time
+from app.services import OcrService
+from app.schemas import OcrInput
+class Engine:
+    def read(self, data, side, rotation=0):
+        time.sleep(1)
+service = OcrService(Engine())
+service.timeout_seconds = .02
+service.hard_timeout_grace_seconds = .02
+service.recognize(OcrInput(document_type='document'), {'front': b'test'})
+"""
+        completed = subprocess.run([sys.executable, "-c", script], capture_output=True,
+                                   text=True, timeout=3, check=False)
+        self.assertEqual(completed.returncode, 124)
+
     def test_rotated_front_and_back_are_selected_independently(self):
         calls = []
         class Engine:
@@ -216,6 +299,54 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN AN")
         self.assertEqual(result.fields["birthdate"], "1988-02-01")
         self.assertIn(("front", 90), calls)
+
+    def test_upright_number_and_dates_skip_extra_full_card_passes(self):
+        calls = []
+        class Engine:
+            def read(self, data, side, rotation=0):
+                calls.append((side, rotation))
+                if side == "front":
+                    return lines(["CĂN CƯỚC", "Số: 012345678901",
+                                  "Ngày sinh: 02/03/1990", "Họ và tên: SN"], side)
+                return lines(["Ngày cấp: 05/06/2021"], side)
+        with patch("app.services.read_identity_qr", return_value=None):
+            result = OcrService(Engine()).recognize(
+                OcrInput(document_type="vn_identity_card"),
+                {"front": b"image", "back": b"image"})
+        self.assertEqual(calls, [("front", 0), ("back", 0)])
+        self.assertNotIn("fullName", result.fields)
+
+    def test_sideways_lines_force_orientation_search_even_with_number_and_date(self):
+        calls = []
+        class Engine:
+            def read(self, data, side, rotation=0):
+                calls.append((side, rotation))
+                if side == "front" and rotation == 0:
+                    return [TextLine("CĂN CƯỚC", .9, side, True),
+                            TextLine("Số: 012345678901", .9, side, True),
+                            TextLine("Ngày sinh: 02/03/1990", .9, side, True)]
+                if side == "front" and rotation == 270:
+                    return lines(["CĂN CƯỚC", "Số: 012345678901",
+                                  "Ngày sinh: 02/03/1990", "Họ và tên: NGUYỄN VĂN AN"], side)
+                if side == "back" and rotation == 0:
+                    return [TextLine("Ngày cấp: 05/06/2021", .9, side, True)]
+                if side == "back" and rotation == 90:
+                    return lines(["Ngày cấp: 05/06/2021", "Nơi cấp: BỘ CÔNG AN"], side)
+                return []
+        with patch("app.services.read_identity_qr", return_value=None):
+            result = OcrService(Engine()).recognize(
+                OcrInput(document_type="vn_identity_card"),
+                {"front": b"image", "back": b"image"})
+        self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN AN")
+        self.assertIn(("front", 270), calls)
+        self.assertIn(("back", 90), calls)
+
+    def test_vietnamese_fragment_cannot_erase_paddle_field_label(self):
+        from app.engine import PaddleEngine
+        merged = PaddleEngine.merge_readers(
+            [("Quê quán / Place of origin:", .96, (10, 10, 400, 60))],
+            [("Place of orlgin", .93, (10, 10, 400, 60))])
+        self.assertEqual([item[0] for item in merged], ["Quê quán / Place of origin:"])
 
 
 class ApiTests(unittest.TestCase):

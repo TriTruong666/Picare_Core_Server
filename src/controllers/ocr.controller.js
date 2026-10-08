@@ -34,6 +34,8 @@ exports.recognize = async (call, callback) => {
         ? grpc.status.INVALID_ARGUMENT
         : error.statusCode === 429
           ? grpc.status.RESOURCE_EXHAUSTED
+          : error.statusCode === 504
+            ? grpc.status.DEADLINE_EXCEEDED
           : grpc.status.UNAVAILABLE;
     callback({
       code,

@@ -116,9 +116,9 @@ class IdentityCardHandler:
                     warnings.append("Quê quán được đọc từ vùng chữ trên thẻ; vui lòng đối chiếu lại dấu và địa danh.")
                 break
 
-        issuer = folded(regions.get("issuedPlace", ""))
+        issuer = re.sub(r"[^a-z0-9]+", " ", folded(regions.get("issuedPlace", "")))
         if ("issuedPlace" not in fields and "cuc truong cuc" in issuer
-                and "canh sat" in issuer and "quan ly hanh chinh" in issuer
+                and "canh sat" in issuer and "hanh chinh" in issuer
                 and "trat tu xa hoi" in issuer):
             # All parts must be visible. This normalizes OCR diacritic errors
             # against the complete agency title printed on the reverse side.
@@ -134,11 +134,16 @@ class IdentityCardHandler:
         front = [line for line in lines if line.side == "front"]
         back = [line for line in lines if line.side == "back"]
         front_text = " ".join(line.text for line in front)
-        if not any(mark in folded(front_text) for mark in ("can cuoc", "identity card", "ho va ten", "full name")):
+        numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", front_text))
+        reverse_numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", " ".join(line.text for line in back)))
+        has_card_label = any(mark in folded(front_text) for mark in
+                             ("can cuoc", "identity card", "ho va ten", "full name"))
+        qr_confirmed = qr_fields and (numbers == {qr_fields["number"]}
+                                      or (not numbers and reverse_numbers == {qr_fields["number"]}))
+        if not has_card_label and not qr_confirmed:
             return OcrResult(documentType="vn_identity_card", fields={}, confidence={},
                              warnings=["Chưa nhận diện được mặt trước căn cước. Kiểm tra ảnh hoặc nhập tay."])
 
-        numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", front_text))
         if len(numbers) == 1:
             fields["number"] = next(iter(numbers))
             confidence["number"] = min((line.score for line in front if fields["number"] in line.text), default=0)
@@ -212,21 +217,28 @@ class IdentityCardHandler:
             if authorities:
                 fields["issuedPlace"] = " ".join(line.text for line in authorities)[:500]
                 confidence["issuedPlace"] = round(min(line.score for line in authorities), 4)
-        reverse_numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", " ".join(line.text for line in back)))
         if fields.get("number") and reverse_numbers and fields["number"] not in reverse_numbers:
             warnings.append("Số nhận diện ở hai mặt không khớp. Vui lòng kiểm tra lại hai ảnh.")
         if qr_fields:
-            if fields.get("number") != qr_fields["number"]:
+            qr_number = qr_fields["number"]
+            # When the front number is unreadable, the printed number on the
+            # reverse can independently bind the QR to this pair of photos.
+            # Never use QR if the front has conflicting or ambiguous numbers.
+            reverse_match = (not numbers and reverse_numbers == {qr_number})
+            if fields.get("number") != qr_number and not reverse_match:
                 warnings.append("Không đối chiếu được số căn cước với mã QR; không dùng dữ liệu QR.")
             else:
+                if reverse_match:
+                    fields["number"] = qr_number
+                    confidence["number"] = 1.0
+                    warnings.append("Số căn cước được đối chiếu bằng mã QR và mặt sau; vui lòng kiểm tra với mặt trước.")
                 for key in ("fullName", "address", "birthdate", "gender", "issuedDate"):
                     value = qr_fields[key]
                     if key in ("birthdate", "gender", "issuedDate") and fields.get(key) and fields[key] != value:
-                        fields.pop(key)
-                        confidence.pop(key, None)
                         label = {"birthdate": "ngày sinh", "gender": "giới tính", "issuedDate": "ngày cấp"}[key]
-                        warnings.append(f"Thông tin {label} giữa chữ in và mã QR không khớp; vui lòng nhập tay.")
-                        continue
+                        warnings.append(f"Thông tin {label} giữa chữ in và mã QR không khớp; đã gợi ý theo mã QR, vui lòng đối chiếu với thẻ.")
+                    if key in ("fullName", "address") and fields.get(key) and fields[key] != value:
+                        warnings.append(f"Thông tin {('họ tên' if key == 'fullName' else 'địa chỉ')} được sửa theo mã QR; vui lòng đối chiếu với thẻ.")
                     fields[key], confidence[key] = value, 1.0
                 warnings.append("Họ tên và địa chỉ được gợi ý từ mã QR; vui lòng đối chiếu với thẻ trước khi tiếp tục.")
 

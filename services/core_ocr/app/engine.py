@@ -59,21 +59,27 @@ class PaddleEngine:
             # EXIF orientation was already applied in decode().
             image = np.rot90(image, k=rotation // 90).copy()
         items = []
+        paddle_boxes = []
         for result in self.model.predict(image):
             scores, texts = result.get("rec_scores", []), result.get("rec_texts", [])
             boxes = result.get("rec_boxes", [])
             items.extend(zip(texts, scores, boxes))
+            paddle_boxes.extend(boxes)
+        tall = sum(float(box[3] - box[1]) > 2 * float(box[2] - box[0]) for box in paddle_boxes)
+        wide = sum(float(box[2] - box[0]) > 2 * float(box[3] - box[1]) for box in paddle_boxes)
+        image_sideways = tall >= 4 and tall >= 2 * wide
         # The upstream Latin dictionary lacks many accented Vietnamese capitals.
         # A local Vietnamese recognizer supplies complete glyphs; never restore
         # accents by guessing names. Paddle remains the detector/fallback reader.
-        vietnamese = self.read_vietnamese(image)
+        vietnamese = [] if image_sideways else self.read_vietnamese(image)
         if vietnamese:
             items = self.merge_readers(items, vietnamese)
         items.sort(key=lambda item: (round(float(item[2][1]) / 12), float(item[2][0])))
-        return [TextLine(str(text).strip(), float(score), side)
-                for text, score, _ in items if str(text).strip()]
+        return [TextLine(str(text).strip(), float(score), side, image_sideways,
+                         tuple(map(int, box)))
+                for text, score, box in items if str(text).strip()]
 
-    def read_identity_regions(self, data, side, rotation=0):
+    def read_identity_regions(self, data, side, rotation=0, lines=None):
         """Re-read small, known text areas only after the card orientation is chosen.
 
         This is a fallback for the two fields that the full-card detector often
@@ -83,22 +89,51 @@ class PaddleEngine:
         if rotation:
             image = np.rot90(image, k=rotation // 90).copy()
         height, width = image.shape[:2]
-        if not 1.4 <= width / height <= 1.8:
-            return {}
-        regions = ({"placeOfOrigin": (.27, .72, .88, .91)} if side == "front"
-                   else {"issuedPlace": (.11, .15, .49, .32)})
+        lines = lines or []
+        regions = {}
+        if side == "front":
+            from .handlers.vn_identity_card import label_for
+            label = next((line for line in lines if line.box and label_for(line.text) == "placeOfOrigin"), None)
+            if label:
+                x0, y0, x1, y1 = label.box
+                candidates = [line for line in lines if line.box and line is not label
+                              and label_for(line.text) is None
+                              and abs(line.box[0] - x0) < .12 * width
+                              and y1 - .3 * (y1 - y0) <= line.box[1] <= y1 + 2 * (y1 - y0)]
+                if candidates:
+                    candidate = min(candidates, key=lambda line: line.box[1])
+                    left, top, right, bottom = candidate.box
+                    regions["placeOfOrigin"] = (
+                        max(0, left - 30), max(0, top - 4),
+                        min(width, right + 30), min(height, bottom + 4), "7")
+        else:
+            from .handlers.vn_identity_card import date_value
+            date_line = next((line for line in lines if line.box and date_value(line.text)), None)
+            if date_line:
+                x0, y0, x1, y1 = date_line.box
+                regions["issuedPlace"] = (
+                    max(0, x0 + int(.09 * width)), max(0, y1 - 20),
+                    min(width, x1 + int(.05 * width)), min(height, y1 + int(.10 * height)), "6")
+        if not regions and 1.4 <= width / height <= 1.8:
+            fallback = ({"placeOfOrigin": (.27, .72, .88, .91)} if side == "front"
+                        else {"issuedPlace": (.11, .15, .49, .32)})
+            regions = {field: (int(l * width), int(t * height),
+                               int(r * width), int(b * height), "6")
+                       for field, (l, t, r, b) in fallback.items()}
         output = {}
-        for field, (left, top, right, bottom) in regions.items():
-            crop = image[int(top * height):int(bottom * height),
-                         int(left * width):int(right * width)]
+        for field, (left, top, right, bottom, psm) in regions.items():
+            crop = image[top:bottom, left:right]
+            if crop.size == 0:
+                continue
             encoded = io.BytesIO()
             Image.fromarray(crop[:, :, ::-1]).save(encoded, "PNG")
             try:
                 result = subprocess.run(
-                    ["tesseract", "stdin", "stdout", "-l", "vie+eng", "--psm", "6"],
+                    ["tesseract", "stdin", "stdout", "-l", "vie+eng", "--psm", psm],
                     input=encoded.getvalue(), capture_output=True, timeout=10, check=True,
                 )
-                output[field] = result.stdout.decode("utf-8", errors="replace")
+                value = result.stdout.decode("utf-8", errors="replace")
+                output[field] = f"Quê quán:\n{value}" if field == "placeOfOrigin" and psm == "7" else value
             except (subprocess.SubprocessError, OSError):
                 continue
         return output
@@ -107,9 +142,13 @@ class PaddleEngine:
     def merge_readers(cls, paddle, vietnamese):
         # A sparse Tesseract fragment must not erase a fuller Paddle line.
         # Tesseract still wins for complete Vietnamese text with diacritics.
+        from .handlers.vn_identity_card import label_for
         accepted = []
         for text, score, box in vietnamese:
             covered = [item for item in paddle if cls.overlaps(item[2], box)]
+            if any(label_for(str(item[0])) and label_for(str(item[0])) != label_for(str(text))
+                   for item in covered):
+                continue
             paddle_letters = sum(char.isalnum() for item in covered for char in str(item[0]))
             vietnamese_letters = sum(char.isalnum() for char in str(text))
             full_date = r"\b\d{1,2}\s*[/.-]\s*\d{1,2}\s*[/.-]\s*\d{4}\b"
