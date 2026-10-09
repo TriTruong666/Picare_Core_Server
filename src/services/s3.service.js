@@ -829,7 +829,7 @@ class S3Service {
       appConfig.server?.baseUrl || "https://core.picare.vn"
     ).replace(/\/+$/, "");
     const encodedKey = encodeURIComponent(result.key);
-    const viewUrl = `${baseUrl}/api/v1/s3/intern/view/${encodedKey}${
+    const viewUrl = `${baseUrl}/api/v1/s3/picare_satellite/view/${encodedKey}${
       viewKey ? `?k=${encodeURIComponent(viewKey)}` : ""
     }`;
 

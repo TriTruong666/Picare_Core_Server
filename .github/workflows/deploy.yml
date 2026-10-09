@@ -16,6 +16,15 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # Kiểm tra xem code của OCR có thay đổi không
+      - name: Check for changes in OCR service
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters:
+            ocr:
+              - 'services/core_ocr/**'
+
       # --- BƯỚC QUAN TRỌNG ĐỂ FIX LỖI CACHE ---
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,7 +48,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # CHỈ BUILD & TEST OCR KHI CÓ THAY ĐỔI TRONG THƯ MỤC services/core_ocr
       - name: Build OCR Image (models included)
+        if: steps.changes.outputs.ocr == 'true'
         uses: docker/build-push-action@v5
         with:
           context: ./services/core_ocr
@@ -50,11 +61,13 @@ jobs:
           cache-to: type=gha,mode=max,scope=core-ocr
 
       - name: Test OCR offline before publishing
+        if: steps.changes.outputs.ocr == 'true'
         run: |
           docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m unittest discover -s tests -v
           docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m tests.smoke_inference
 
       - name: Publish tested OCR Image
+        if: steps.changes.outputs.ocr == 'true'
         run: docker push ghcr.io/tritruong666/picare-core-ocr:latest
 
   deploy:
@@ -117,5 +130,5 @@ jobs:
             # Lưu ý: GITHUB_TOKEN chỉ có hiệu lực khi job đang chạy
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --force-recreate
+            docker compose -f docker-compose.prod.yml up -d
             docker image prune -f
