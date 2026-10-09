@@ -1,12 +1,18 @@
-﻿const express = require("express");
+const express = require("express");
+const cors = require("cors");
 const multer = require("multer");
 const router = express.Router();
 const S3Controller = require("../controllers/s3.controller");
-const { protect } = require("../middlewares/auth.middleware");
+const {
+  protect,
+  protectInternUpload,
+  protectInternView,
+} = require("../middlewares/auth.middleware");
 const {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
   getAssetsSchema,
+  internUploadSchema,
 } = require("../schemas/s3.schema");
 const { maxFileUploadBytes } = require("../config/upload.config");
 
@@ -81,6 +87,102 @@ const upload = multer({
  */
 router.post("/upload", protect, upload.single("file"), S3Controller.uploadFile);
 router.get("/upload/jobs/:jobId", protect, S3Controller.getUploadJobStatus);
+
+/**
+ * @swagger
+ * /api/v1/s3/intern/upload:
+ *   post:
+ *     summary: Upload file trực tiếp dành cho thực tập sinh (yêu cầu header x-picare-s3-upload-key)
+ *     tags: [S3]
+ *     parameters:
+ *       - in: header
+ *         name: x-picare-s3-upload-key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Secret Upload API key (INTERN_UPLOAD_API_KEY)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ *                 description: File cần upload
+ *               folder:
+ *                 type: string
+ *                 description: Thư mục con (sẽ tự động nối sau prefix interns/)
+ *                 example: project-a
+ *               description:
+ *                 type: string
+ *                 description: Mô tả ngắn gọn
+ *     responses:
+ *       201:
+ *         description: Upload file thành công
+ *       400:
+ *         description: File không hợp lệ hoặc quá dung lượng
+ *       401:
+ *         description: Sai hoặc thiếu x-picare-s3-upload-key
+ */
+router.options("/picare_satellite/upload", cors());
+router.post(
+  "/picare_satellite/upload",
+  cors(),
+  protectInternUpload,
+  upload.single("file"),
+  internUploadSchema,
+  S3Controller.uploadInternFile,
+);
+
+/**
+ * @swagger
+ * /api/v1/s3/intern/view/{key}:
+ *   get:
+ *     summary: Xem file dành riêng cho thực tập sinh (yêu cầu header x-picare-s3-view-key hoặc query param k)
+ *     tags: [S3]
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Object key (bắt buộc phải nằm trong prefix interns/)
+ *       - in: header
+ *         name: x-picare-s3-view-key
+ *         schema:
+ *           type: string
+ *         description: Secret View API key (INTERN_VIEW_API_KEY)
+ *       - in: query
+ *         name: k
+ *         schema:
+ *           type: string
+ *         description: Secret View API key (INTERN_VIEW_API_KEY)
+ *     responses:
+ *       302:
+ *         description: Redirect tới S3 Presigned URL
+ *       401:
+ *         description: Sai key xem file hoặc đã bị thu hồi
+ *       403:
+ *         description: Không có quyền xem file ngoài thư mục interns
+ */
+router.options(/^\/picare_satellite\/view(\/.*)?$/, cors());
+router.get(
+  /^\/picare_satellite\/view\/(.+)$/,
+  cors(),
+  protectInternView,
+  S3Controller.viewInternObject,
+);
+router.get(
+  "/picare_satellite/view",
+  cors(),
+  protectInternView,
+  S3Controller.viewInternObject,
+);
 
 // ─── PRESIGNED URLs ──────────────────────────────────────────────────────────
 

@@ -122,8 +122,82 @@ const restrictTo = (...allowedRoles) => {
   };
 };
 
+/**
+ * Middleware xác thực API upload cho thực tập sinh.
+ * Header bắt buộc: x-picare-s3-upload-key
+ */
+const protectInternUpload = (req, res, next) => {
+  try {
+    const configuredKey = process.env.INTERN_UPLOAD_API_KEY;
+    if (!configuredKey) {
+      throw new ForbiddenException(
+        ErrorCodes.FORBIDDEN,
+        "Chưa cấu hình INTERN_UPLOAD_API_KEY trên hệ thống",
+      );
+    }
+
+    const apiKey =
+      req.headers["x-picare-s3-upload-key"] ||
+      req.headers["x-api-key"] ||
+      (req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.slice(7).trim()
+        : null);
+
+    if (!apiKey || apiKey !== configuredKey) {
+      throw new UnauthorizedException(
+        ErrorCodes.UNAUTHORIZED,
+        "Upload Key không hợp lệ hoặc thiếu header x-picare-s3-upload-key",
+      );
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Middleware xác thực API xem file (view) cho thực tập sinh.
+ * Header bắt buộc: x-picare-s3-view-key (hoặc query param k)
+ */
+const protectInternView = (req, res, next) => {
+  try {
+    const configuredKey = process.env.INTERN_VIEW_API_KEY;
+    if (!configuredKey) {
+      throw new ForbiddenException(
+        ErrorCodes.FORBIDDEN,
+        "Chưa cấu hình INTERN_VIEW_API_KEY trên hệ thống",
+      );
+    }
+
+    const apiKey =
+      req.headers["x-picare-s3-view-key"] ||
+      req.query?.k ||
+      req.query?.key ||
+      req.headers["x-api-key"] ||
+      (req.headers.authorization?.startsWith("Bearer ")
+        ? req.headers.authorization.slice(7).trim()
+        : null);
+
+    if (!apiKey || apiKey !== configuredKey) {
+      throw new UnauthorizedException(
+        ErrorCodes.UNAUTHORIZED,
+        "View Key không hợp lệ hoặc thiếu header x-picare-s3-view-key (hoặc query k)",
+      );
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   protect,
   protectContractAccess,
   restrictTo,
+  protectInternUpload,
+  protectInternView,
 };
+
+

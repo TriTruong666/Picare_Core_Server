@@ -16,7 +16,10 @@ const appConfig = require("../config/app.config");
 const S3Asset = require("../models/s3_asset.model");
 const S3Folder = require("../models/s3_folder.model");
 const { AssetVisibility } = require("../common/enum/s3_asset.enum");
-const { BadRequestException } = require("../common/exceptions/BaseException");
+const {
+  BadRequestException,
+  ForbiddenException,
+} = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const { resolveMimeType } = require("../common/s3_upload.helper");
 const fs = require("fs");
@@ -756,6 +759,125 @@ class S3Service {
     const slug = slugify(name, { lower: true, strict: true, locale: "vi" });
     return `${folder}/${timestamp}_${randomUUID()}_${slug}${ext}`;
   }
+
+  /**
+   * Upload file dành riêng cho thực tập sinh / repo bên ngoài.
+   * Đảm bảo validation dung lượng, làm sạch prefix và ép chặt prefix interns/.
+   * @param {Object} params
+   * @param {Buffer} params.fileBuffer - Nội dung file
+   * @param {string} params.mimeType - Content type
+   * @param {string} params.originalName - Tên file gốc
+   * @param {number} params.fileSize - Kích thước file
+   * @param {string} [params.subfolder] - Thư mục con
+   * @param {string} [params.description] - Mô tả
+   * @returns {Promise<{key: string, url: string, originalName: string, fileSize: number, mimeType: string, folder: string}>}
+   */
+  async uploadInternFile({
+    fileBuffer,
+    mimeType,
+    originalName,
+    fileSize,
+    subfolder = "",
+    description = null,
+  }) {
+    if (!fileBuffer) {
+      throw new BadRequestException("Không tìm thấy dữ liệu file");
+    }
+
+    const maxMb =
+      Number.parseInt(process.env.INTERN_MAX_UPLOAD_MB || "25", 10) || 25;
+    if (fileSize > maxMb * 1024 * 1024) {
+      throw new BadRequestException(
+        `Dung lượng file vượt quá giới hạn cho phép (${maxMb}MB)`,
+      );
+    }
+
+    const basePrefix = (
+      process.env.INTERN_UPLOAD_PREFIX || "interns"
+    ).replace(/^\/+|\/+$/g, "");
+
+    let cleanSubfolder = "";
+    if (typeof subfolder === "string") {
+      cleanSubfolder = subfolder
+        .replace(/\.\./g, "")
+        .replace(/[^a-zA-Z0-9_\-\/]/g, "")
+        .replace(/\/+/g, "/")
+        .replace(/^\/+|\/+$/g, "");
+    }
+
+    const targetFolder = cleanSubfolder
+      ? `${basePrefix}/${cleanSubfolder}`
+      : basePrefix;
+    const key = this.buildKey(targetFolder, originalName);
+
+    const result = await this.upload({
+      key,
+      body: fileBuffer,
+      mimeType,
+      originalName,
+      fileSize,
+      folder: targetFolder,
+      description: description || "Uploaded by intern",
+      visibility: AssetVisibility.PUBLIC,
+    });
+
+    const viewKey =
+      process.env.INTERN_VIEW_API_KEY ||
+      process.env.INTERN_UPLOAD_API_KEY ||
+      "";
+    const baseUrl = (
+      appConfig.server?.baseUrl || "https://core.picare.vn"
+    ).replace(/\/+$/, "");
+    const encodedKey = encodeURIComponent(result.key);
+    const viewUrl = `${baseUrl}/api/v1/s3/intern/view/${encodedKey}${
+      viewKey ? `?k=${encodeURIComponent(viewKey)}` : ""
+    }`;
+
+    return {
+      key: result.key,
+      url: viewUrl,
+      viewUrl,
+      s3RawUrl: result.url,
+      originalName,
+      fileSize,
+      mimeType,
+      folder: targetFolder,
+    };
+  }
+
+  /**
+   * Tạo Presigned URL cho thực tập sinh xem file từ S3.
+   * Chặn chặt prefix: Chỉ cho phép xem các object nằm trong prefix interns/.
+   * @param {string} key - S3 object key
+   * @param {number} [expiresIn=3600] - Thời hạn của presigned URL (giây)
+   * @returns {Promise<string>}
+   */
+  async getInternPresignedViewUrl(key, expiresIn = 3600) {
+    if (!key || typeof key !== "string") {
+      throw new BadRequestException("Key của object không hợp lệ");
+    }
+
+    const basePrefix = (
+      process.env.INTERN_UPLOAD_PREFIX || "interns"
+    ).replace(/^\/+|\/+$/g, "");
+    const normalizedKey = key.replace(/^\/+/, "");
+
+    // Chặn path traversal và chỉ cho phép truy cập tài nguyên trong basePrefix/
+    if (
+      normalizedKey.includes("..") ||
+      (!normalizedKey.startsWith(`${basePrefix}/`) &&
+        normalizedKey !== basePrefix)
+    ) {
+      throw new ForbiddenException(
+        ErrorCodes.FORBIDDEN,
+        `Chỉ được phép xem các tài nguyên thuộc thư mục "${basePrefix}"`,
+      );
+    }
+
+    return this.getPresignedUrl(normalizedKey, expiresIn);
+  }
 }
 
 module.exports = new S3Service();
+
+

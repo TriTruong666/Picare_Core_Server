@@ -21,6 +21,7 @@ const { validate: isUuid } = require("uuid");
 const {
   S3PresignedUrlDTO,
   S3ObjectMetaDTO,
+  InternUploadDTO,
 } = require("../schemas/s3.schema");
 
 class S3Controller {
@@ -556,6 +557,101 @@ class S3Controller {
       next(error);
     }
   }
+
+  /**
+   * POST /api/v1/s3/intern/upload
+   * Controller tiếp nhận request upload từ repo bên ngoài của thực tập sinh.
+   * Xác thực schema -> Bóc tách file -> Gọi S3Service -> Trả về InternUploadDTO.
+   */
+  static async uploadInternFile(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException("Dữ liệu không hợp lệ", errors.array());
+      }
+
+      let fileBuffer, mimeType, originalName, fileSize;
+
+      if (req.file) {
+        fileBuffer = req.file.buffer;
+        originalName = req.file.originalname;
+        mimeType = resolveMimeType(req.file.mimetype, originalName);
+        fileSize = req.file.size;
+      } else if (req.body.file && typeof req.body.file === "string") {
+        const fileData = req.body.file;
+        const parsedDataUri = parseBase64DataUri(fileData);
+        const requestedFilename = req.body.filename || null;
+
+        if (parsedDataUri) {
+          mimeType = resolveMimeType(
+            parsedDataUri.mimeType,
+            requestedFilename,
+          );
+          fileBuffer = parsedDataUri.buffer;
+          fileSize = fileBuffer.length;
+        } else {
+          fileBuffer = Buffer.from(fileData, "base64");
+          fileSize = fileBuffer.length;
+          mimeType = resolveMimeType(req.body.mimeType, requestedFilename);
+        }
+
+        const ext = mime.extension(mimeType) || mimeType.split("/")[1] || "bin";
+        originalName = requestedFilename || `upload_${Date.now()}.${ext}`;
+      }
+
+      if (!fileBuffer) {
+        throw new BadRequestException("Không tìm thấy file trong request");
+      }
+
+      const uploadResult = await S3Service.uploadInternFile({
+        fileBuffer,
+        mimeType,
+        originalName,
+        fileSize,
+        subfolder: req.body.folder || req.body.subfolder || "",
+        description: req.body.description || null,
+      });
+
+      return ResponseHandler.created(
+        res,
+        InternUploadDTO.from(uploadResult),
+        "Upload file thành công",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/v1/s3/intern/view/:key
+   * Xem file dành riêng cho thực tập sinh qua API Key (query hoặc header).
+   * Redirect 302 trực tiếp sang Presigned URL của S3.
+   */
+  static async viewInternObject(req, res, next) {
+    try {
+      const rawKey =
+        req.params?.key ?? req.params?.[0] ?? req.query?.key ?? req.query?.path;
+      if (!rawKey) {
+        throw new BadRequestException("Key của object là bắt buộc");
+      }
+
+      const key =
+        S3Controller.extractObjectKey(req) || decodeURIComponent(rawKey);
+      const expiresIn = parseInt(req.query.expiresIn, 10) || 3600;
+
+      const presignedUrl = await S3Service.getInternPresignedViewUrl(
+        key,
+        expiresIn,
+      );
+
+      return res.redirect(presignedUrl);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = S3Controller;
+
+
+

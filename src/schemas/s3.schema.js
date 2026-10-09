@@ -1,4 +1,4 @@
-const { query, param } = require("express-validator");
+const { query, param, body } = require("express-validator");
 
 // DTOs
 
@@ -115,12 +115,52 @@ const getAssetsSchema = [
     .isIn(["image", "video", "document", "audio", "other"]),
 ];
 
+/**
+ * DTO cho kết quả upload của thực tập sinh.
+ */
+class InternUploadDTO {
+  constructor({ key, url, viewUrl, s3RawUrl, originalName, fileSize, mimeType, folder }) {
+    this.key = key;
+    this.url = url;
+    this.viewUrl = viewUrl || url;
+    this.s3RawUrl = s3RawUrl;
+    this.originalName = originalName;
+    this.fileSize = fileSize;
+    this.mimeType = mimeType;
+    this.folder = folder;
+  }
+  static from(data) {
+    return new InternUploadDTO(data);
+  }
+}
+
+/**
+ * Schema xác thực dữ liệu khi thực tập sinh gọi upload
+ */
+const internUploadSchema = [
+  body("folder")
+    .optional()
+    .isString()
+    .trim()
+    .matches(/^[a-zA-Z0-9_\-\/]*$/)
+    .withMessage("folder chỉ được chứa ký tự chữ cái, chữ số, dấu gạch nối, gạch dưới và gạch chéo"),
+  body("description")
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 500 })
+    .withMessage("description không được vượt quá 500 ký tự"),
+];
+
 module.exports = {
   S3UploadResultDTO,
   S3PresignedUrlDTO,
   S3ObjectMetaDTO,
+  InternUploadDTO,
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
   keyParamSchema,
   getAssetsSchema,
+  internUploadSchema,
 };
+
