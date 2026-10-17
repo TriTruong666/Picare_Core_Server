@@ -206,8 +206,9 @@ const appConfig = {
     senders: {
       office: {
         user: process.env.OFFICE_SMTP_USER || "",
-        from: process.env.OFFICE_MAIL_FROM || "noreply@picare.vn",
-        name: "Picare Office",
+        pass: process.env.OFFICE_SMTP_PASS || "",
+        from: process.env.OFFICE_MAIL_FROM || "",
+        name: process.env.OFFICE_MAIL_FROM_NAME || "Picare Office",
       },
       auth: {
         user:

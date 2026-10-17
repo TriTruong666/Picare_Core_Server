@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const grpc = require("@grpc/grpc-js");
+const appConfig = require("../src/config/app.config");
 const MailService = require("../src/services/mail.service");
 const handler = require("../src/services/grpc_mail.handler");
 const request = {
@@ -20,16 +21,44 @@ const call = (payload = request, token = "test-mail-secret") =>
       (error, response) => resolve({ error, response }),
     );
   });
-test("Office mail renders escaped, formal content, noreply footer and fixed sender", async (t) => {
+test("Office uses its own SMTP password and configured From header", async (t) => {
+  const original = { ...appConfig.mail.senders.office };
+  const originalHost = appConfig.mail.host;
+  t.after(() => {
+    appConfig.mail.senders.office = original;
+    appConfig.mail.host = originalHost;
+  });
+  appConfig.mail.host = "smtp.example.com";
+  appConfig.mail.senders.office = {
+    user: "office@picare.vn",
+    pass: "office-specific-test-password",
+    from: "office@picare.vn",
+    name: "Picare Office",
+  };
+  const transporter = MailService.getTransporter("office");
+  assert.equal(transporter.options.auth.pass, "office-specific-test-password");
+  t.mock.method(transporter, "sendMail", async (mail) => {
+    assert.equal(mail.from, '"Picare Office" <office@picare.vn>');
+    return { accepted: [mail.to], rejected: [], messageId: "mail-office" };
+  });
+  const sent = await MailService.sendMail({
+    sender: "office",
+    to: "member@example.com",
+    subject: "Office test",
+    text: "Test",
+  });
+  assert.deepEqual(sent.accepted, ["member@example.com"]);
+});
+test("Office mail renders escaped content and uses the configured Office sender", async (t) => {
   t.mock.method(MailService, "sendMail", async (mail) => {
     assert.equal(mail.sender, "office");
-    assert.equal(mail.mailFromName, "Picare Office");
+    assert.equal(mail.mailFromName, undefined);
     assert.match(mail.html, /&lt;script&gt;/);
     assert.doesNotMatch(mail.html, /<script>|<strong>|box-shadow/);
     assert.match(mail.text, /Kính gửi/);
     assert.match(mail.text, /Trân trọng,/);
     assert.match(mail.text, /03 ngày/);
-    assert.match(mail.text, /noreply/);
+    assert.match(mail.text, /email tự động/);
     assert.match(mail.text, /account@example.com/);
     assert.ok(mail.html.includes(request.actionUrl));
     return { accepted: [mail.to], rejected: [], messageId: "mail-office" };

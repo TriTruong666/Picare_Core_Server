@@ -14,14 +14,15 @@ function getSenderConfig(sender, overrides = {}) {
   const configured = appConfig.mail.senders?.[sender] || {};
   return {
     user: overrides.smtpUser || configured.user,
+    pass: configured.pass || appConfig.mail.pass,
     from: overrides.mailFrom || configured.from,
     name: overrides.mailFromName || configured.name,
   };
 }
 
 function assertMailConfig(sender, overrides) {
-  const { host, port, pass } = appConfig.mail;
-  const { user, from } = getSenderConfig(sender, overrides);
+  const { host, port } = appConfig.mail;
+  const { user, from, pass } = getSenderConfig(sender, overrides);
   const userEnvName =
     sender === "salesforce"
       ? "SALEFORCE_MAIL_USER"
@@ -30,7 +31,7 @@ function assertMailConfig(sender, overrides) {
     !host && "SMTP_HOST",
     !port && "SMTP_PORT",
     !user && userEnvName,
-    !pass && "SMTP_PASS",
+    !pass && (sender === "office" ? "OFFICE_SMTP_PASS or SMTP_PASS" : "SMTP_PASS"),
     !from && `${sender.toUpperCase()}_MAIL_FROM`,
   ].filter(Boolean);
 
@@ -42,8 +43,8 @@ function assertMailConfig(sender, overrides) {
 function buildTransporter(sender, overrides) {
   assertMailConfig(sender, overrides);
 
-  const { host, port, secure, pass, rejectUnauthorized } = appConfig.mail;
-  const { user } = getSenderConfig(sender, overrides);
+  const { host, port, secure, rejectUnauthorized } = appConfig.mail;
+  const { user, pass } = getSenderConfig(sender, overrides);
 
   return nodemailer.createTransport({
     host,
@@ -307,7 +308,7 @@ class MailService {
       `Liên kết có hiệu lực trong 03 ngày, đến ${expires} (giờ Việt Nam). Sau thời điểm này, Anh/Chị vui lòng liên hệ người quản lý để được gửi lại lời mời.`,
       "Để bảo mật tài khoản, vui lòng không chia sẻ hoặc chuyển tiếp liên kết này. Nếu Anh/Chị không phải người nhận dự kiến, vui lòng bỏ qua email và thông báo cho người quản lý của đơn vị.",
     ];
-    const footer = `© ${new Date().getFullYear()} Picare Office. Bảo lưu mọi quyền. Đây là email tự động từ địa chỉ noreply; vui lòng không trả lời email này.`;
+    const footer = `© ${new Date().getFullYear()} Picare Office. Bảo lưu mọi quyền. Đây là email tự động; vui lòng không trả lời email này.`;
     const html = [
       '<!doctype html><html lang="vi"><head><meta charset="utf-8"></head><body style="margin:0;background:#fff">',
       '<div style="max-width:640px;margin:0 auto;padding:32px 24px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.75;color:#374151">',
@@ -320,7 +321,7 @@ class MailService {
       '</div></body></html>',
     ].join("");
     const text = [...paragraphs.slice(0, 3), `Thiết lập tài khoản và tham gia Picare Office: ${actionUrl}`, ...paragraphs.slice(3), "Trân trọng,\nPicare Office", footer].join("\n\n");
-    return this.sendMail({ to, subject, html, text, sender: "office", mailFromName: "Picare Office" });
+    return this.sendMail({ to, subject, html, text, sender: "office" });
   }
 
   static async sendLicenseActivationMail({
