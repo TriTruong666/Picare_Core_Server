@@ -1,8 +1,7 @@
 const { BaseException } = require("../common/exceptions/BaseException");
 const { imageMime } = require("../schemas/ocr.schema");
 const { randomUUID } = require("node:crypto");
-const limits = new Map();
-let active = 0;
+const admission = require("./ocr_admission.service");
 const fail = (message, statusCode, code) =>
   new BaseException({ message, statusCode, code });
 
@@ -15,19 +14,15 @@ class OcrService {
       process.env.GRPC_STORAGE_SERVICE_TOKEN;
     if (!secret)
       throw fail("Chưa cấu hình OCR service token", 503, "ERR_OCR_UNAVAILABLE");
-    const now = Date.now();
-    for (const [key, value] of limits)
-      if (now >= value.until) limits.delete(key);
-    const limit = limits.get(input.userId) || { count: 0, until: now + 60_000 };
-    if (limit.count >= 5 || active >= 2 || limits.size >= 10000)
+    const slot = await admission.admit(input.userId, requestId);
+    if (slot.status !== "ADMITTED")
       throw fail(
-        "OCR đang bận hoặc bạn đã thử quá nhiều lần. Vui lòng thử lại sau một phút.",
+        slot.status === "BUSY"
+          ? "OCR đang xử lý ảnh khác. Vui lòng thử lại sau."
+          : "Bạn đã thử OCR quá nhiều lần. Vui lòng thử lại sau một phút.",
         429,
-        "ERR_OCR_BUSY",
+        slot.status === "BUSY" ? "ERR_OCR_BUSY" : "ERR_OCR_RATE_LIMITED",
       );
-    limit.count++;
-    limits.set(input.userId, limit);
-    active++;
     console.info(
       `[ocr] request_id=${requestId} status=start document_type=${input.documentType} front_bytes=${input.front?.length || 0} back_bytes=${input.back?.length || 0} timeout_ms=90000`,
     );
@@ -105,7 +100,7 @@ class OcrService {
         "ERR_OCR_UNAVAILABLE",
       );
     } finally {
-      active--;
+      await admission.release(requestId, slot.redisLease);
     }
   }
 }

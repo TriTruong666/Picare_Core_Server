@@ -323,6 +323,23 @@ service.recognize(OcrInput(document_type='document'), {'front': b'test'})
         self.assertEqual(calls, [("front", 0), ("back", 0)])
         self.assertNotIn("fullName", result.fields)
 
+    def test_each_image_is_decoded_once_for_all_reads(self):
+        decoded = []
+        class Engine:
+            def decode(self, data):
+                decoded.append(data)
+                return f"prepared-{data.decode()}"
+            def read(self, data, side, rotation=0):
+                self_side = f"prepared-{side}"
+                assert data == self_side
+                if side == "front":
+                    return lines(["CĂN CƯỚC", "Số: 012345678901", "Ngày sinh: 02/03/1990"], side)
+                return lines(["Ngày cấp: 05/06/2021"], side)
+        with patch("app.services.read_identity_qr", return_value=None):
+            OcrService(Engine()).recognize(OcrInput(document_type="vn_identity_card"),
+                                           {"front": b"front", "back": b"back"})
+        self.assertEqual(decoded, [b"front", b"back"])
+
     def test_sideways_lines_force_orientation_search_even_with_number_and_date(self):
         calls = []
         class Engine:

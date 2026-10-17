@@ -7,9 +7,11 @@ services:
     env_file:
       - .env.development
     environment:
+      OCR_CPU_THREADS: ${OCR_CPU_THREADS:-4}
+      OMP_NUM_THREADS: ${OCR_CPU_THREADS:-4}
       OCR_REQUEST_TIMEOUT_SECONDS: ${OCR_REQUEST_TIMEOUT_SECONDS:-75}
     mem_limit: 3g
-    cpus: 2
+    cpus: ${OCR_CPUS:-4}
     networks:
       - picare-dev-network
 

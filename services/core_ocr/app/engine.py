@@ -30,7 +30,7 @@ class PaddleEngine:
             text_recognition_model_name=MODEL_NAMES[1],
             use_doc_orientation_classify=False, use_doc_unwarping=False,
             use_textline_orientation=False, device="cpu",
-            enable_mkldnn=False, cpu_threads=int(os.environ.get("OCR_CPU_THREADS", "2")),
+            enable_mkldnn=False, cpu_threads=int(os.environ.get("OCR_CPU_THREADS", "4")),
             **options,
         )
 
@@ -51,7 +51,7 @@ class PaddleEngine:
             raise ApiError("Ảnh không hợp lệ. Dùng JPEG, PNG hoặc WEBP, tối đa 20 megapixel.") from None
 
     def read(self, data, side, rotation=0):
-        image = self.decode(data)
+        image = data if isinstance(data, np.ndarray) else self.decode(data)
         if rotation not in (0, 90, 180, 270):
             raise ValueError("Unsupported image rotation")
         if rotation:
@@ -85,7 +85,7 @@ class PaddleEngine:
         This is a fallback for the two fields that the full-card detector often
         merges with neighbouring labels. It does not replace the main OCR pass.
         """
-        image = self.decode(data)
+        image = data if isinstance(data, np.ndarray) else self.decode(data)
         if rotation:
             image = np.rot90(image, k=rotation // 90).copy()
         height, width = image.shape[:2]

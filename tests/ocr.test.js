@@ -1,5 +1,8 @@
 const { test, afterEach } = require("node:test");
 const assert = require("node:assert/strict");
+const redisPath = require.resolve("../src/config/redis.config");
+const redis = { status: "connecting", eval: async () => { throw new Error("unexpected Redis call"); } };
+require.cache[redisPath] = { id: redisPath, filename: redisPath, loaded: true, exports: redis };
 const schema = require("../src/schemas/ocr.schema");
 const service = require("../src/services/ocr.service");
 const controller = require("../src/controllers/ocr.controller");
@@ -8,6 +11,8 @@ const originalToken = process.env.CORE_OCR_SERVICE_TOKEN;
 const originalGrpcToken = process.env.GRPC_OCR_SERVICE_TOKEN;
 afterEach(() => {
   global.fetch = originalFetch;
+  redis.status = "connecting";
+  redis.eval = async () => { throw new Error("unexpected Redis call"); };
   if (originalToken === undefined) delete process.env.CORE_OCR_SERVICE_TOKEN;
   else process.env.CORE_OCR_SERVICE_TOKEN = originalToken;
   if (originalGrpcToken === undefined)
@@ -102,4 +107,66 @@ test("OCR timeout propagates as gRPC deadline exceeded", async () => {
   );
   assert.equal(error.code, 4);
   assert.match(error.details, /quá thời gian/);
+});
+
+test("OCR admits one request at a time and busy requests do not consume quota", async () => {
+  process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
+  let finish;
+  let calls = 0;
+  global.fetch = async () => {
+    calls++;
+    if (calls === 1) await new Promise((resolve) => { finish = resolve; });
+    return {
+      ok: true,
+      json: async () => ({ success: true, data: {
+        documentType: "vn_identity_card", fields: {},
+      } }),
+    };
+  };
+  const user = `admission-${Date.now()}`;
+  const first = service.recognize(input(user));
+  await new Promise((resolve) => setImmediate(resolve));
+  await assert.rejects(service.recognize(input(user)), { statusCode: 429 });
+  finish();
+  await first;
+  for (let i = 0; i < 4; i++) await service.recognize(input(user));
+  await assert.rejects(service.recognize(input(user)), { statusCode: 429 });
+  assert.equal(calls, 5);
+});
+
+test("OCR uses an atomic Redis admission and releases its own lease", async () => {
+  process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
+  redis.status = "ready";
+  const calls = [];
+  redis.eval = async (...args) => {
+    calls.push(args);
+    return calls.length === 1 ? "ADMITTED" : 1;
+  };
+  global.fetch = async () => ({ ok: true, json: async () => ({
+    success: true, data: { documentType: "vn_identity_card", fields: {} },
+  }) });
+  await service.recognize(input("redis-admission"));
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][1], 2);
+  assert.equal(calls[0][2], "ocr:inference:lease");
+  assert.match(calls[0][3], /^ocr:rate:user:[0-9a-f]{64}$/);
+  assert.equal(calls[1][1], 1);
+  assert.equal(calls[1][2], "ocr:inference:lease");
+  assert.equal(calls[1][3], calls[0][4]);
+});
+
+test("OCR rate limit reaches gRPC as RESOURCE_EXHAUSTED with its error code", async () => {
+  process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
+  process.env.GRPC_OCR_SERVICE_TOKEN = "test-secret";
+  const userId = `grpc-rate-${Date.now()}`;
+  global.fetch = async () => ({ ok: true, json: async () => ({
+    success: true, data: { documentType: "vn_identity_card", fields: {} },
+  }) });
+  for (let i = 0; i < 5; i++) await service.recognize(input(userId));
+  const error = await new Promise((resolve) => controller.recognize({
+    metadata: { get: () => ["test-secret"] },
+    request: input(userId),
+  }, resolve));
+  assert.equal(error.code, 8);
+  assert.equal(error.metadata.get("x-ocr-error-code")[0], "ERR_OCR_RATE_LIMITED");
 });

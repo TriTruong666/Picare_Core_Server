@@ -29,6 +29,8 @@ exports.recognize = async (call, callback) => {
       dataJson: JSON.stringify(data),
     });
   } catch (error) {
+    const metadata = new grpc.Metadata();
+    if (error.errorCode) metadata.set("x-ocr-error-code", error.errorCode);
     const code =
       error.statusCode === 400
         ? grpc.status.INVALID_ARGUMENT
@@ -39,6 +41,7 @@ exports.recognize = async (call, callback) => {
           : grpc.status.UNAVAILABLE;
     callback({
       code,
+      metadata,
       details: error.statusCode ? error.message : "Dịch vụ OCR chưa sẵn sàng",
     });
   }

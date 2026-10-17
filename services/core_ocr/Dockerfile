@@ -1,7 +1,7 @@
 FROM python:3.11-slim-bookworm
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True \
-    OCR_MODEL_DIR=/opt/ocr-models OCR_CPU_THREADS=2 OMP_NUM_THREADS=2
+    OCR_MODEL_DIR=/opt/ocr-models OCR_CPU_THREADS=4 OMP_NUM_THREADS=4
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 libgl1 libglib2.0-0 tesseract-ocr tesseract-ocr-vie tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*

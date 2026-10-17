@@ -71,13 +71,17 @@ class OcrService:
                     request_id, request.document_type, len(images.get("front", b"")),
                     len(images.get("back", b"")), self.timeout_seconds)
         try:
+            prepare = getattr(self.engine, "decode", None)
+            prepared = ({side: self.stage(request_id, f"decode_{side}", deadline,
+                                          lambda data=data: prepare(data))
+                         for side, data in images.items()} if prepare else images)
             if request.document_type == "vn_identity_card":
-                result = self.read_identity(handler, images, request_id, deadline)
+                result = self.read_identity(handler, prepared, images, request_id, deadline)
             else:
                 lines = []
                 for side in handler.required_sides:
                     lines.extend(self.stage(request_id, f"read_{side}_0", deadline,
-                                            lambda side=side: self.engine.read(images[side], side)))
+                                            lambda side=side: self.engine.read(prepared[side], side)))
                 result = handler.extract(lines)
             self.check_deadline(deadline)
             logger.info("ocr_request request_id=%s status=ok elapsed_ms=%d fields=%d warnings=%d",
@@ -96,11 +100,11 @@ class OcrService:
             watchdog.cancel()
             self.lock.release()
 
-    def read_identity(self, handler, images, request_id, deadline):
+    def read_identity(self, handler, images, raw_images, request_id, deadline):
         # Most photos need one pass. Try other pixel orientations only when the
         # relevant side is not recognized; front and back may be shot differently.
         qr_fields = self.stage(request_id, "qr", deadline,
-                               lambda: read_identity_qr(images["front"]))
+                               lambda: read_identity_qr(raw_images["front"]))
         front = self.stage(request_id, "read_front_0", deadline,
                            lambda: self.engine.read(images["front"], "front"))
         front_rotation = 0
