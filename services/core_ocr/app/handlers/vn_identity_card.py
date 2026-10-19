@@ -12,14 +12,17 @@ def folded(text):
 
 
 LABELS = {
-    "fullName": ("ho va ten", "ho, chu dem va ten khai sinh", "ho chu dem va ten khai sinh", "full name"),
+    "fullName": ("ho va ten", "ho, chu dem va ten khai sinh", "ho chu dem va ten khai sinh",
+                 "ho, chu dem va ten", "ho chu dem va ten", "full name"),
     "birthdate": ("ngay sinh", "ngay, thang, nam sinh", "date of birth"),
     "gender": ("gioi tinh", "sex", "gender"),
     "nationality": ("quoc tich", "nationality"),
     "placeOfOrigin": ("que quan", "place of origin"),
+    "birthRegistrationPlace": ("noi dang ky khai sinh", "place of birth"),
     "address": ("noi thuong tru", "noi cu tru", "place of residence"),
-    "issuedDate": ("ngay cap", "date of issue"),
-    "expiryDate": ("co gia tri den", "co gia tr den", "ngay het han", "date of expiry"),
+    "issuedDate": ("ngay cap", "ngay, thang, nam cap", "ngay thang nam cap", "date of issue"),
+    "expiryDate": ("co gia tri den", "co gia tr den", "ngay het han",
+                   "ngay, thang, nam het han", "ngay thang nam het han", "date of expiry"),
     "issuedPlace": ("noi cap", "issuing authority", "place of issue"),
 }
 
@@ -95,6 +98,13 @@ class IdentityCardHandler:
     required_sides = ("front", "back")
 
     @staticmethod
+    def is_new_layout(lines):
+        front = " ".join(folded(line.text) for line in lines if line.side == "front")
+        back = " ".join(folded(line.text) for line in lines if line.side == "back")
+        return ("so dinh danh ca nhan" in front or "personal identification number" in front
+                or "noi dang ky khai sinh" in back or "place of birth" in back)
+
+    @staticmethod
     def refine_regions(fields, confidence, regions, warnings):
         origin = regions.get("placeOfOrigin", "")
         origin_lines = [line.strip(" \t'\"`_.,;:-") for line in origin.splitlines()]
@@ -133,6 +143,7 @@ class IdentityCardHandler:
         rejected_fields = set()
         front = [line for line in lines if line.side == "front"]
         back = [line for line in lines if line.side == "back"]
+        new_layout = self.is_new_layout(lines)
         front_text = " ".join(line.text for line in front)
         numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", front_text))
         reverse_numbers = set(re.findall(r"(?<!\d)\d{12}(?!\d)", " ".join(line.text for line in back)))
@@ -151,7 +162,13 @@ class IdentityCardHandler:
             warnings.append("Có nhiều số căn cước trong ảnh; vui lòng nhập số chính xác.")
 
         for field in LABELS:
-            source = back if field in ("issuedDate", "issuedPlace") else front
+            if (new_layout and field == "placeOfOrigin") or (
+                not new_layout and field == "birthRegistrationPlace"
+            ):
+                continue
+            source = back if field in ("issuedDate", "issuedPlace") or (
+                new_layout and field in ("address", "birthRegistrationPlace", "expiryDate")
+            ) else front
             for index, line in enumerate(source):
                 if not any(label in folded(line.text) for label in LABELS[field]):
                     continue
@@ -183,21 +200,23 @@ class IdentityCardHandler:
                         break
                     if other == field:
                         fragment = strip_label(following.text, field)
-                    elif value and field not in ("address", "placeOfOrigin"):
+                    elif value and field not in ("address", "placeOfOrigin", "birthRegistrationPlace"):
                         break
                     else:
                         fragment = following.text.strip()
                     if not fragment:
                         continue
-                    if field in ("address", "placeOfOrigin") and (date_value(fragment) or "can cuoc" in folded(fragment)):
+                    if field in ("address", "placeOfOrigin", "birthRegistrationPlace") and (
+                        date_value(fragment) or "can cuoc" in folded(fragment)
+                    ):
                         break
                     value = f"{value} {fragment}".strip()
                     scores.append(following.score)
                 if field == "gender":
                     norm = folded(value or "")
                     value = "FEMALE" if re.search(r"\b(nu|female)\b", norm) else "MALE" if re.search(r"\b(nam|male)\b", norm) else None
-                elif field in ("address", "placeOfOrigin") and not plausible_address(
-                    value or "", 5 if field == "placeOfOrigin" else 8
+                elif field in ("address", "placeOfOrigin", "birthRegistrationPlace") and not plausible_address(
+                    value or "", 5 if field in ("placeOfOrigin", "birthRegistrationPlace") else 8
                 ):
                     value = None
                 if value:
@@ -213,9 +232,16 @@ class IdentityCardHandler:
                 fields["issuedDate"], confidence["issuedDate"] = dated[0]
         if "issuedPlace" not in fields:
             authorities = [line for line in back if any(name in folded(line.text)
-                           for name in ("cuc canh sat", "bo cong an", "giam doc cong an"))]
+                           for name in ("cuc canh sat", "bo cong an", "giam doc cong an",
+                                        "ministry of public security"))]
             if authorities:
-                fields["issuedPlace"] = " ".join(line.text for line in authorities)[:500]
+                fields["issuedPlace"] = (
+                    "Bộ Công an" if new_layout and any(
+                        "bo cong an" in folded(line.text)
+                        or "ministry of public security" in folded(line.text)
+                        for line in authorities)
+                    else " ".join(line.text for line in authorities)[:500]
+                )
                 confidence["issuedPlace"] = round(min(line.score for line in authorities), 4)
         if fields.get("number") and reverse_numbers and fields["number"] not in reverse_numbers:
             warnings.append("Số nhận diện ở hai mặt không khớp. Vui lòng kiểm tra lại hai ảnh.")
@@ -248,7 +274,9 @@ class IdentityCardHandler:
             else:
                 fields.pop("nationality")
                 confidence.pop("nationality", None)
-        for key, label in (("placeOfOrigin", "quê quán"), ("issuedPlace", "nơi cấp")):
+        for key, label in (("placeOfOrigin", "quê quán"),
+                           ("birthRegistrationPlace", "nơi đăng ký khai sinh"),
+                           ("issuedPlace", "nơi cấp")):
             if key in fields and (confidence.get(key, 0) < .85 or not plausible_vietnamese_place(fields[key])):
                 fields.pop(key)
                 confidence.pop(key, None)

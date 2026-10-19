@@ -69,6 +69,8 @@ Registry handlers own extraction, shared engine combines PaddleOCR (`PP-OCRv5_mo
 
 The identity handler additionally decodes the printed QR **locally** with ZXing, retrying at higher resolution when a small printed code is missed. QR suggestions require its 12-digit number to match the printed number read from the front, or uniquely from the reverse when the front number is unreadable. It may suggest name, permanent address, birth date, sex, and issue date; conflicts with printed text use the QR value and carry an explicit review warning. The old ID number is never returned. Origin and issuing authority are not contained in this QR and still depend on OCR/manual entry. QR values are suggestions, not proof of card authenticity or account ownership. Confidence is transcription confidence, not proof of correctness. Glare, unusual layouts and new card variants may need a retake/manual input. No chip reading, liveness, authenticity verification, or guaranteed matching of two sides.
 
+The 2024 `Căn cước` layout places residence, birth registration place, expiry date and the QR on the back. Its birth registration place is returned as `birthRegistrationPlace`, separate from the older CCCD `placeOfOrigin` field. Office accepts and displays both fields separately; no database migration is needed because identification is stored as JSON. New-layout QR payloads with empty trailing optional segments are accepted only after the printed number matches.
+
 Add handlers in `app/handlers`, register explicitly in `OcrService`, update `OcrInput` and Core schema allowlist. No dynamic module names from clients. Add synthetic parser tests and evaluate on an authorized real-image corpus before claiming production accuracy.
 
 ```sh

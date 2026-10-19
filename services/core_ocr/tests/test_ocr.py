@@ -34,6 +34,46 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(result.fields["gender"], "MALE")
         self.assertEqual(result.fields["address"], "Phường Thử Nghiệm Thành phố Kiểm Thử")
 
+    def test_2024_card_reads_residence_birthplace_and_expiry_from_back(self):
+        front = lines([
+            "CĂN CƯỚC / IDENTITY CARD", "Số định danh cá nhân: 012345678901",
+            "Họ, chữ đệm và tên / Full name:", "NGUYỄN VĂN KIỂM THỬ",
+            "Ngày, tháng, năm sinh / Date of birth: 02/03/1990",
+            "Giới tính / Sex: Nam", "Quốc tịch / Nationality: Việt Nam",
+        ])
+        back = lines([
+            "Nơi cư trú / Place of residence: Số 6 Đường Mẫu",
+            "Phường Thử Nghiệm, Thành phố Kiểm Thử",
+            "Nơi đăng ký khai sinh / Place of birth: Thành phố Kiểm Thử",
+            "Ngày, tháng, năm cấp / Date of issue: 05/06/2021",
+            "Ngày, tháng, năm hết hạn / Date of expiry: 05/06/2031",
+            "MINISTRY OF PUBLIC SECURITY",
+        ], "back")
+        result = IdentityCardHandler().extract(front + back)
+        self.assertEqual(result.fields["number"], "012345678901")
+        self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN KIỂM THỬ")
+        self.assertEqual(result.fields["address"], "Số 6 Đường Mẫu Phường Thử Nghiệm, Thành phố Kiểm Thử")
+        self.assertEqual(result.fields["birthRegistrationPlace"], "Thành phố Kiểm Thử")
+        self.assertNotIn("placeOfOrigin", result.fields)
+        self.assertEqual(result.fields["issuedDate"], "2021-06-05")
+        self.assertEqual(result.fields["expiryDate"], "2031-06-05")
+        self.assertEqual(result.fields["issuedPlace"], "Bộ Công an")
+
+    def test_older_card_keeps_origin_and_expiry_on_front(self):
+        front = lines([
+            "CĂN CƯỚC CÔNG DÂN", "Số: 012345678901",
+            "Quê quán: Phường Thử Nghiệm, Thành phố Kiểm Thử",
+            "Nơi thường trú: Số 6 Đường Mẫu, Thành phố Kiểm Thử",
+            "Có giá trị đến: 05/06/2031",
+        ])
+        back = lines(["Ngày cấp: 05/06/2021"], "back")
+        result = IdentityCardHandler().extract(front + back)
+        self.assertFalse(IdentityCardHandler.is_new_layout(front + back))
+        self.assertEqual(result.fields["placeOfOrigin"],
+                         "Phường Thử Nghiệm, Thành phố Kiểm Thử")
+        self.assertEqual(result.fields["expiryDate"], "2031-06-05")
+        self.assertNotIn("birthRegistrationPlace", result.fields)
+
     def test_unknown_document_does_not_fill_identity(self):
         self.assertEqual(IdentityCardHandler().extract(lines(["Invoice", "012345678901"])).fields, {})
 
@@ -134,6 +174,8 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(parsed["fullName"], "NGUYỄN VĂN MẪU")
         self.assertEqual(parsed["birthdate"], "1990-03-02")
         self.assertIsNone(parse_identity_qr(payload.replace("012345678901", "bad")))
+        self.assertEqual(parse_identity_qr(payload + "||||"), parsed)
+        self.assertIsNone(parse_identity_qr(payload + "|unexpected"))
         barcode = zxingcpp.create_barcode(payload, zxingcpp.BarcodeFormat.QRCode)
         image = Image.fromarray(np.asarray(zxingcpp.write_barcode_to_image(barcode, size_hint=600)))
         output = io.BytesIO()
@@ -215,6 +257,25 @@ class ParserTests(unittest.TestCase):
                 {"front": b"image", "back": b"image"})
         self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN MẪU")
         self.assertIn("address", result.fields)
+
+    def test_new_card_qr_is_read_from_back_and_bound_to_front_number(self):
+        qr = parse_identity_qr("012345678901|123456789|NGUYỄN VĂN MẪU|02031990|Nam|"
+                               "Phường Mẫu, Thành phố Thử Nghiệm|05062021||||")
+        class Engine:
+            def read(self, data, side, rotation=0):
+                if side == "front":
+                    return lines(["CĂN CƯỚC", "Số định danh cá nhân: 012345678901",
+                                  "Ngày sinh: 02/03/1990"], side)
+                return lines(["Nơi đăng ký khai sinh: Thành phố Mẫu",
+                              "Ngày cấp: 05/06/2021"], side)
+        with patch("app.services.read_identity_qr", side_effect=[None, qr]) as decoder:
+            result = OcrService(Engine()).recognize(
+                OcrInput(document_type="vn_identity_card"),
+                {"front": b"front-image", "back": b"back-image"})
+        self.assertEqual(decoder.call_count, 2)
+        self.assertEqual(decoder.call_args_list[1].args[0], b"back-image")
+        self.assertEqual(result.fields["fullName"], "NGUYỄN VĂN MẪU")
+        self.assertEqual(result.fields["birthRegistrationPlace"], "Thành phố Mẫu")
 
     def test_place_quality_rejects_foreign_ocr_glyphs(self):
         self.assertFalse(plausible_vietnamese_place("Phường Çhử, Tỉnh Mẫu ề"))

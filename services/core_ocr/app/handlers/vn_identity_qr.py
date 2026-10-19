@@ -23,6 +23,11 @@ def qr_date(value):
 def parse_identity_qr(value):
     # Printed Vietnamese identity QR: number|old number|name|DDMMYYYY|sex|address|DDMMYYYY.
     parts = [part.strip() for part in value.split("|")]
+    # New card QR payloads may append empty optional fields after the seven
+    # identity values. Keep the original positional format and reject unknown
+    # populated extensions rather than shifting fields.
+    while len(parts) > 7 and not parts[-1]:
+        parts.pop()
     if len(parts) != 7 or any(len(part) > 500 for part in parts):
         return None
     number, old_number, name, born, sex, address, issued = parts

@@ -104,7 +104,8 @@ class OcrService:
         # Most photos need one pass. Try other pixel orientations only when the
         # relevant side is not recognized; front and back may be shot differently.
         qr_fields = self.stage(request_id, "qr", deadline,
-                               lambda: read_identity_qr(raw_images["front"]))
+                               lambda: (read_identity_qr(raw_images["front"])
+                                        or read_identity_qr(raw_images["back"])))
         front = self.stage(request_id, "read_front_0", deadline,
                            lambda: self.engine.read(images["front"], "front"))
         front_rotation = 0
@@ -150,9 +151,10 @@ class OcrService:
                 back_sideways = candidate_sideways
                 back_rotation = rotation
         preliminary = handler.extract(front + back, qr_fields=qr_fields)
+        new_layout = handler.is_new_layout(front + back)
         regions = {}
         region_reader = getattr(self.engine, "read_identity_regions", None)
-        if region_reader and "placeOfOrigin" not in preliminary.fields:
+        if region_reader and not new_layout and "placeOfOrigin" not in preliminary.fields:
             regions.update(self.stage(request_id, "region_front", deadline,
                                       lambda: region_reader(images["front"], "front", front_rotation, front)))
         if region_reader and "issuedPlace" not in preliminary.fields:

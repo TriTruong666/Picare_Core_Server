@@ -76,7 +76,7 @@ test(
       assert.equal(data.fields.number, "012345678901");
       assert.equal(data.fields.birthdate, "1990-03-02");
       assert.equal(data.fields.issuedDate, "2021-06-05");
-      assert.equal(data.extractorVersion, "1.3.1");
+      assert.equal(data.extractorVersion, "1.5.0");
     } finally {
       client.close();
       server.forceShutdown();
