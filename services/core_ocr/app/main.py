@@ -1,5 +1,6 @@
 import os
 import hmac
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
@@ -12,10 +13,15 @@ from .routes import router
 @asynccontextmanager
 async def lifespan(app):
     from .engine import PaddleEngine
-    from .services import OcrService
+    from .services import OcrService, OCR_POLICY_VERSION
     if not service_token():
         raise RuntimeError("Configure CORE_OCR_SERVICE_TOKEN or GRPC_STORAGE_SERVICE_TOKEN")
     app.state.ocr = OcrService(PaddleEngine())
+    logging.getLogger("uvicorn.error").info(
+        "ocr_runtime policy=%s timeout_s=%.0f cpu_threads=%s",
+        OCR_POLICY_VERSION, app.state.ocr.timeout_seconds,
+        os.environ.get("OCR_CPU_THREADS", "4"),
+    )
     yield
     app.state.ocr = None
 

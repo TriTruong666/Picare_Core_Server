@@ -10,8 +10,9 @@ from .handlers.vn_identity_card import IdentityCardHandler
 from .handlers.vn_identity_qr import read_identity_qr
 
 logger = logging.getLogger("uvicorn.error")
+OCR_POLICY_VERSION = "orientation-v2"
 FRONT_RESERVE_SECONDS = 40
-BACK_OPTIONAL_MIN_SECONDS = 18
+BACK_OPTIONAL_MIN_SECONDS = 30
 REGION_MIN_SECONDS = 12
 
 
@@ -115,14 +116,16 @@ class OcrService:
         front_fields = handler.extract(front).fields
         front_score = self.front_score(front_fields)
         front_sideways = any(line.image_sideways for line in front)
+        front_stop_reason = "all_rotations"
         for rotation in (90, 270, 180):
-            # A number and date read from the printed front establish its
-            # orientation. Missing text then needs a focused fallback, not
-            # three more full-card Paddle and Tesseract passes.
-            if (not front_sideways and (
-                    all(front_fields.get(key) for key in ("number", "birthdate"))
-                    or self.has_upright_text(front, "front"))
-                    or deadline - time.monotonic() <= FRONT_RESERVE_SECONDS):
+            # Two valid fields or several card labels establish this side's
+            # orientation. Missing fields need manual review, not another
+            # full-card inference at a different angle.
+            if not front_sideways and (len(front_fields) >= 2 or self.has_upright_text(front, "front")):
+                front_stop_reason = "recognized"
+                break
+            if deadline - time.monotonic() <= FRONT_RESERVE_SECONDS:
+                front_stop_reason = "time_budget"
                 break
             candidate = self.stage(request_id, f"read_front_{rotation}", deadline,
                                    lambda rotation=rotation: self.engine.read(images["front"], "front", rotation=rotation))
@@ -134,18 +137,22 @@ class OcrService:
                 front, front_fields, front_score = candidate, candidate_fields, score
                 front_sideways = candidate_sideways
                 front_rotation = rotation
+        logger.info("ocr_orientation request_id=%s side=front rotation=%d fields=%d labels=%d sideways=%s stop=%s",
+                    request_id, front_rotation, len(front_fields), self.label_count(front),
+                    front_sideways, front_stop_reason)
 
         back = self.stage(request_id, "read_back_0", deadline,
                           lambda: self.engine.read(images["back"], "back"))
         back_rotation = 0
         back_score = self.back_score(back)
         back_sideways = any(line.image_sideways for line in back)
+        back_stop_reason = "all_rotations"
         for rotation in (90, 270, 180):
-            # The issue date is enough evidence that this side is upright.
-            # Rotating cannot recover a missing agency name on an upright card.
-            if (not back_sideways and (back_score >= 3 or self.back_has_issue_date(back)
-                                       or self.has_upright_text(back, "back"))
-                    or deadline - time.monotonic() <= BACK_OPTIONAL_MIN_SECONDS):
+            if not back_sideways and (back_score > 0 or self.has_upright_text(back, "back")):
+                back_stop_reason = "recognized"
+                break
+            if deadline - time.monotonic() <= BACK_OPTIONAL_MIN_SECONDS:
+                back_stop_reason = "time_budget"
                 break
             candidate = self.stage(request_id, f"read_back_{rotation}", deadline,
                                    lambda rotation=rotation: self.engine.read(images["back"], "back", rotation=rotation))
@@ -156,8 +163,18 @@ class OcrService:
                 back, back_score = candidate, score
                 back_sideways = candidate_sideways
                 back_rotation = rotation
+        logger.info("ocr_orientation request_id=%s side=back rotation=%d score=%d labels=%d sideways=%s stop=%s",
+                    request_id, back_rotation, back_score, self.label_count(back),
+                    back_sideways, back_stop_reason)
         preliminary = handler.extract(front + back, qr_fields=qr_fields)
         new_layout = handler.is_new_layout(front + back)
+        from .handlers.vn_identity_card import folded
+        front_text = folded(" ".join(line.text for line in front))
+        theme = ("vn_id_2024" if new_layout else
+                 "vn_cccd_legacy" if "can cuoc cong dan" in front_text or preliminary.fields.get("placeOfOrigin") else
+                 "unknown")
+        logger.info("ocr_card_theme request_id=%s theme=%s fields=%d qr=%s",
+                    request_id, theme, len(preliminary.fields), bool(qr_fields))
         regions = {}
         region_reader = getattr(self.engine, "read_identity_regions", None)
         if (region_reader and not new_layout and "placeOfOrigin" not in preliminary.fields
@@ -174,15 +191,18 @@ class OcrService:
 
     @staticmethod
     def has_upright_text(lines, side):
-        # Several horizontal, labelled lines establish orientation even when
-        # glare prevents a particular field from being read. A rotation cannot
-        # repair that field and costs another full inference pass.
-        from .handlers.vn_identity_card import label_for
-        minimum_lines = 4 if side == "front" else 3
+        # Card labels on horizontal lines establish orientation even when a
+        # field value is unreadable. An isolated label is not enough on front.
+        minimum_lines = 3 if side == "front" else 2
         minimum_labels = 2 if side == "front" else 1
         return (len(lines) >= minimum_lines
                 and not any(line.image_sideways for line in lines)
-                and sum(label_for(line.text) is not None for line in lines) >= minimum_labels)
+                and OcrService.label_count(lines) >= minimum_labels)
+
+    @staticmethod
+    def label_count(lines):
+        from .handlers.vn_identity_card import label_for
+        return sum(label_for(line.text) is not None for line in lines)
 
     @staticmethod
     def front_score(fields):
@@ -203,9 +223,3 @@ class OcrService:
         agency_visible = "cuc" in text and "canh sat" in text
         return (2 * bool(fields.get("issuedDate")) + bool(fields.get("issuedPlace"))
                 + 2 * agency_visible)
-
-    @staticmethod
-    def back_has_issue_date(lines):
-        from .schemas import TextLine
-        placeholder = TextLine("CĂN CƯỚC CÔNG DÂN", 1.0, "front")
-        return bool(IdentityCardHandler().extract([placeholder] + lines).fields.get("issuedDate"))

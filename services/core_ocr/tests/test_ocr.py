@@ -402,6 +402,46 @@ service.recognize(OcrInput(document_type='document'), {'front': b'test'})
         self.assertEqual(calls, [("front", 0), ("back", 0)])
         self.assertEqual(result.fields["number"], "012345678901")
 
+    def test_two_valid_front_fields_and_one_back_field_stop_rotation(self):
+        calls = []
+        class Engine:
+            def read(self, data, side, rotation=0):
+                calls.append((side, rotation))
+                if side == "front":
+                    return lines(["CĂN CƯỚC CÔNG DÂN", "Số: 012345678901",
+                                  "Họ và tên: NGUYỄN VĂN AN"], side)
+                return lines(["Ngày cấp: 05/06/2021"], side)
+        with patch("app.services.read_identity_qr", return_value=None):
+            with self.assertLogs("uvicorn.error", level="INFO") as log:
+                result = OcrService(Engine()).recognize(
+                    OcrInput(document_type="vn_identity_card"),
+                    {"front": b"image", "back": b"image"})
+        self.assertEqual(calls, [("front", 0), ("back", 0)])
+        self.assertEqual(result.fields["issuedDate"], "2021-06-05")
+        self.assertTrue(any("ocr_card_theme" in entry and "theme=vn_cccd_legacy" in entry
+                            for entry in log.output))
+        self.assertFalse(any("NGUYỄN VĂN AN" in entry or "012345678901" in entry
+                             for entry in log.output))
+
+    def test_new_card_theme_is_logged_without_card_text(self):
+        class Engine:
+            def read(self, data, side, rotation=0):
+                if side == "front":
+                    return lines(["CĂN CƯỚC", "Số định danh cá nhân: 012345678901",
+                                  "Họ, chữ đệm và tên: NGUYỄN VĂN AN",
+                                  "Ngày sinh: 02/03/1990"], side)
+                return lines(["Nơi cư trú: Hà Nội", "Nơi đăng ký khai sinh: Hà Nội",
+                              "Ngày cấp: 05/06/2021"], side)
+        with patch("app.services.read_identity_qr", return_value=None):
+            with self.assertLogs("uvicorn.error", level="INFO") as log:
+                OcrService(Engine()).recognize(
+                    OcrInput(document_type="vn_identity_card"),
+                    {"front": b"image", "back": b"image"})
+        self.assertTrue(any("ocr_card_theme" in entry and "theme=vn_id_2024" in entry
+                            for entry in log.output))
+        self.assertFalse(any("NGUYỄN VĂN AN" in entry or "012345678901" in entry
+                             for entry in log.output))
+
     def test_front_rotation_budget_reserves_time_for_back(self):
         calls = []
         class Engine:
