@@ -462,6 +462,8 @@ router.get("/assets", protect, getAssetsSchema, S3Controller.getAssets);
  *   get:
  *     summary: Redirect trực tiếp tới presigned URL để xem ảnh/file
  *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
  *     parameters:
  *       - in: path
  *         name: key
@@ -472,8 +474,10 @@ router.get("/assets", protect, getAssetsSchema, S3Controller.getAssets);
  *     responses:
  *       302:
  *         description: Redirect tới S3
+ *       401:
+ *         description: Chưa xác thực
  */
-router.get(/^\/view\/(.+)$/, S3Controller.viewObject);
+router.get(/^\/view\/(.+)$/, protect, S3Controller.viewObject);
 
 /**
  * @swagger
@@ -530,7 +534,7 @@ router.get("/download", protect, S3Controller.downloadObject);
  *       401:
  *         description: Chưa xác thực
  */
-router.get(/^\/download\/(.+)$/, S3Controller.downloadObject);
+router.get(/^\/download\/(.+)$/, protect, S3Controller.downloadObject);
 
 /**
  * @swagger
