@@ -10,6 +10,9 @@ from .handlers.vn_identity_card import IdentityCardHandler
 from .handlers.vn_identity_qr import read_identity_qr
 
 logger = logging.getLogger("uvicorn.error")
+FRONT_RESERVE_SECONDS = 40
+BACK_OPTIONAL_MIN_SECONDS = 18
+REGION_MIN_SECONDS = 12
 
 
 class OcrService:
@@ -116,8 +119,10 @@ class OcrService:
             # A number and date read from the printed front establish its
             # orientation. Missing text then needs a focused fallback, not
             # three more full-card Paddle and Tesseract passes.
-            if (not front_sideways and all(front_fields.get(key) for key in ("number", "birthdate"))
-                    or time.monotonic() >= deadline):
+            if (not front_sideways and (
+                    all(front_fields.get(key) for key in ("number", "birthdate"))
+                    or self.has_upright_text(front, "front"))
+                    or deadline - time.monotonic() <= FRONT_RESERVE_SECONDS):
                 break
             candidate = self.stage(request_id, f"read_front_{rotation}", deadline,
                                    lambda rotation=rotation: self.engine.read(images["front"], "front", rotation=rotation))
@@ -138,8 +143,9 @@ class OcrService:
         for rotation in (90, 270, 180):
             # The issue date is enough evidence that this side is upright.
             # Rotating cannot recover a missing agency name on an upright card.
-            if (not back_sideways and (back_score >= 3 or self.back_has_issue_date(back))
-                    or time.monotonic() >= deadline):
+            if (not back_sideways and (back_score >= 3 or self.back_has_issue_date(back)
+                                       or self.has_upright_text(back, "back"))
+                    or deadline - time.monotonic() <= BACK_OPTIONAL_MIN_SECONDS):
                 break
             candidate = self.stage(request_id, f"read_back_{rotation}", deadline,
                                    lambda rotation=rotation: self.engine.read(images["back"], "back", rotation=rotation))
@@ -154,15 +160,29 @@ class OcrService:
         new_layout = handler.is_new_layout(front + back)
         regions = {}
         region_reader = getattr(self.engine, "read_identity_regions", None)
-        if region_reader and not new_layout and "placeOfOrigin" not in preliminary.fields:
+        if (region_reader and not new_layout and "placeOfOrigin" not in preliminary.fields
+                and deadline - time.monotonic() > REGION_MIN_SECONDS):
             regions.update(self.stage(request_id, "region_front", deadline,
                                       lambda: region_reader(images["front"], "front", front_rotation, front)))
-        if region_reader and "issuedPlace" not in preliminary.fields:
+        if (region_reader and "issuedPlace" not in preliminary.fields
+                and deadline - time.monotonic() > REGION_MIN_SECONDS):
             regions.update(self.stage(request_id, "region_back", deadline,
                                       lambda: region_reader(images["back"], "back", back_rotation, back)))
         if regions:
             return handler.extract(front + back, qr_fields=qr_fields, regions=regions)
         return preliminary
+
+    @staticmethod
+    def has_upright_text(lines, side):
+        # Several horizontal, labelled lines establish orientation even when
+        # glare prevents a particular field from being read. A rotation cannot
+        # repair that field and costs another full inference pass.
+        from .handlers.vn_identity_card import label_for
+        minimum_lines = 4 if side == "front" else 3
+        minimum_labels = 2 if side == "front" else 1
+        return (len(lines) >= minimum_lines
+                and not any(line.image_sideways for line in lines)
+                and sum(label_for(line.text) is not None for line in lines) >= minimum_labels)
 
     @staticmethod
     def front_score(fields):

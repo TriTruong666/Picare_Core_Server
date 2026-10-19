@@ -7,10 +7,12 @@ const schema = require("../src/schemas/ocr.schema");
 const service = require("../src/services/ocr.service");
 const controller = require("../src/controllers/ocr.controller");
 const originalFetch = global.fetch;
+const originalDateNow = Date.now;
 const originalToken = process.env.CORE_OCR_SERVICE_TOKEN;
 const originalGrpcToken = process.env.GRPC_OCR_SERVICE_TOKEN;
 afterEach(() => {
   global.fetch = originalFetch;
+  Date.now = originalDateNow;
   redis.status = "connecting";
   redis.eval = async () => { throw new Error("unexpected Redis call"); };
   if (originalToken === undefined) delete process.env.CORE_OCR_SERVICE_TOKEN;
@@ -107,6 +109,20 @@ test("OCR timeout propagates as gRPC deadline exceeded", async () => {
   );
   assert.equal(error.code, 4);
   assert.match(error.details, /quá thời gian/);
+});
+
+test("network disconnect after the Python watchdog is reported as a timeout", async () => {
+  process.env.CORE_OCR_SERVICE_TOKEN = "test-secret";
+  const started = originalDateNow();
+  Date.now = () => started;
+  global.fetch = async () => {
+    Date.now = () => started + 80_100;
+    throw new TypeError("fetch failed");
+  };
+  await assert.rejects(service.recognize(input("watchdog-disconnect")), {
+    statusCode: 504,
+    errorCode: "ERR_OCR_TIMEOUT",
+  });
 });
 
 test("OCR admits one request at a time and busy requests do not consume quota", async () => {

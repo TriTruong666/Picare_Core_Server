@@ -384,6 +384,40 @@ service.recognize(OcrInput(document_type='document'), {'front': b'test'})
         self.assertEqual(calls, [("front", 0), ("back", 0)])
         self.assertNotIn("fullName", result.fields)
 
+    def test_upright_labels_skip_rotations_when_a_field_is_unreadable(self):
+        calls = []
+        class Engine:
+            def read(self, data, side, rotation=0):
+                calls.append((side, rotation))
+                if side == "front":
+                    return lines(["CĂN CƯỚC", "Số: 012345678901",
+                                  "Họ và tên: NGUYỄN VĂN AN", "Ngày sinh: ?",
+                                  "Giới tính: Nam"], side)
+                return lines(["Nơi cư trú: Phường Mẫu", "Nơi đăng ký khai sinh: Hà Nội",
+                              "Ngày cấp: ?", "Ngày hết hạn: ?"], side)
+        with patch("app.services.read_identity_qr", return_value=None):
+            result = OcrService(Engine()).recognize(
+                OcrInput(document_type="vn_identity_card"),
+                {"front": b"image", "back": b"image"})
+        self.assertEqual(calls, [("front", 0), ("back", 0)])
+        self.assertEqual(result.fields["number"], "012345678901")
+
+    def test_front_rotation_budget_reserves_time_for_back(self):
+        calls = []
+        class Engine:
+            def read(self, data, side, rotation=0):
+                calls.append((side, rotation))
+                if side == "front":
+                    return []
+                return lines(["Ngày cấp: 05/06/2021"], side)
+        service = OcrService(Engine())
+        service.timeout_seconds = 40
+        with patch("app.services.read_identity_qr", return_value=None):
+            service.recognize(OcrInput(document_type="vn_identity_card"),
+                              {"front": b"image", "back": b"image"})
+        self.assertEqual(calls[0:2], [("front", 0), ("back", 0)])
+        self.assertNotIn(("front", 90), calls)
+
     def test_each_image_is_decoded_once_for_all_reads(self):
         decoded = []
         class Engine:

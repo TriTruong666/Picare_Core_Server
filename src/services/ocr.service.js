@@ -84,11 +84,14 @@ class OcrService {
       );
       return body.data;
     } catch (error) {
+      const timedOut =
+        error?.name === "TimeoutError" ||
+        (!(error instanceof BaseException) && Date.now() - started >= 75_000);
       console.warn(
-        `[ocr] request_id=${requestId} status=error code=${error.errorCode || (error?.name === "TimeoutError" ? "ERR_OCR_TIMEOUT" : "ERR_OCR_UNAVAILABLE")} elapsed_ms=${Date.now() - started}`,
+        `[ocr] request_id=${requestId} status=error code=${error.errorCode || (timedOut ? "ERR_OCR_TIMEOUT" : "ERR_OCR_UNAVAILABLE")} elapsed_ms=${Date.now() - started}`,
       );
       if (error instanceof BaseException) throw error;
-      if (error?.name === "TimeoutError")
+      if (timedOut)
         throw fail(
           "OCR đã quá thời gian xử lý. Vui lòng thử lại hoặc nhập tay.",
           504,
