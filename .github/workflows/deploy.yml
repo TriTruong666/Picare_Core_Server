@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - production
+  workflow_dispatch:
 
 jobs:
   build-and-push:
+    if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -21,9 +23,13 @@ jobs:
         uses: dorny/paths-filter@v3
         id: changes
         with:
+          # On production pushes, compare with the commit before this push.
+          # The default base is main, which is often identical to production.
+          base: ${{ github.ref }}
           filters: |
             ocr:
               - 'services/core_ocr/**'
+              - '.github/workflows/deploy.yml'
 
       # --- BƯỚC QUAN TRỌNG ĐỂ FIX LỖI CACHE ---
       - name: Set up Docker Buildx
@@ -50,7 +56,7 @@ jobs:
 
       # CHỈ BUILD & TEST OCR KHI CÓ THAY ĐỔI TRONG THƯ MỤC services/core_ocr
       - name: Build OCR Image (models included)
-        if: steps.changes.outputs.ocr == 'true'
+        if: steps.changes.outputs.ocr == 'true' || github.event_name == 'workflow_dispatch'
         uses: docker/build-push-action@v5
         with:
           context: ./services/core_ocr
@@ -61,13 +67,13 @@ jobs:
           cache-to: type=gha,mode=max,scope=core-ocr
 
       - name: Test OCR offline before publishing
-        if: steps.changes.outputs.ocr == 'true'
+        if: steps.changes.outputs.ocr == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m unittest discover -s tests -v
           docker run --rm --network none -v "$PWD/services/core_ocr/tests:/app/tests:ro" ghcr.io/tritruong666/picare-core-ocr:latest python -m tests.smoke_inference
 
       - name: Publish tested OCR Image
-        if: steps.changes.outputs.ocr == 'true'
+        if: steps.changes.outputs.ocr == 'true' || github.event_name == 'workflow_dispatch'
         run: docker push ghcr.io/tritruong666/picare-core-ocr:latest
 
   deploy:
