@@ -403,6 +403,21 @@ class S3Controller {
     }
   }
 
+  /** PATCH /api/v1/s3/assets/:assetId */
+  static async updateAsset(req, res, next) {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestException("Dữ liệu cập nhật asset không hợp lệ", errors.array());
+      }
+
+      const asset = await S3Service.updateAsset(req.params.assetId, req.body);
+      return ResponseHandler.success(res, asset, "Cập nhật asset thành công");
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /**
    * GET /api/v1/s3/download/:key
    * Tải một file trực tiếp từ S3 về máy client (hỗ trợ mọi loại file).

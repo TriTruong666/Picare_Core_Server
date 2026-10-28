@@ -19,6 +19,7 @@ const { AssetVisibility } = require("../common/enum/s3_asset.enum");
 const {
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
 } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 const { resolveMimeType } = require("../common/s3_upload.helper");
@@ -458,6 +459,26 @@ class S3Service {
       : undefined;
 
     return { rows: pageRows, hasNext, nextCursor, count };
+  }
+
+  async updateAsset(assetId, data) {
+    const asset = await S3Asset.findOne({ where: { assetId } });
+    if (!asset) {
+      throw new NotFoundException("Không tìm thấy asset");
+    }
+
+    const changes = {};
+    if (data.originalName !== undefined) changes.originalName = data.originalName;
+    if (data.visibility !== undefined) changes.visibility = data.visibility;
+    if (data.tags !== undefined) {
+      const normalizedTags = data.tags.map((tag) => tag.trim());
+      if (new Set(normalizedTags.map((tag) => tag.toLowerCase())).size !== normalizedTags.length) {
+        throw new BadRequestException("Tags không được trùng nhau");
+      }
+      changes.tags = normalizedTags;
+    }
+
+    return asset.update(changes);
   }
 
   encodeAssetsCursor(createdAt, id) {

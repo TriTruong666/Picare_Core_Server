@@ -12,6 +12,7 @@ const {
   getPresignedUrlSchema,
   getPresignedUploadUrlSchema,
   getAssetsSchema,
+  updateAssetSchema,
   internUploadSchema,
 } = require("../schemas/s3.schema");
 const { maxFileUploadBytes } = require("../config/upload.config");
@@ -455,6 +456,50 @@ router.delete(/^\/objects\/(.+)$/, protect, S3Controller.deleteObject);
  *         description: Thành công. Cursor mode returns data.assets and data.pagination.nextCursor; send that nextCursor to load the next page.
  */
 router.get("/assets", protect, getAssetsSchema, S3Controller.getAssets);
+
+/**
+ * @swagger
+ * /api/v1/s3/assets/{assetId}:
+ *   patch:
+ *     summary: Cập nhật tên hiển thị, quyền truy cập và tags của asset
+ *     tags: [S3]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assetId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               originalName:
+ *                 type: string
+ *                 maxLength: 512
+ *               visibility:
+ *                 type: string
+ *                 enum: [public, private]
+ *               tags:
+ *                 type: array
+ *                 maxItems: 20
+ *                 items:
+ *                   type: string
+ *                   maxLength: 50
+ *     responses:
+ *       200:
+ *         description: Cập nhật asset thành công
+ *       400:
+ *         description: Dữ liệu cập nhật không hợp lệ
+ *       404:
+ *         description: Không tìm thấy asset
+ */
+router.patch("/assets/:assetId", protect, updateAssetSchema, S3Controller.updateAsset);
 
 /**
  * @swagger

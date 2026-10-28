@@ -115,6 +115,24 @@ const getAssetsSchema = [
     .isIn(["image", "video", "document", "audio", "other"]),
 ];
 
+const updateAssetSchema = [
+  param("assetId").isUUID(4).withMessage("assetId không hợp lệ"),
+  body().custom((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new Error("Dữ liệu cập nhật không hợp lệ");
+    }
+    const keys = Object.keys(value);
+    if (!keys.length || keys.some((key) => !["originalName", "visibility", "tags"].includes(key))) {
+      throw new Error("Chỉ được cập nhật originalName, visibility và tags");
+    }
+    return true;
+  }),
+  body("originalName").optional().isString().trim().isLength({ min: 1, max: 512 }),
+  body("visibility").optional().isIn(["public", "private"]),
+  body("tags").optional().isArray({ max: 20 }),
+  body("tags.*").isString().trim().isLength({ min: 1, max: 50 }),
+];
+
 /**
  * DTO cho kết quả upload của thực tập sinh.
  */
@@ -161,6 +179,7 @@ module.exports = {
   getPresignedUploadUrlSchema,
   keyParamSchema,
   getAssetsSchema,
+  updateAssetSchema,
   internUploadSchema,
 };
 
