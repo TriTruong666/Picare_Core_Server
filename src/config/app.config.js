@@ -165,6 +165,7 @@ const appConfig = {
     ALLOWED_CLIENT_URL_3,
     ALLOWED_CLIENT_URL_4,
     ALLOWED_CLIENT_URL_5,
+    ALLOWED_CLIENT_URL_6,
   ],
 
   jwt: {
