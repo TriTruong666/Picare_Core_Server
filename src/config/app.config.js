@@ -32,6 +32,9 @@ const ALLOWED_CLIENT_URL_5 =
 const ALLOWED_CLIENT_URL_6 =
   process.env.ALLOWED_CLIENT_URL_6 || "http://localhost:2345";
 
+const ALLOWED_CLIENT_URL_7 =
+  process.env.ALLOWED_CLIENT_URL_7 || "http://localhost:2345";
+
 const parseTrustProxy = (value) => {
   if (value === undefined || value === null || value === "") return false;
   if (String(value).toLowerCase() === "true") return true;
@@ -166,6 +169,7 @@ const appConfig = {
     ALLOWED_CLIENT_URL_4,
     ALLOWED_CLIENT_URL_5,
     ALLOWED_CLIENT_URL_6,
+    ALLOWED_CLIENT_URL_7,
   ],
 
   jwt: {

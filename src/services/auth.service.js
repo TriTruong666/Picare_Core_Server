@@ -233,7 +233,13 @@ class AuthService {
   static async getTrustedIps({ userId }) {
     const user = await User.findOne({
       where: { userId },
-      attributes: ["trustedIps", "trustedIpRecords", "loginIp", "loginAt", "bypassIpVerification"],
+      attributes: [
+        "trustedIps",
+        "trustedIpRecords",
+        "loginIp",
+        "loginAt",
+        "bypassIpVerification",
+      ],
     });
     if (!user) throw new NotFoundException(ErrorCodes.USER_NOT_FOUND);
 
