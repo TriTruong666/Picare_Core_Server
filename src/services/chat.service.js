@@ -1315,18 +1315,21 @@ class ChatService {
   /**
    * Cập nhật thông tin nhóm (chỉ owner/admin)
    */
-  static async updateConversation(conversationId, userId, dto) {
+  static async updateConversation(conversationId, userId, dto, userRole = null) {
     if (conversationId === PICARE_GROUP_DB_ID) {
       throw new ForbiddenException(
         "Không thể chỉnh sửa thông tin nhóm chính thức Đại gia đình - Picare Group",
       );
     }
+    const isSysAdmin = String(userRole || "").toLowerCase() === "admin";
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId, leftAt: null },
     });
-    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
-    if (!["owner", "admin"].includes(membership.role)) {
-      throw new ForbiddenException(ErrorCodes.CHAT_GROUP_UPDATE_FORBIDDEN);
+    if (!isSysAdmin) {
+      if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
+      if (!["owner", "admin"].includes(membership.role)) {
+        throw new ForbiddenException(ErrorCodes.CHAT_GROUP_UPDATE_FORBIDDEN);
+      }
     }
 
     const conversation = await Conversation.findByPk(conversationId);
@@ -1466,24 +1469,29 @@ class ChatService {
   /**
    * Thêm thành viên vào nhóm (chỉ Quản trị viên - người tạo phòng)
    */
-  static async addMembers(conversationId, requesterId, newMemberIds) {
+  static async addMembers(conversationId, requesterId, newMemberIds, userRole = null) {
     if (conversationId === PICARE_GROUP_DB_ID) {
       throw new ForbiddenException(
         "Thành viên được tự động đồng bộ vào nhóm chính thức Đại gia đình - Picare Group",
       );
     }
+    const isSysAdmin = String(userRole || "").toLowerCase() === "admin";
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId: requesterId, leftAt: null },
       }),
       Conversation.findByPk(conversationId),
     ]);
-    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
+    if (!isSysAdmin && !membership) {
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
+    }
     if (!conversation || conversation.type !== "group") {
       throw new BadRequestException(ErrorCodes.CHAT_ONLY_GROUP_ADD_MEMBER);
     }
     const isGroupOwner =
-      conversation.createdBy === requesterId || membership.role === "owner";
+      isSysAdmin ||
+      conversation.createdBy === requesterId ||
+      membership?.role === "owner";
     if (!isGroupOwner) {
       throw new ForbiddenException(ErrorCodes.CHAT_ADD_MEMBER_FORBIDDEN);
     }
@@ -1544,12 +1552,13 @@ class ChatService {
   /**
    * Xóa thành viên khỏi nhóm (chỉ Quản trị viên) / tự rời nhóm (giữ nguyên lịch sử tới thời điểm rời)
    */
-  static async removeMember(conversationId, requesterId, targetUserId) {
+  static async removeMember(conversationId, requesterId, targetUserId, userRole = null) {
     if (conversationId === PICARE_GROUP_DB_ID) {
       throw new ForbiddenException(
         "Không thể rời khỏi hoặc xoá thành viên khỏi nhóm chính thức Đại gia đình - Picare Group",
       );
     }
+    const isSysAdmin = String(userRole || "").toLowerCase() === "admin";
     const [requesterMembership, targetMembership, conversation] =
       await Promise.all([
         ConversationMember.findOne({
@@ -1560,7 +1569,7 @@ class ChatService {
         }),
         Conversation.findByPk(conversationId),
       ]);
-    if (!requesterMembership) {
+    if (!isSysAdmin && !requesterMembership) {
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
     }
     if (!conversation) {
@@ -1569,13 +1578,15 @@ class ChatService {
 
     const isSelfLeave = requesterId === targetUserId;
     const isRequesterOwner =
+      isSysAdmin ||
       conversation.createdBy === requesterId ||
-      requesterMembership.role === "owner";
+      requesterMembership?.role === "owner";
 
     if (!isSelfLeave && !isRequesterOwner) {
       throw new ForbiddenException(ErrorCodes.CHAT_REMOVE_MEMBER_FORBIDDEN);
     }
     if (
+      !isSysAdmin &&
       !isSelfLeave &&
       (targetUserId === conversation.createdBy ||
         targetMembership?.role === "owner")
@@ -3346,13 +3357,14 @@ class ChatService {
     return { memberIds, messageIds, attachmentIds };
   }
 
-  static async dissolveGroup(conversationId, userId) {
+  static async dissolveGroup(conversationId, userId, userRole = null) {
     if (conversationId === PICARE_GROUP_DB_ID) {
       throw new ForbiddenException(
         "Không thể giải tán nhóm chính thức Đại gia đình - Picare Group",
       );
     }
 
+    const isSysAdmin = String(userRole || "").toLowerCase() === "admin";
     const [conversation, membership] = await Promise.all([
       Conversation.findByPk(conversationId),
       ConversationMember.findOne({
@@ -3368,6 +3380,7 @@ class ChatService {
     }
 
     const canDissolve =
+      isSysAdmin ||
       conversation.createdBy === userId ||
       membership?.role === "owner" ||
       membership?.role === "admin";

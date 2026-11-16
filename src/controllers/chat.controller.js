@@ -148,11 +148,12 @@ class ChatController {
       }
 
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const conversation = await ChatService.updateConversation(
         conversationId,
         userId,
         req.body,
+        role,
       );
       return ResponseHandler.success(
         res,
@@ -176,12 +177,13 @@ class ChatController {
       }
 
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { memberIds } = req.body;
       const result = await ChatService.addMembers(
         conversationId,
         userId,
         memberIds,
+        role,
       );
       return ResponseHandler.success(res, result, "Thêm thành viên thành công");
     } catch (error) {
@@ -223,11 +225,12 @@ class ChatController {
   static async removeMember(req, res, next) {
     try {
       const { conversationId, targetUserId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const result = await ChatService.removeMember(
         conversationId,
         userId,
         targetUserId,
+        role,
       );
       return ResponseHandler.success(
         res,
@@ -284,8 +287,12 @@ class ChatController {
   static async dissolveGroup(req, res, next) {
     try {
       const { conversationId } = req.params;
-      const { userId } = req.user;
-      const result = await ChatService.dissolveGroup(conversationId, userId);
+      const { userId, role } = req.user;
+      const result = await ChatService.dissolveGroup(
+        conversationId,
+        userId,
+        role,
+      );
       return ResponseHandler.success(res, result, "Đã giải tán nhóm trò chuyện");
     } catch (error) {
       next(error);
