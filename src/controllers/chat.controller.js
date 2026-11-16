@@ -278,6 +278,21 @@ class ChatController {
   }
 
   /**
+   * DELETE /api/v1/chat/conversations/:conversationId
+   * Giải tán nhóm chat (chỉ owner/admin nhóm, xoá cuộc trò chuyện với toàn bộ thành viên)
+   */
+  static async dissolveGroup(req, res, next) {
+    try {
+      const { conversationId } = req.params;
+      const { userId } = req.user;
+      const result = await ChatService.dissolveGroup(conversationId, userId);
+      return ResponseHandler.success(res, result, "Đã giải tán nhóm trò chuyện");
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * DELETE /api/v1/chat/conversations/:conversationId/me
    * Xoá cuộc trò chuyện ở phía người dùng hiện tại (ẩn hội thoại & xoá vĩnh viễn lịch sử cũ với user đó)
    */

@@ -255,6 +255,20 @@ router.patch("/conversations/:conversationId/mute", ChatController.toggleMute);
 
 /**
  * @swagger
+ * /api/v1/chat/conversations/{conversationId}:
+ *   delete:
+ *     summary: Giải tán nhóm chat (chỉ owner/admin nhóm)
+ *     tags: [Chat]
+ *     security:
+ *       - cookieAuth: []
+ */
+router.delete(
+  "/conversations/:conversationId",
+  ChatController.dissolveGroup,
+);
+
+/**
+ * @swagger
  * /api/v1/chat/conversations/{conversationId}/me:
  *   delete:
  *     summary: Xoá cuộc hội thoại ở phía người dùng hiện tại (ẩn hội thoại & xoá lịch sử cũ đối với user đó)

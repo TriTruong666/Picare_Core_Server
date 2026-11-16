@@ -842,6 +842,23 @@ class ChatService {
     };
   }
 
+  static async _validateExistingUserIds(userIds = []) {
+    const uniqueIds = [...new Set((userIds || []).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const existingUsers = await User.findAll({
+      where: { userId: { [Op.in]: uniqueIds } },
+      attributes: ["userId"],
+    });
+    const validSet = new Set(existingUsers.map((u) => u.userId));
+    const invalidIds = uniqueIds.filter((uid) => !validSet.has(uid));
+    if (invalidIds.length > 0) {
+      throw new BadRequestException(
+        `Tài khoản thành viên không tồn tại trên hệ thống (${invalidIds[0]})`,
+      );
+    }
+    return uniqueIds;
+  }
+
   /**
    * Tạo cuộc hội thoại private (1-1) hoặc group kèm khởi tạo khoá DEK riêng (C1)
    * @param {string} creatorId
@@ -908,7 +925,10 @@ class ChatService {
       throw new BadRequestException(ErrorCodes.CHAT_GROUP_NAME_REQUIRED);
     }
 
-    const allMemberIds = [...new Set([creatorId, ...memberIds])];
+    const allMemberIds = await this._validateExistingUserIds([
+      creatorId,
+      ...memberIds,
+    ]);
     const conversationId = randomUUID();
     const { encryptedDek, dekVersion, dek } =
       chatCryptoService.generateConversationDek(conversationId);
@@ -1075,7 +1095,16 @@ class ChatService {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
 
-    const targetIds = [...new Set((memberIds || []).filter(Boolean))];
+    const rawTargetIds = [...new Set((memberIds || []).filter(Boolean))];
+    const existingUsers =
+      rawTargetIds.length > 0
+        ? await User.findAll({
+            where: { userId: { [Op.in]: rawTargetIds } },
+            attributes: ["userId"],
+          })
+        : [];
+    const validUserSet = new Set(existingUsers.map((u) => u.userId));
+    const targetIds = rawTargetIds.filter((uid) => validUserSet.has(uid));
     const existingMembers = await ConversationMember.findAll({
       where: { conversationId },
     });
@@ -1459,8 +1488,13 @@ class ChatService {
       throw new ForbiddenException(ErrorCodes.CHAT_ADD_MEMBER_FORBIDDEN);
     }
 
+    const validNewMemberIds = await this._validateExistingUserIds(newMemberIds);
+    if (validNewMemberIds.length === 0) {
+      throw new BadRequestException("Danh sách thành viên thêm mới không hợp lệ");
+    }
+
     const now = new Date();
-    const records = newMemberIds.map((uid) => ({
+    const records = validNewMemberIds.map((uid) => ({
       conversationId,
       userId: uid,
       role: "member",
@@ -1484,7 +1518,7 @@ class ChatService {
       {
         where: {
           conversationId,
-          userId: { [Op.in]: newMemberIds },
+          userId: { [Op.in]: validNewMemberIds },
           leftAt: { [Op.ne]: null },
         },
       },
@@ -3218,19 +3252,7 @@ class ChatService {
   /**
    * Huỷ khoá phòng bảo mật & xoá toàn bộ dữ liệu cuộc hội thoại (S3 object, s3_assets, attachments, reactions, pins, messages, members, conversation) khỏi server
    */
-  static async destroyRoomSecurity(conversationId, userId) {
-    const [conversation, member] = await Promise.all([
-      Conversation.findByPk(conversationId),
-      ConversationMember.findOne({
-        where: { conversationId, userId, leftAt: null },
-      }),
-    ]);
-
-    if (!member || !conversation?.isSecure || conversation.createdBy !== userId) {
-      chatSecurity.deny();
-    }
-    await chatSecurity.open(conversation);
-
+  static async _purgeConversation(conversationId, { deleteS3Assets = false } = {}) {
     const [members, convMessages, attachments] = await Promise.all([
       ConversationMember.findAll({
         where: { conversationId },
@@ -3256,35 +3278,38 @@ class ChatService {
     const memberIds = [...new Set(members.map((m) => m.userId).filter(Boolean))];
     const messageIds = convMessages.map((m) => m.id).filter(Boolean);
     const attachmentIds = attachments.map((att) => att.id).filter(Boolean);
-    const s3Keys = [
-      ...new Set(attachments.map((att) => att.s3Key).filter(Boolean)),
-    ];
-    const s3AssetIds = [
-      ...new Set(attachments.map((att) => att.s3AssetId).filter(Boolean)),
-    ];
 
-    for (const s3Key of s3Keys) {
-      try {
-        await s3Service.deleteAndRecord(s3Key);
-      } catch (err) {
-        console.warn(
-          `[ChatService.destroyRoomSecurity] Failed deleting S3 key ${s3Key}:`,
-          err?.message || err,
-        );
-      }
-    }
+    if (deleteS3Assets) {
+      const s3Keys = [
+        ...new Set(attachments.map((att) => att.s3Key).filter(Boolean)),
+      ];
+      const s3AssetIds = [
+        ...new Set(attachments.map((att) => att.s3AssetId).filter(Boolean)),
+      ];
 
-    if (s3AssetIds.length > 0 || s3Keys.length > 0) {
-      const assetFilters = [];
-      if (s3AssetIds.length > 0) {
-        assetFilters.push({ assetId: { [Op.in]: s3AssetIds } });
+      for (const s3Key of s3Keys) {
+        try {
+          await s3Service.deleteAndRecord(s3Key);
+        } catch (err) {
+          console.warn(
+            `[ChatService._purgeConversation] Failed deleting S3 key ${s3Key}:`,
+            err?.message || err,
+          );
+        }
       }
-      if (s3Keys.length > 0) {
-        assetFilters.push({ s3Key: { [Op.in]: s3Keys } });
+
+      if (s3AssetIds.length > 0 || s3Keys.length > 0) {
+        const assetFilters = [];
+        if (s3AssetIds.length > 0) {
+          assetFilters.push({ assetId: { [Op.in]: s3AssetIds } });
+        }
+        if (s3Keys.length > 0) {
+          assetFilters.push({ s3Key: { [Op.in]: s3Keys } });
+        }
+        await S3Asset.destroy({
+          where: { [Op.or]: assetFilters },
+        });
       }
-      await S3Asset.destroy({
-        where: { [Op.or]: assetFilters },
-      });
     }
 
     await Conversation.update(
@@ -3317,6 +3342,89 @@ class ChatService {
     await Conversation.destroy({ where: { id: conversationId } });
 
     chatCryptoService.dekCache.delete(conversationId);
+
+    return { memberIds, messageIds, attachmentIds };
+  }
+
+  static async dissolveGroup(conversationId, userId) {
+    if (conversationId === PICARE_GROUP_DB_ID) {
+      throw new ForbiddenException(
+        "Không thể giải tán nhóm chính thức Đại gia đình - Picare Group",
+      );
+    }
+
+    const [conversation, membership] = await Promise.all([
+      Conversation.findByPk(conversationId),
+      ConversationMember.findOne({
+        where: { conversationId, userId, leftAt: null },
+      }),
+    ]);
+
+    if (!conversation) {
+      throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (conversation.type !== "group") {
+      throw new BadRequestException("Chỉ có thể giải tán cuộc trò chuyện nhóm");
+    }
+
+    const canDissolve =
+      conversation.createdBy === userId ||
+      membership?.role === "owner" ||
+      membership?.role === "admin";
+    if (!canDissolve) {
+      throw new ForbiddenException(
+        "Chỉ Quản trị viên nhóm mới có quyền giải tán nhóm",
+      );
+    }
+
+    const groupName = conversation.name;
+    const { memberIds } = await this._purgeConversation(conversationId, {
+      deleteS3Assets: false,
+    });
+
+    const publicId = this.toPublicConversationId(conversationId);
+    const payload = {
+      conversationId: publicId,
+      dissolved: true,
+      groupName,
+    };
+
+    if (memberIds.length > 0) {
+      socketService.removeUsersFromConversationRoom(memberIds, publicId);
+      socketService.emitToUsers(
+        memberIds,
+        "conversation_deleted_for_me",
+        payload,
+      );
+      await ssePublisher.publishToUsers(
+        memberIds,
+        "CONVERSATION_DISSOLVED",
+        payload,
+      );
+    }
+
+    return {
+      dissolved: true,
+      conversationId: publicId,
+      groupName,
+    };
+  }
+
+  static async destroyRoomSecurity(conversationId, userId) {
+    const [conversation, member] = await Promise.all([
+      Conversation.findByPk(conversationId),
+      ConversationMember.findOne({
+        where: { conversationId, userId, leftAt: null },
+      }),
+    ]);
+
+    if (!member || !conversation?.isSecure || conversation.createdBy !== userId) {
+      chatSecurity.deny();
+    }
+    await chatSecurity.open(conversation);
+
+    const { memberIds, messageIds, attachmentIds } =
+      await this._purgeConversation(conversationId, { deleteS3Assets: true });
 
     const payload = {
       conversationId,
