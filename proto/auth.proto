@@ -257,3 +257,168 @@ message S3DeleteObjectResponse {
   bool success = 1;
   bool deletedRecord = 2;
 }
+
+service ChatService {
+  // Tạo hoặc lấy hội thoại 1-1 / nhóm theo ngữ cảnh nghiệp vụ (Office, SFA, WMS, OMS)
+  rpc EnsureConversation (EnsureConversationRequest) returns (ChatConversationResponse) {}
+
+  // Gửi tin nhắn văn bản, file đính kèm hoặc Entity Card từ các repo sang Core Hub
+  rpc SendMessage (GrpcSendMessageRequest) returns (ChatMessageResponse) {}
+
+  // Gửi nhanh thẻ nghiệp vụ (Đơn hàng SFA/OMS, Phiếu kho WMS, Đơn duyệt chi Office)
+  rpc SendEntityMessage (SendEntityMessageRequest) returns (ChatMessageResponse) {}
+
+  // Cập nhật trạng thái trực tiếp trên Entity Card khi đơn hàng/chứng từ đổi trạng thái
+  rpc UpdateEntityCardSnapshot (UpdateEntityCardSnapshotRequest) returns (UpdateEntityCardSnapshotResponse) {}
+
+  // Lấy tổng số tin chưa đọc & danh sách hội thoại rút gọn cho Dropdown UI / Header Badge
+  rpc GetUserChatSummary (UserChatSummaryRequest) returns (UserChatSummaryResponse) {}
+
+  // Đồng bộ danh sách thành viên vào nhóm chat phòng ban/đội bán hàng
+  rpc SyncConversationMembers (SyncConversationMembersRequest) returns (SyncConversationMembersResponse) {}
+
+  // Thu hồi tin nhắn
+  rpc RecallMessage (RecallMessageRequest) returns (RecallMessageResponse) {}
+
+  // Xoá tin nhắn ở phía tôi
+  rpc DeleteMessageForMe (DeleteMessageForMeRequest) returns (DeleteMessageForMeResponse) {}
+}
+
+message EnsureConversationRequest {
+  string creatorId = 1;
+  string type = 2; // "private" | "group"
+  string name = 3;
+  string avatarUrl = 4;
+  repeated string memberIds = 5;
+  string scopeSystem = 6; // "CORE" | "OFFICE" | "OMS" | "WMS" | "SFA"
+  string companyId = 7;
+  string contextType = 8; // "DEPARTMENT" | "COMPANY_GENERAL" | "SALE_TEAM" | "ORDER"...
+  string contextId = 9;
+}
+
+message ChatConversationResponse {
+  bool success = 1;
+  string message = 2;
+  string conversationId = 3;
+  string conversationJson = 4;
+}
+
+message GrpcAttachmentInput {
+  string fileName = 1;
+  string fileUrl = 2;
+  string s3AssetId = 3;
+  string s3Key = 4;
+  string fileType = 5;
+  string mimeType = 6;
+  int64 fileSize = 7;
+  string thumbnailUrl = 8;
+  int32 width = 9;
+  int32 height = 10;
+  string blurhash = 11;
+  int32 durationMs = 12;
+}
+
+message GrpcSendMessageRequest {
+  string conversationId = 1;
+  string senderId = 2;
+  string type = 3; // "text" | "image" | "file" | "system" | "entity_card" | "mixed"
+  string content = 4;
+  string replyToId = 5;
+  string metadataJson = 6;
+  string clientMessageId = 7;
+  repeated GrpcAttachmentInput attachments = 8;
+}
+
+message SendEntityMessageRequest {
+  string conversationId = 1;
+  string senderId = 2;
+  repeated string recipientIds = 3; // Nếu chưa có conversationId, tự động tạo/lấy hội thoại 1-1 hoặc nhóm
+  string content = 4;
+  string entityType = 5; // "SFA_ORDER" | "EXPENSE_REQUEST" | "WMS_SHIPPING" | "OMS_ECOM_ORDER"...
+  string sourceSystem = 6; // "OFFICE" | "SFA" | "OMS" | "WMS"
+  string entityId = 7;
+  string entityCode = 8;
+  string companyId = 9;
+  string snapshotJson = 10;
+  string navigationPath = 11;
+  string primarySystem = 12;
+  string fallbackPathsJson = 13;
+  string clientMessageId = 14;
+}
+
+message ChatMessageResponse {
+  bool success = 1;
+  string message = 2;
+  string conversationId = 3;
+  string messageId = 4;
+  string messageJson = 5;
+}
+
+message UpdateEntityCardSnapshotRequest {
+  string conversationId = 1;
+  string messageId = 2;
+  string entityType = 3;
+  string entityId = 4;
+  string sourceSystem = 5;
+  string snapshotPatchJson = 6;
+  string navigationPatchJson = 7;
+}
+
+message UpdateEntityCardSnapshotResponse {
+  bool success = 1;
+  string message = 2;
+  int32 updatedCount = 3;
+  repeated string updatedMessageIds = 4;
+}
+
+message UserChatSummaryRequest {
+  string userId = 1;
+  int32 limit = 2;
+  string scopeSystem = 3;
+  string companyId = 4;
+}
+
+message UserChatSummaryResponse {
+  bool success = 1;
+  string userId = 2;
+  int32 totalUnreadMessages = 3;
+  int32 totalMentionCount = 4;
+  int32 unreadConversationsCount = 5;
+  int32 totalConversations = 6;
+  string summaryJson = 7;
+}
+
+message SyncConversationMembersRequest {
+  string conversationId = 1;
+  repeated string memberIds = 2;
+  string mode = 3; // "REPLACE" | "ADD_ONLY" | "REMOVE_ONLY"
+}
+
+message SyncConversationMembersResponse {
+  bool success = 1;
+  string conversationId = 2;
+  repeated string addedUserIds = 3;
+  repeated string removedUserIds = 4;
+}
+
+message RecallMessageRequest {
+  string messageId = 1;
+  string userId = 2;
+}
+
+message RecallMessageResponse {
+  bool success = 1;
+  string message = 2;
+  string messageId = 3;
+}
+
+message DeleteMessageForMeRequest {
+  string messageId = 1;
+  string userId = 2;
+}
+
+message DeleteMessageForMeResponse {
+  bool success = 1;
+  string message = 2;
+  string messageId = 3;
+}

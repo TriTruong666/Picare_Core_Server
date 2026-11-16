@@ -445,10 +445,13 @@ class S3Controller {
         res.setHeader("Content-Length", streamData.ContentLength);
       }
       
+      const asciiFallback = String(filename || "download")
+        .replace(/[^\x20-\x7E]/g, "_")
+        .replace(/["\\]/g, "_");
       const encodedFilename = encodeURIComponent(filename);
       res.setHeader(
         "Content-Disposition",
-        `attachment; filename="${filename}"; filename*=UTF-8''${encodedFilename}`
+        `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodedFilename}`
       );
 
       streamData.Body.pipe(res);

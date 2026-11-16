@@ -184,6 +184,17 @@ const startServer = async () => {
     await seedAppConfig();
     await loadDynamicConfig();
 
+    try {
+      const ChatService = require("./src/services/chat.service");
+      await ChatService.ensurePicareGroup();
+      console.log("[CHAT]: Đã khởi tạo & đồng bộ nhóm chính thức picare_group.");
+    } catch (chatErr) {
+      console.warn(
+        "[CHAT]: Không thể khởi tạo nhóm chính thức picare_group khi start server:",
+        chatErr?.message || chatErr,
+      );
+    }
+
     startGrpcServer(config.app.grpc_port);
     if (process.env.CORE_STORAGE_WORKERS_EXTERNAL !== "true") {
       startJobs();

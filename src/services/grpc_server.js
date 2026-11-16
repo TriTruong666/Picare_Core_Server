@@ -5,6 +5,7 @@ const grpcAuthHandler = require("./grpc_auth.handler");
 const grpcLicenseHandler = require("./grpc_license.handler");
 const grpcS3Handler = require("./grpc_s3.handler");
 const grpcMailHandler = require("./grpc_mail.handler");
+const grpcChatHandler = require("./grpc_chat.handler");
 const { maxGrpcMessageBytes } = require("../config/upload.config");
 
 // Đường dẫn file proto
@@ -71,6 +72,15 @@ function startGrpcServer(port = 50051) {
   server.addService(authProto.MailService.service, {
     SendOfficeInvitationMail: grpcMailHandler.sendOfficeInvitationMail,
     SendOrderReturnSigningMail: grpcMailHandler.sendOrderReturnSigningMail,
+  });
+
+  server.addService(authProto.ChatService.service, {
+    EnsureConversation: grpcChatHandler.ensureConversation,
+    SendMessage: grpcChatHandler.sendMessage,
+    SendEntityMessage: grpcChatHandler.sendEntityMessage,
+    UpdateEntityCardSnapshot: grpcChatHandler.updateEntityCardSnapshot,
+    GetUserChatSummary: grpcChatHandler.getUserChatSummary,
+    SyncConversationMembers: grpcChatHandler.syncConversationMembers,
   });
 
   server.bindAsync(

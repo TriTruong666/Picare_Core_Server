@@ -48,10 +48,26 @@ class ForbiddenException extends BaseException {
   }
 }
 
+class ConflictException extends BaseException {
+  constructor(errObject, details) {
+    super(errObject, details);
+    this.statusCode = 409;
+  }
+}
+
+class InternalServerException extends BaseException {
+  constructor(errObject, details) {
+    super(errObject, details);
+    this.statusCode = 500;
+  }
+}
+
 module.exports = {
   BaseException,
   BadRequestException,
   UnauthorizedException,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
+  InternalServerException,
 };

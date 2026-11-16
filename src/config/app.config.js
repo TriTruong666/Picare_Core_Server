@@ -136,6 +136,8 @@ const appConfig = {
       "conversation_members",
       "messages",
       "message_attachments",
+      "pinned_messages",
+      "message_reactions",
     ],
   },
 
@@ -190,12 +192,80 @@ const appConfig = {
       "true",
     storageServiceToken: process.env.GRPC_STORAGE_SERVICE_TOKEN || "",
     storageAllowedPrefixes: (
-      process.env.GRPC_STORAGE_ALLOWED_PREFIXES || "picare-intelligent/"
+      process.env.GRPC_STORAGE_ALLOWED_PREFIXES ||
+      "picare-intelligent/,chat-attachments/"
     )
       .split(",")
       .map((prefix) => prefix.trim().replace(/^\/+|\/+$/g, ""))
       .filter(Boolean)
       .map((prefix) => `${prefix}/`),
+    chatAuthEnabled:
+      String(process.env.GRPC_CHAT_AUTH_ENABLED || "false").toLowerCase() ===
+      "true",
+    chatServiceToken:
+      process.env.GRPC_CHAT_SERVICE_TOKEN ||
+      process.env.GRPC_STORAGE_SERVICE_TOKEN ||
+      "",
+  },
+
+  chat: {
+    encryption: {
+      enabled: parseBoolean(process.env.CHAT_ENCRYPTION_ENABLED, true),
+      currentKeyVersion:
+        parseInt(process.env.CHAT_MASTER_KEK_VERSION, 10) || 1,
+      masterKek:
+        process.env.CHAT_MASTER_KEK ||
+        process.env.CHAT_MASTER_KEK_V1 ||
+        process.env.JWT_SECRET ||
+        "picare-core-default-chat-master-kek-dev",
+      keyring: {
+        1:
+          process.env.CHAT_MASTER_KEK_V1 ||
+          process.env.CHAT_MASTER_KEK ||
+          process.env.JWT_SECRET ||
+          "picare-core-default-chat-master-kek-dev",
+        ...(process.env.CHAT_MASTER_KEK_V2
+          ? { 2: process.env.CHAT_MASTER_KEK_V2 }
+          : {}),
+      },
+      dekCacheTtlMs:
+        parseInt(process.env.CHAT_DEK_CACHE_TTL_MS, 10) || 10 * 60 * 1000,
+      dekCacheMaxSize:
+        parseInt(process.env.CHAT_DEK_CACHE_MAX_SIZE, 10) || 2000,
+    },
+    maxPinsPerConversation:
+      parseInt(process.env.CHAT_MAX_PINS_PER_CONVERSATION, 10) || 20,
+    presignedUrlExpiresIn:
+      parseInt(process.env.CHAT_PRESIGNED_URL_EXPIRES_IN, 10) || 3600,
+    attachmentFolderPrefix:
+      process.env.CHAT_ATTACHMENT_FOLDER_PREFIX || "chat-attachments",
+    systemUrls: {
+      CORE:
+        process.env.CORE_WEB_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://hub.picare.vn"
+          : "http://localhost:5173"),
+      OFFICE:
+        process.env.OFFICE_WEB_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://office.picare.vn"
+          : "http://localhost:3001"),
+      OMS:
+        process.env.OMS_WEB_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://oms.picare.vn"
+          : "http://localhost:3002"),
+      WMS:
+        process.env.WMS_WEB_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://wms.picare.vn"
+          : "http://localhost:3003"),
+      SFA:
+        process.env.SFA_WEB_URL ||
+        (process.env.NODE_ENV === "production"
+          ? "https://sfa.picare.vn"
+          : "http://localhost:3004"),
+    },
   },
 
   fptAi: {

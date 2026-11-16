@@ -15,7 +15,7 @@ const catalogueRoutes = require("./catalogue.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
-// router.use("/chat", chatRoutes); // Tạm dừng module chat theo yêu cầu
+router.use("/chat", chatRoutes);
 router.use("/hub-clients", hubClientRoutes);
 
 router.use("/s3", s3Routes);

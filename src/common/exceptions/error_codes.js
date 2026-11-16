@@ -360,6 +360,41 @@ const ErrorCodes = {
     message: "Bạn chỉ có thể xóa tin nhắn của chính mình",
     statusCode: 403,
   },
+  CHAT_RECALL_OWN_MESSAGE_ONLY: {
+    code: "ERR_CHAT_023",
+    message: "Bạn chỉ có thể thu hồi tin nhắn của chính mình",
+    statusCode: 403,
+  },
+  CHAT_PIN_LIMIT_REACHED: (maxPins) => ({
+    code: "ERR_CHAT_017",
+    message: `Cuộc hội thoại chỉ được ghim tối đa ${maxPins} tin nhắn`,
+    statusCode: 400,
+  }),
+  CHAT_MESSAGE_ALREADY_PINNED: {
+    code: "ERR_CHAT_018",
+    message: "Tin nhắn này đã được ghim trong cuộc hội thoại",
+    statusCode: 409,
+  },
+  CHAT_MESSAGE_NOT_PINNED: {
+    code: "ERR_CHAT_019",
+    message: "Tin nhắn chưa được ghim trong cuộc hội thoại",
+    statusCode: 404,
+  },
+  CHAT_ENTITY_CARD_INVALID: {
+    code: "ERR_CHAT_020",
+    message: "Dữ liệu thẻ nghiệp vụ (entity_card) không hợp lệ",
+    statusCode: 400,
+  },
+  CHAT_ATTACHMENT_NOT_FOUND: {
+    code: "ERR_CHAT_021",
+    message: "Không tìm thấy tệp đính kèm trong cuộc hội thoại",
+    statusCode: 404,
+  },
+  CHAT_ENCRYPTION_INTEGRITY_FAILED: {
+    code: "ERR_CHAT_022",
+    message: "Không thể xác thực toàn vẹn dữ liệu mã hoá tin nhắn",
+    statusCode: 500,
+  },
 
   MAIL_SMTP_CONFIG_MISSING: (fields) => ({
     code: "ERR_MAIL_001",

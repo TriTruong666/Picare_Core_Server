@@ -120,6 +120,27 @@ const User = sequelize.define(
         }
       },
 
+      afterCreate: (user) => {
+        if (user?.userId && (!user.status || user.status === USER_STATUS.ACTIVE)) {
+          setImmediate(() => {
+            try {
+              const ChatService = require("../services/chat.service");
+              ChatService.addUserToPicareGroup(user.userId).catch((err) => {
+                console.warn(
+                  `[User.afterCreate] Could not auto-add user ${user.userId} to picare_group:`,
+                  err?.message || err,
+                );
+              });
+            } catch (err) {
+              console.warn(
+                `[User.afterCreate] Could not load ChatService for picare_group:`,
+                err?.message || err,
+              );
+            }
+          });
+        }
+      },
+
       beforeUpdate: async (user) => {
         if (user.changed("password")) {
           const salt = await bcrypt.genSalt(12);
