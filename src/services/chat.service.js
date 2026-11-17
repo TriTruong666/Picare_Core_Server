@@ -697,7 +697,6 @@ class ChatService {
    * @param {Object} [options] - { scopeSystem, companyId, userRole }
    */
   static async getMyConversations(userId, options = {}) {
-    const isSysAdmin = this._isSystemAdmin(options.userRole);
     try {
       await this.ensurePicareGroup();
       if (userId && !this._picareGroupUserSet?.has(userId)) {
@@ -819,83 +818,6 @@ class ChatService {
 
     if (pendingLeftLastMessages.length > 0) {
       await Promise.all(pendingLeftLastMessages);
-    }
-
-    // Role Admin hệ thống thấy tất cả nhóm chat trên hệ thống (kể cả nhóm không có mặt) để quản trị / giải tán
-    if (isSysAdmin) {
-      const allMyMemberRows = await ConversationMember.findAll({
-        where: { userId },
-        attributes: ["conversationId"],
-        raw: true,
-      });
-      const knownConvIds = [
-        ...new Set(allMyMemberRows.map((row) => row.conversationId).filter(Boolean)),
-      ];
-      const extraGroups = await Conversation.findAll({
-        where: {
-          ...convWhere,
-          type: "group",
-          ...(knownConvIds.length > 0
-            ? { id: { [Op.notIn]: knownConvIds } }
-            : {}),
-        },
-        include: [
-          {
-            model: Message,
-            as: "lastMessage",
-            include: [
-              { model: User, as: "sender", attributes: SENDER_ATTRIBUTES },
-            ],
-          },
-          {
-            model: ConversationMember,
-            as: "members",
-            where: { leftAt: null },
-            required: false,
-            include: [
-              { model: User, as: "user", attributes: SENDER_ATTRIBUTES },
-            ],
-          },
-        ],
-        order: [["lastMessageAt", "DESC NULLS LAST"]],
-      });
-
-      for (const groupConv of extraGroups) {
-        let dek = null;
-        try {
-          const dekInfo = await this._getOrEnsureConversationDek(groupConv);
-          dek = dekInfo.dek;
-        } catch (err) {
-          console.warn(
-            `[ChatService] Không thể mở khoá DEK cho hội thoại ${groupConv.id}:`,
-            err.message,
-          );
-        }
-        const sanitized = this.sanitizeConversation(groupConv, dek);
-        sanitized.myMembership = {
-          role: "admin",
-          nickname: null,
-          isMuted: false,
-          isPinned: false,
-          lastReadAt: null,
-          lastReadMessageId: null,
-          clearedAt: null,
-          leftAt: null,
-          unreadCount: 0,
-          mentionCount: 0,
-        };
-        results.push(sanitized);
-      }
-
-      results.sort((a, b) => {
-        const pinDiff =
-          Number(Boolean(b.myMembership?.isPinned)) -
-          Number(Boolean(a.myMembership?.isPinned));
-        if (pinDiff !== 0) return pinDiff;
-        const tA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
-        const tB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
-        return tB - tA;
-      });
     }
 
     return results;
@@ -1317,9 +1239,8 @@ class ChatService {
    * @param {string} conversationId
    * @param {string} userId
    */
-  static async getConversationDetail(conversationId, userId, userRole = null) {
+  static async getConversationDetail(conversationId, userId) {
     conversationId = this.resolveDbConversationId(conversationId);
-    const isSysAdmin = this._isSystemAdmin(userRole);
     if (conversationId === PICARE_GROUP_DB_ID) {
       await this.addUserToPicareGroup(userId).catch(() => null);
     }
@@ -1352,7 +1273,7 @@ class ChatService {
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
-    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+    if (!membership) {
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
@@ -1833,7 +1754,6 @@ class ChatService {
    * @param {Object} options - { before, beforeId, limit }
    */
   static async getMessages(conversationId, userId, options = {}) {
-    const isSysAdmin = this._isSystemAdmin(options.userRole);
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -1844,7 +1764,7 @@ class ChatService {
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
-    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+    if (!membership) {
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
@@ -1938,7 +1858,6 @@ class ChatService {
    * @param {Object} [options] - { limit }
    */
   static async searchMessages(conversationId, userId, queryText, options = {}) {
-    const isSysAdmin = this._isSystemAdmin(options.userRole);
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -1949,7 +1868,7 @@ class ChatService {
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
-    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+    if (!membership) {
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
@@ -2700,27 +2619,11 @@ class ChatService {
     conversationId,
     userId,
     lastReadMessageId = null,
-    userRole = null,
   ) {
-    const isSysAdmin = this._isSystemAdmin(userRole);
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId },
     });
     if (!membership) {
-      if (isSysAdmin) {
-        const conversation = await Conversation.findByPk(conversationId, {
-          attributes: ["id", "type"],
-        });
-        if (conversation?.type === "group") {
-          return {
-            conversationId,
-            userId,
-            readAt: new Date(),
-            lastReadMessageId: null,
-            unreadCount: 0,
-          };
-        }
-      }
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
     }
 
@@ -3025,8 +2928,7 @@ class ChatService {
    * @param {string} conversationId
    * @param {string} userId
    */
-  static async getPinnedMessages(conversationId, userId, userRole = null) {
-    const isSysAdmin = this._isSystemAdmin(userRole);
+  static async getPinnedMessages(conversationId, userId) {
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -3037,7 +2939,7 @@ class ChatService {
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
-    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+    if (!membership) {
       throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
