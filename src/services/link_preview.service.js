@@ -218,9 +218,36 @@ async function readResponseTextBounded(response, maxBytes = MAX_HTML_BYTES) {
   return Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
 }
 
-async function fetchHtmlMeta(parsedUrl, timeoutMs = FETCH_TIMEOUT_MS) {
+const SOCIAL_PREVIEW_HOSTS = [
+  "tiktok.com",
+  "vm.tiktok.com",
+  "vt.tiktok.com",
+  "facebook.com",
+  "fb.watch",
+  "fb.com",
+  "instagram.com",
+  "threads.net",
+  "twitter.com",
+  "x.com",
+];
+
+function isHostMatch(hostname, targets) {
+  const host = String(hostname || "").toLowerCase().replace(/^www\./, "");
+  return targets.some((target) => host === target || host.endsWith(`.${target}`));
+}
+
+function isTikTokHost(hostname) {
+  return isHostMatch(hostname, ["tiktok.com", "vm.tiktok.com", "vt.tiktok.com"]);
+}
+
+function isSocialPreviewHost(hostname) {
+  return isHostMatch(hostname, SOCIAL_PREVIEW_HOSTS);
+}
+
+async function fetchHtmlMeta(parsedUrl, timeoutMs = FETCH_TIMEOUT_MS, forceCrawlerUa = false) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const useSocialCrawlerUa = forceCrawlerUa || isSocialPreviewHost(parsedUrl.hostname);
 
   try {
     const response = await fetch(parsedUrl.toString(), {
@@ -228,8 +255,9 @@ async function fetchHtmlMeta(parsedUrl, timeoutMs = FETCH_TIMEOUT_MS) {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; PicareHubBot/1.0; +https://hub.picare.vn)",
+        "User-Agent": useSocialCrawlerUa
+          ? "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"
+          : "Mozilla/5.0 (compatible; PicareHubBot/1.0; +https://hub.picare.vn)",
         Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
       },
@@ -276,6 +304,33 @@ async function fetchYouTubeOEmbed(videoUrl, videoId, timeoutMs = FETCH_TIMEOUT_M
       image:
         data?.thumbnail_url ||
         (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined),
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchTikTokOEmbed(videoUrl, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const oembedUrl = `https://www.tiktok.com/oembed?url=${encodeURIComponent(
+      videoUrl,
+    )}`;
+    const res = await fetch(oembedUrl, {
+      method: "GET",
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return {
+      title: data?.title ? String(data.title).trim() : undefined,
+      authorName: data?.author_name ? String(data.author_name).trim() : undefined,
+      image: data?.thumbnail_url ? String(data.thumbnail_url).trim() : undefined,
     };
   } catch {
     return null;
@@ -351,7 +406,40 @@ class LinkPreviewService {
       return result;
     }
 
-    const htmlMeta = await fetchHtmlMeta(parsedUrl, timeoutMs);
+    if (isTikTokHost(parsedUrl.hostname)) {
+      const [htmlRes, oembedRes] = await Promise.allSettled([
+        fetchHtmlMeta(parsedUrl, timeoutMs, true),
+        fetchTikTokOEmbed(canonicalUrl, timeoutMs),
+      ]);
+      const htmlMeta = htmlRes.status === "fulfilled" ? htmlRes.value : null;
+      const oembed = oembedRes.status === "fulfilled" ? oembedRes.value : null;
+
+      const result = {
+        id: canonicalUrl,
+        url: canonicalUrl,
+        domain: "tiktok.com",
+        siteName: htmlMeta?.siteName || "TikTok",
+        title: htmlMeta?.title || oembed?.title || "TikTok",
+        ...(htmlMeta?.description
+          ? { description: htmlMeta.description }
+          : oembed?.authorName
+            ? { description: `Kênh: ${oembed.authorName}` }
+            : {}),
+        ...(htmlMeta?.image || oembed?.image
+          ? { image: htmlMeta?.image || oembed?.image }
+          : {}),
+      };
+      setCachedPreview(canonicalUrl, result);
+      return result;
+    }
+
+    let htmlMeta = await fetchHtmlMeta(parsedUrl, timeoutMs);
+    if ((!htmlMeta || !htmlMeta.image) && !isSocialPreviewHost(parsedUrl.hostname)) {
+      const fallbackMeta = await fetchHtmlMeta(parsedUrl, timeoutMs, true);
+      if (fallbackMeta && (fallbackMeta.image || !htmlMeta)) {
+        htmlMeta = fallbackMeta;
+      }
+    }
     const result = htmlMeta
       ? { ...htmlMeta, id: canonicalUrl, url: canonicalUrl }
       : {
