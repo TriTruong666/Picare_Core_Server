@@ -381,6 +381,68 @@ class ChatService {
   }
 
   /**
+   * Chuẩn hoá và kiểm tra hợp lệ dữ liệu Sticker gửi trong chat
+   * @param {Object} metadata
+   */
+  static normalizeStickerMetadata(metadata = {}) {
+    const rawSticker =
+      metadata?.sticker && typeof metadata.sticker === "object"
+        ? metadata.sticker
+        : metadata;
+
+    const stickerId = String(rawSticker?.id || rawSticker?.stickerId || "").trim();
+    if (!stickerId || !/^[a-zA-Z0-9_-]{1,80}$/.test(stickerId)) {
+      throw new BadRequestException("Thông tin stickerId không hợp lệ");
+    }
+
+    const isSafeStickerUrl = (val) => {
+      if (!val || typeof val !== "string") return false;
+      const trimmed = val.trim();
+      return (
+        trimmed.startsWith("/stickers/") ||
+        trimmed.startsWith("https://fonts.gstatic.com/s/e/notoemoji/")
+      );
+    };
+
+    const url = isSafeStickerUrl(rawSticker?.url) ? rawSticker.url.trim() : null;
+    const lottieUrl = isSafeStickerUrl(rawSticker?.lottieUrl)
+      ? rawSticker.lottieUrl.trim()
+      : null;
+    const fallbackWebpUrl = isSafeStickerUrl(rawSticker?.fallbackWebpUrl)
+      ? rawSticker.fallbackWebpUrl.trim()
+      : null;
+
+    if (!url && !lottieUrl && !fallbackWebpUrl) {
+      throw new BadRequestException("Đường dẫn sticker không hợp lệ");
+    }
+
+    const format = rawSticker?.format === "lottie" ? "lottie" : "webp";
+    const pack = String(rawSticker?.pack || "picare_pibot")
+      .trim()
+      .slice(0, 40);
+    const label = String(rawSticker?.label || "Nhãn dán")
+      .trim()
+      .slice(0, 80);
+    const codepoint = rawSticker?.codepoint
+      ? String(rawSticker.codepoint).trim().slice(0, 40)
+      : null;
+
+    return {
+      schemaVersion: 1,
+      sticker: {
+        id: stickerId,
+        pack,
+        label,
+        format,
+        url: url || fallbackWebpUrl || lottieUrl,
+        ...(lottieUrl ? { lottieUrl } : {}),
+        ...(fallbackWebpUrl ? { fallbackWebpUrl } : {}),
+        ...(codepoint ? { codepoint } : {}),
+      },
+    };
+  }
+
+  /**
    * Chuẩn hoá và kiểm tra hợp lệ dữ liệu Entity Card (C3 & C4)
    * @param {Object} metadata
    * @param {Object} [options]
@@ -2032,7 +2094,9 @@ class ChatService {
     }
 
     let normalizedMetadata = metadata || null;
-    if (type === "entity_card" || metadata?.entityType) {
+    if (type === "sticker") {
+      normalizedMetadata = this.normalizeStickerMetadata(metadata);
+    } else if (type === "entity_card" || metadata?.entityType) {
       normalizedMetadata = this.normalizeEntityCardMetadata(metadata, {
         defaultSystem: conversation.scopeSystem,
       });

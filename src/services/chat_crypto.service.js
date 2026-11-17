@@ -472,6 +472,12 @@ class ChatCryptoService {
         ? { entityCode: String(metadata.entityCode) }
         : {}),
       ...(metadata.companyId ? { companyId: String(metadata.companyId) } : {}),
+      ...(metadata.sticker?.id
+        ? { stickerId: String(metadata.sticker.id) }
+        : {}),
+      ...(metadata.sticker?.pack
+        ? { stickerPack: String(metadata.sticker.pack) }
+        : {}),
       ...(Array.isArray(metadata.mentions)
         ? { mentions: metadata.mentions }
         : {}),
@@ -485,6 +491,8 @@ class ChatCryptoService {
       metadata.snapshot?.title,
       metadata.snapshot?.subtitle,
       metadata.snapshot?.customerName,
+      metadata.sticker?.label,
+      metadata.sticker?.id,
       metadata.linkPreview?.title,
       metadata.linkPreview?.description,
       metadata.linkPreview?.domain,

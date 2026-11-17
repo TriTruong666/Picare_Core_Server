@@ -175,9 +175,9 @@ const sendMessageSchema = [
     .withMessage("conversationId không hợp lệ"),
   body("type")
     .optional()
-    .isIn(["text", "image", "file", "system", "entity_card", "mixed"])
+    .isIn(["text", "image", "file", "system", "entity_card", "sticker", "mixed"])
     .withMessage(
-      "type phải là 'text', 'image', 'file', 'system', 'entity_card' hoặc 'mixed'",
+      "type phải là 'text', 'image', 'file', 'system', 'entity_card', 'sticker' hoặc 'mixed'",
     ),
   body("content")
     .if(
@@ -188,9 +188,9 @@ const sendMessageSchema = [
     .notEmpty()
     .withMessage("content không được để trống với tin nhắn text"),
   body("metadata")
-    .if(body("type").equals("entity_card"))
+    .if(body("type").isIn(["entity_card", "sticker"]))
     .isObject()
-    .withMessage("metadata là bắt buộc khi gửi entity_card"),
+    .withMessage("metadata là bắt buộc khi gửi entity_card hoặc sticker"),
   body("replyToId")
     .optional({ nullable: true })
     .isUUID()

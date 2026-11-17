@@ -5,12 +5,13 @@ const sequelize = require("../../config/postgres.config");
  * Message Model
  * Lưu trữ từng tin nhắn trong cuộc hội thoại với cơ chế mã hoá AES-256-GCM + AAD.
  *
- * - type: loại nội dung (text, image, file, system, entity_card, mixed).
+ * - type: loại nội dung (text, image, file, system, entity_card, sticker, mixed).
  *   + "text":        Tin nhắn văn bản thuần.
  *   + "image":       Tin nhắn chứa ảnh (nội dung ảnh lưu ở MessageAttachment).
  *   + "file":        Tin nhắn chứa file đính kèm.
  *   + "system":      Tin nhắn hệ thống (thêm/xóa thành viên, đổi tên nhóm, ghim tin nhắn...).
  *   + "entity_card": Thẻ nghiệp vụ liên hệ thống (Đơn hàng SFA/OMS, Phiếu kho WMS, Đơn duyệt chi Office...).
+ *   + "sticker":     Nhãn dán tĩnh/động (.webp / Lottie JSON, lưu cấu trúc tại metadata/encryptedMetadata).
  *   + "mixed":       Tin nhắn kết hợp văn bản + file + thẻ nghiệp vụ.
  *
  * - ciphertext, iv, authTag, keyVersion: Dữ liệu nội dung đã mã hoá AES-256-GCM.
@@ -42,9 +43,12 @@ const Message = sequelize.define(
       allowNull: false,
       defaultValue: "text",
       validate: {
-        isIn: [["text", "image", "file", "system", "entity_card", "mixed"]],
+        isIn: [
+          ["text", "image", "file", "system", "entity_card", "sticker", "mixed"],
+        ],
       },
-      comment: "Loại tin nhắn: text, image, file, system, entity_card, mixed",
+      comment:
+        "Loại tin nhắn: text, image, file, system, entity_card, sticker, mixed",
     },
     content: {
       type: DataTypes.TEXT,
