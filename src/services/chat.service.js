@@ -32,6 +32,9 @@ const {
   PICARE_GROUP_DB_ID,
   PICARE_GROUP_NAME,
   PICARE_GROUP_DESCRIPTION,
+  PERSONAL_SPACE_CONTEXT_TYPE,
+  PERSONAL_SPACE_NAME,
+  PERSONAL_SPACE_DESCRIPTION,
   SYSTEM_ADMIN_USER_ID,
   resolveDbConversationId,
   toPublicConversationId,
@@ -48,6 +51,118 @@ class ChatService {
 
   static toPublicConversationId(id) {
     return toPublicConversationId(id);
+  }
+
+  static isPersonalSpaceConversation(conversation) {
+    return (
+      String(conversation?.contextType || "").toUpperCase() ===
+      PERSONAL_SPACE_CONTEXT_TYPE
+    );
+  }
+
+  /**
+   * Đảm bảo mỗi user đều có phòng chat lưu trữ cá nhân riêng ("Không gian của bạn" - My Documents).
+   * Mỗi phòng gắn contextType = "PERSONAL_SPACE", contextId = userId, chỉ có 1 thành viên duy nhất là chính user đó.
+   */
+  static async ensurePersonalSpace(userId) {
+    if (!userId) return null;
+    const normalizedUserId = String(userId).trim();
+    if (!normalizedUserId) return null;
+
+    if (!this._personalSpaceInFlight) {
+      this._personalSpaceInFlight = new Map();
+    }
+    if (this._personalSpaceInFlight.has(normalizedUserId)) {
+      return this._personalSpaceInFlight.get(normalizedUserId);
+    }
+
+    const promise = (async () => {
+      let conv = await Conversation.findOne({
+        where: {
+          contextType: PERSONAL_SPACE_CONTEXT_TYPE,
+          contextId: normalizedUserId,
+        },
+        order: [["createdAt", "ASC"]],
+      });
+
+      if (!conv) {
+        const userRecord = await User.findOne({
+          where: { userId: normalizedUserId },
+          attributes: ["userId"],
+        });
+        if (!userRecord?.userId) return null;
+
+        const conversationId = randomUUID();
+        const { encryptedDek, dekVersion } =
+          chatCryptoService.generateConversationDek(conversationId);
+
+        conv = await Conversation.create({
+          id: conversationId,
+          type: "private",
+          name: PERSONAL_SPACE_NAME,
+          description: PERSONAL_SPACE_DESCRIPTION,
+          createdBy: normalizedUserId,
+          scopeSystem: "CORE",
+          companyId: null,
+          contextType: PERSONAL_SPACE_CONTEXT_TYPE,
+          contextId: normalizedUserId,
+          encryptedDek,
+          dekVersion,
+          pinnedCount: 0,
+        });
+
+        await ConversationMember.create({
+          conversationId: conv.id,
+          userId: normalizedUserId,
+          role: "owner",
+          unreadCount: 0,
+          mentionCount: 0,
+          isPinned: false,
+          joinedAt: new Date(),
+        });
+      } else {
+        await this._getOrEnsureConversationDek(conv);
+        if (!conv.name) {
+          await conv.update({
+            name: PERSONAL_SPACE_NAME,
+            description: conv.description || PERSONAL_SPACE_DESCRIPTION,
+          });
+        }
+
+        const membership = await ConversationMember.findOne({
+          where: {
+            conversationId: conv.id,
+            userId: normalizedUserId,
+          },
+        });
+        if (!membership) {
+          await ConversationMember.create({
+            conversationId: conv.id,
+            userId: normalizedUserId,
+            role: "owner",
+            unreadCount: 0,
+            mentionCount: 0,
+            isPinned: false,
+            joinedAt: new Date(),
+          });
+        } else if (membership.hiddenAt || membership.leftAt) {
+          await membership.update({
+            hiddenAt: null,
+            leftAt: null,
+          });
+        }
+      }
+
+      socketService.addUsersToConversationRoom([normalizedUserId], conv.id);
+      return conv;
+    })();
+
+    this._personalSpaceInFlight.set(normalizedUserId, promise);
+    try {
+      return await promise;
+    } finally {
+      this._personalSpaceInFlight.delete(normalizedUserId);
+    }
   }
 
   /**
@@ -767,6 +882,17 @@ class ChatService {
     } catch (err) {
       console.warn(
         "[ChatService.getMyConversations] ensurePicareGroup warning:",
+        err?.message || err,
+      );
+    }
+
+    try {
+      if (userId) {
+        await this.ensurePersonalSpace(userId);
+      }
+    } catch (err) {
+      console.warn(
+        "[ChatService.getMyConversations] ensurePersonalSpace warning:",
         err?.message || err,
       );
     }
@@ -1575,6 +1701,11 @@ class ChatService {
     if (!conversation || conversation.type !== "group") {
       throw new BadRequestException(ErrorCodes.CHAT_ONLY_GROUP_ADD_MEMBER);
     }
+    if (this.isPersonalSpaceConversation(conversation)) {
+      throw new ForbiddenException(
+        "Không gian của bạn là phòng lưu trữ riêng tư, không thể thêm thành viên",
+      );
+    }
     const isGroupOwner =
       isSysAdmin ||
       conversation.createdBy === requesterId ||
@@ -1661,6 +1792,11 @@ class ChatService {
     }
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (this.isPersonalSpaceConversation(conversation)) {
+      throw new ForbiddenException(
+        "Không thể rời khỏi hoặc xoá thành viên trong Không gian của bạn",
+      );
     }
 
     const isSelfLeave = requesterId === targetUserId;
@@ -2779,6 +2915,12 @@ class ChatService {
         "Không thể xoá cuộc trò chuyện chính thức Đại gia đình - Picare Group",
       );
     }
+    const conversation = await Conversation.findByPk(conversationId);
+    if (conversation && this.isPersonalSpaceConversation(conversation)) {
+      throw new ForbiddenException(
+        "Không gian của bạn luôn được giữ cố định. Hãy dùng nút 'Xoá dữ liệu của tôi' để dọn sạch toàn bộ nội dung.",
+      );
+    }
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId },
     });
@@ -2818,6 +2960,156 @@ class ChatService {
       conversationId: this.toPublicConversationId(conversationId),
       clearedAt: eventPayload.clearedAt,
     };
+  }
+
+  /**
+   * Xoá SẠCH toàn bộ dữ liệu trong "Không gian của bạn" của user hiện tại:
+   * - Xoá toàn bộ object trên S3 (theo s3Key trong MessageAttachment) + record trong s3_assets
+   * - Xoá vĩnh viễn toàn bộ tin nhắn, đính kèm, reaction, ghim trong DB
+   * - Giữ nguyên phòng "Không gian của bạn" trống sạch để user tiếp tục lưu trữ
+   */
+  static async clearPersonalSpaceData(conversationId, userId) {
+    const [conversation, membership] = await Promise.all([
+      Conversation.findByPk(conversationId),
+      ConversationMember.findOne({
+        where: { conversationId, userId, leftAt: null },
+      }),
+    ]);
+
+    if (!conversation) {
+      throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (!this.isPersonalSpaceConversation(conversation)) {
+      throw new BadRequestException(
+        "Thao tác này chỉ áp dụng cho phòng lưu trữ cá nhân Không gian của bạn",
+      );
+    }
+    if (
+      !membership ||
+      (String(conversation.contextId || "") !== String(userId) &&
+        String(conversation.createdBy || "") !== String(userId))
+    ) {
+      throw new ForbiddenException(
+        "Bạn không có quyền xoá dữ liệu của Không gian của bạn này",
+      );
+    }
+
+    const [convMessages, attachments] = await Promise.all([
+      Message.findAll({
+        where: { conversationId },
+        attributes: ["id"],
+        paranoid: false,
+      }),
+      MessageAttachment.findAll({
+        include: [
+          {
+            model: Message,
+            as: "message",
+            attributes: [],
+            where: { conversationId },
+            paranoid: false,
+          },
+        ],
+      }),
+    ]);
+
+    const messageIds = convMessages.map((m) => m.id).filter(Boolean);
+    const attachmentIds = attachments.map((att) => att.id).filter(Boolean);
+    const s3Keys = [
+      ...new Set(attachments.map((att) => att.s3Key).filter(Boolean)),
+    ];
+    const s3AssetIds = [
+      ...new Set(attachments.map((att) => att.s3AssetId).filter(Boolean)),
+    ];
+
+    let deletedS3KeysCount = 0;
+    const failedS3Keys = [];
+
+    if (s3Keys.length > 0) {
+      await Promise.allSettled(
+        s3Keys.map(async (s3Key) => {
+          try {
+            await s3Service.deleteAndRecord(s3Key);
+            deletedS3KeysCount += 1;
+          } catch (err) {
+            failedS3Keys.push(s3Key);
+            console.warn(
+              `[ChatService.clearPersonalSpaceData] Failed deleting S3 key ${s3Key}:`,
+              err?.message || err,
+            );
+          }
+        }),
+      );
+    }
+
+    if (s3AssetIds.length > 0 || s3Keys.length > 0) {
+      const assetFilters = [];
+      if (s3AssetIds.length > 0) {
+        assetFilters.push({ assetId: { [Op.in]: s3AssetIds } });
+      }
+      if (s3Keys.length > 0) {
+        assetFilters.push({ s3Key: { [Op.in]: s3Keys } });
+      }
+      await S3Asset.destroy({
+        where: { [Op.or]: assetFilters },
+      });
+    }
+
+    await Conversation.update(
+      { lastMessageId: null, lastMessageAt: null, pinnedCount: 0 },
+      { where: { id: conversationId } },
+    );
+
+    if (messageIds.length > 0) {
+      await Message.update(
+        { replyToId: null },
+        { where: { conversationId }, paranoid: false },
+      );
+    }
+
+    if (attachmentIds.length > 0) {
+      await MessageAttachment.destroy({
+        where: { id: { [Op.in]: attachmentIds } },
+      });
+    }
+
+    if (messageIds.length > 0) {
+      await MessageReaction.destroy({
+        where: { messageId: { [Op.in]: messageIds } },
+      });
+    }
+
+    await PinnedMessage.destroy({ where: { conversationId } });
+    await Message.destroy({ where: { conversationId }, force: true });
+
+    await ConversationMember.update(
+      {
+        unreadCount: 0,
+        mentionCount: 0,
+        clearedAt: null,
+        lastReadMessageId: null,
+      },
+      { where: { conversationId, userId } },
+    );
+
+    const publicId = this.toPublicConversationId(conversationId);
+    const payload = {
+      cleared: true,
+      conversationId: publicId,
+      deletedMessagesCount: messageIds.length,
+      deletedAttachmentsCount: attachmentIds.length,
+      deletedS3KeysCount,
+      failedS3KeysCount: failedS3Keys.length,
+    };
+
+    socketService.emitToUser(userId, "personal_space_cleared", payload);
+    await ssePublisher.publishToUsers(
+      [userId],
+      "PERSONAL_SPACE_CLEARED",
+      payload,
+    );
+
+    return payload;
   }
 
   // =====================================

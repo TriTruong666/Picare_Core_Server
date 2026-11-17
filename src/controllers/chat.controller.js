@@ -324,6 +324,28 @@ class ChatController {
     }
   }
 
+  /**
+   * DELETE /api/v1/chat/conversations/:conversationId/personal-space/data
+   * Xoá sạch toàn bộ tin nhắn, đính kèm và S3 object keys trong Không gian của bạn
+   */
+  static async clearPersonalSpaceData(req, res, next) {
+    try {
+      const { conversationId } = req.params;
+      const { userId } = req.user;
+      const result = await ChatService.clearPersonalSpaceData(
+        conversationId,
+        userId,
+      );
+      return ResponseHandler.success(
+        res,
+        result,
+        "Đã xoá sạch toàn bộ dữ liệu trong Không gian của bạn",
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ===========================
   // MESSAGES & SEARCH
   // ===========================

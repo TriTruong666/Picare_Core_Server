@@ -281,6 +281,20 @@ router.delete(
   ChatController.deleteConversationForMe,
 );
 
+/**
+ * @swagger
+ * /api/v1/chat/conversations/{conversationId}/personal-space/data:
+ *   delete:
+ *     summary: Xoá sạch toàn bộ tin nhắn, tài liệu đính kèm và key trên S3 trong Không gian của bạn
+ *     tags: [Chat]
+ *     security:
+ *       - cookieAuth: []
+ */
+router.delete(
+  "/conversations/:conversationId/personal-space/data",
+  ChatController.clearPersonalSpaceData,
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PINNED MESSAGES IN CONVERSATION (C2)
 // ─────────────────────────────────────────────────────────────────────────────
