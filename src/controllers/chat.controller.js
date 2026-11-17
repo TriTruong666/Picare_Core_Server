@@ -15,11 +15,12 @@ class ChatController {
    */
   static async getMyConversations(req, res, next) {
     try {
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { scopeSystem, companyId } = req.query;
       const conversations = await ChatService.getMyConversations(userId, {
         scopeSystem,
         companyId,
+        userRole: role,
       });
       const data = conversations.map((c) => ConversationDTO.from(c));
       return ResponseHandler.success(
@@ -38,12 +39,13 @@ class ChatController {
    */
   static async getUserChatSummary(req, res, next) {
     try {
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { limit, scopeSystem, companyId } = req.query;
       const summary = await ChatService.getUserChatSummary(userId, {
         limit,
         scopeSystem,
         companyId,
+        userRole: role,
       });
       return ResponseHandler.success(
         res,
@@ -119,10 +121,11 @@ class ChatController {
   static async getConversationDetail(req, res, next) {
     try {
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const conversation = await ChatService.getConversationDetail(
         conversationId,
         userId,
+        role,
       );
       return ResponseHandler.success(
         res,
@@ -337,13 +340,14 @@ class ChatController {
       }
 
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { before, beforeId, limit } = req.query;
 
       const messages = await ChatService.getMessages(conversationId, userId, {
         before,
         beforeId,
         limit,
+        userRole: role,
       });
       const data = messages.map((m) =>
         MessageDTO.from(m.toJSON ? m.toJSON() : m),
@@ -366,14 +370,14 @@ class ChatController {
       }
 
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { q, limit } = req.query;
 
       const messages = await ChatService.searchMessages(
         conversationId,
         userId,
         q,
-        { limit },
+        { limit, userRole: role },
       );
       const data = messages.map((m) => MessageDTO.from(m));
       return ResponseHandler.success(res, data, "Tìm kiếm tin nhắn thành công");
@@ -487,12 +491,13 @@ class ChatController {
   static async markAsRead(req, res, next) {
     try {
       const { conversationId } = req.params;
-      const { userId } = req.user;
+      const { userId, role } = req.user;
       const { lastReadMessageId } = req.body || {};
       const result = await ChatService.markAsRead(
         conversationId,
         userId,
         lastReadMessageId,
+        role,
       );
       return ResponseHandler.success(res, result, "Đã đánh dấu đã đọc");
     } catch (error) {
@@ -510,8 +515,12 @@ class ChatController {
   static async getPinnedMessages(req, res, next) {
     try {
       const { conversationId } = req.params;
-      const { userId } = req.user;
-      const pins = await ChatService.getPinnedMessages(conversationId, userId);
+      const { userId, role } = req.user;
+      const pins = await ChatService.getPinnedMessages(
+        conversationId,
+        userId,
+        role,
+      );
       return ResponseHandler.success(
         res,
         pins.map((p) => ({

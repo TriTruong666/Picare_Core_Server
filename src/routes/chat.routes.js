@@ -257,7 +257,7 @@ router.patch("/conversations/:conversationId/mute", ChatController.toggleMute);
  * @swagger
  * /api/v1/chat/conversations/{conversationId}:
  *   delete:
- *     summary: Giải tán nhóm chat (chỉ owner/admin nhóm)
+ *     summary: Giải tán nhóm chat (chỉ role Admin hệ thống, trừ picare_group)
  *     tags: [Chat]
  *     security:
  *       - cookieAuth: []

@@ -687,12 +687,17 @@ class ChatService {
   // CONVERSATION APIs (C0, C1, C3)
   // =====================================
 
+  static _isSystemAdmin(userRole) {
+    return String(userRole || "").toLowerCase() === "admin";
+  }
+
   /**
    * Lấy danh sách tất cả conversations của user hiện tại (bao gồm tin nhắn cuối đã giải mã, unreadCount)
    * @param {string} userId
-   * @param {Object} [options] - { scopeSystem, companyId }
+   * @param {Object} [options] - { scopeSystem, companyId, userRole }
    */
   static async getMyConversations(userId, options = {}) {
+    const isSysAdmin = this._isSystemAdmin(options.userRole);
     try {
       await this.ensurePicareGroup();
       if (userId && !this._picareGroupUserSet?.has(userId)) {
@@ -751,6 +756,7 @@ class ChatService {
     });
 
     const results = [];
+    const pendingLeftLastMessages = [];
     for (const m of memberships) {
       if (!m.conversation) continue;
       let dek = null;
@@ -767,27 +773,29 @@ class ChatService {
       const leftAtDate = m.leftAt ? new Date(m.leftAt) : null;
       const clearedAtDate = m.clearedAt ? new Date(m.clearedAt) : null;
       if (leftAtDate && conv.lastMessage?.createdAt && new Date(conv.lastMessage.createdAt) > leftAtDate) {
-        const lastAllowedMsg = await Message.findOne({
-          where: {
-            conversationId: m.conversation.id,
-            deletedAt: null,
-            createdAt: {
-              [Op.lte]: leftAtDate,
-              ...(clearedAtDate ? { [Op.gt]: clearedAtDate } : {}),
+        pendingLeftLastMessages.push(
+          Message.findOne({
+            where: {
+              conversationId: m.conversation.id,
+              deletedAt: null,
+              createdAt: {
+                [Op.lte]: leftAtDate,
+                ...(clearedAtDate ? { [Op.gt]: clearedAtDate } : {}),
+              },
             },
-          },
-          include: [{ model: User, as: "sender", attributes: SENDER_ATTRIBUTES }],
-          order: [
-            ["createdAt", "DESC"],
-            ["id", "DESC"],
-          ],
-        });
-        conv.lastMessage = lastAllowedMsg
-          ? this.hydrateMessage(lastAllowedMsg, dek)
-          : null;
-        conv.lastMessageAt = conv.lastMessage?.createdAt || m.leftAt;
-      }
-      if (
+            include: [{ model: User, as: "sender", attributes: SENDER_ATTRIBUTES }],
+            order: [
+              ["createdAt", "DESC"],
+              ["id", "DESC"],
+            ],
+          }).then((lastAllowedMsg) => {
+            conv.lastMessage = lastAllowedMsg
+              ? this.hydrateMessage(lastAllowedMsg, dek)
+              : null;
+            conv.lastMessageAt = conv.lastMessage?.createdAt || m.leftAt;
+          }),
+        );
+      } else if (
         clearedAtDate &&
         conv.lastMessage?.createdAt &&
         new Date(conv.lastMessage.createdAt) <= clearedAtDate
@@ -807,6 +815,87 @@ class ChatService {
         mentionCount: m.leftAt ? 0 : Number(m.mentionCount || 0),
       };
       results.push(conv);
+    }
+
+    if (pendingLeftLastMessages.length > 0) {
+      await Promise.all(pendingLeftLastMessages);
+    }
+
+    // Role Admin hệ thống thấy tất cả nhóm chat trên hệ thống (kể cả nhóm không có mặt) để quản trị / giải tán
+    if (isSysAdmin) {
+      const allMyMemberRows = await ConversationMember.findAll({
+        where: { userId },
+        attributes: ["conversationId"],
+        raw: true,
+      });
+      const knownConvIds = [
+        ...new Set(allMyMemberRows.map((row) => row.conversationId).filter(Boolean)),
+      ];
+      const extraGroups = await Conversation.findAll({
+        where: {
+          ...convWhere,
+          type: "group",
+          ...(knownConvIds.length > 0
+            ? { id: { [Op.notIn]: knownConvIds } }
+            : {}),
+        },
+        include: [
+          {
+            model: Message,
+            as: "lastMessage",
+            include: [
+              { model: User, as: "sender", attributes: SENDER_ATTRIBUTES },
+            ],
+          },
+          {
+            model: ConversationMember,
+            as: "members",
+            where: { leftAt: null },
+            required: false,
+            include: [
+              { model: User, as: "user", attributes: SENDER_ATTRIBUTES },
+            ],
+          },
+        ],
+        order: [["lastMessageAt", "DESC NULLS LAST"]],
+      });
+
+      for (const groupConv of extraGroups) {
+        let dek = null;
+        try {
+          const dekInfo = await this._getOrEnsureConversationDek(groupConv);
+          dek = dekInfo.dek;
+        } catch (err) {
+          console.warn(
+            `[ChatService] Không thể mở khoá DEK cho hội thoại ${groupConv.id}:`,
+            err.message,
+          );
+        }
+        const sanitized = this.sanitizeConversation(groupConv, dek);
+        sanitized.myMembership = {
+          role: "admin",
+          nickname: null,
+          isMuted: false,
+          isPinned: false,
+          lastReadAt: null,
+          lastReadMessageId: null,
+          clearedAt: null,
+          leftAt: null,
+          unreadCount: 0,
+          mentionCount: 0,
+        };
+        results.push(sanitized);
+      }
+
+      results.sort((a, b) => {
+        const pinDiff =
+          Number(Boolean(b.myMembership?.isPinned)) -
+          Number(Boolean(a.myMembership?.isPinned));
+        if (pinDiff !== 0) return pinDiff;
+        const tA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const tB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return tB - tA;
+      });
     }
 
     return results;
@@ -1228,47 +1317,49 @@ class ChatService {
    * @param {string} conversationId
    * @param {string} userId
    */
-  static async getConversationDetail(conversationId, userId) {
+  static async getConversationDetail(conversationId, userId, userRole = null) {
     conversationId = this.resolveDbConversationId(conversationId);
+    const isSysAdmin = this._isSystemAdmin(userRole);
     if (conversationId === PICARE_GROUP_DB_ID) {
       await this.addUserToPicareGroup(userId).catch(() => null);
     }
-    const membership = await ConversationMember.findOne({
-      where: { conversationId, userId },
-    });
-    if (!membership) {
-      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
-    }
-
-    const conversation = await Conversation.findByPk(conversationId, {
-      include: [
-        {
-          model: ConversationMember,
-          as: "members",
-          where: { leftAt: null },
-          required: false,
-          include: [
-            { model: User, as: "user", attributes: SENDER_ATTRIBUTES },
-          ],
-        },
-        {
-          model: Message,
-          as: "lastMessage",
-          include: [
-            { model: User, as: "sender", attributes: SENDER_ATTRIBUTES },
-          ],
-        },
-      ],
-    });
+    const [membership, conversation] = await Promise.all([
+      ConversationMember.findOne({
+        where: { conversationId, userId },
+      }),
+      Conversation.findByPk(conversationId, {
+        include: [
+          {
+            model: ConversationMember,
+            as: "members",
+            where: { leftAt: null },
+            required: false,
+            include: [
+              { model: User, as: "user", attributes: SENDER_ATTRIBUTES },
+            ],
+          },
+          {
+            model: Message,
+            as: "lastMessage",
+            include: [
+              { model: User, as: "sender", attributes: SENDER_ATTRIBUTES },
+            ],
+          },
+        ],
+      }),
+    ]);
 
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
+    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
+    }
 
     const { dek } = await this._getOrEnsureConversationDek(conversation);
     const sanitized = this.sanitizeConversation(conversation, dek);
-    const leftAtDate = membership.leftAt ? new Date(membership.leftAt) : null;
-    const clearedAtDate = membership.clearedAt ? new Date(membership.clearedAt) : null;
+    const leftAtDate = membership?.leftAt ? new Date(membership.leftAt) : null;
+    const clearedAtDate = membership?.clearedAt ? new Date(membership.clearedAt) : null;
     if (leftAtDate && sanitized.lastMessage?.createdAt && new Date(sanitized.lastMessage.createdAt) > leftAtDate) {
       const lastAllowedMsg = await Message.findOne({
         where: {
@@ -1297,18 +1388,31 @@ class ChatService {
     ) {
       sanitized.lastMessage = null;
     }
-    sanitized.myMembership = {
-      role: membership.role,
-      nickname: membership.nickname,
-      isMuted: Boolean(membership.isMuted),
-      isPinned: Boolean(membership.isPinned),
-      lastReadAt: membership.lastReadAt,
-      lastReadMessageId: membership.lastReadMessageId || null,
-      clearedAt: membership.clearedAt || null,
-      leftAt: membership.leftAt || null,
-      unreadCount: membership.leftAt ? 0 : Number(membership.unreadCount || 0),
-      mentionCount: membership.leftAt ? 0 : Number(membership.mentionCount || 0),
-    };
+    sanitized.myMembership = membership
+      ? {
+          role: membership.role,
+          nickname: membership.nickname,
+          isMuted: Boolean(membership.isMuted),
+          isPinned: Boolean(membership.isPinned),
+          lastReadAt: membership.lastReadAt,
+          lastReadMessageId: membership.lastReadMessageId || null,
+          clearedAt: membership.clearedAt || null,
+          leftAt: membership.leftAt || null,
+          unreadCount: membership.leftAt ? 0 : Number(membership.unreadCount || 0),
+          mentionCount: membership.leftAt ? 0 : Number(membership.mentionCount || 0),
+        }
+      : {
+          role: "admin",
+          nickname: null,
+          isMuted: false,
+          isPinned: false,
+          lastReadAt: null,
+          lastReadMessageId: null,
+          clearedAt: null,
+          leftAt: null,
+          unreadCount: 0,
+          mentionCount: 0,
+        };
     return sanitized;
   }
 
@@ -1729,6 +1833,7 @@ class ChatService {
    * @param {Object} options - { before, beforeId, limit }
    */
   static async getMessages(conversationId, userId, options = {}) {
+    const isSysAdmin = this._isSystemAdmin(options.userRole);
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -1736,11 +1841,11 @@ class ChatService {
       Conversation.findByPk(conversationId),
     ]);
 
-    if (!membership) {
-      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
-    }
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
     const { before, beforeId, limit = 30 } = options;
@@ -1770,12 +1875,12 @@ class ChatService {
       ...cursorFilter,
     };
     where[Op.and] = where[Op.and] || [];
-    if (membership.clearedAt) {
+    if (membership?.clearedAt) {
       where[Op.and].push({
         createdAt: { [Op.gt]: new Date(membership.clearedAt) },
       });
     }
-    if (membership.leftAt) {
+    if (membership?.leftAt) {
       where[Op.and].push({
         createdAt: { [Op.lte]: new Date(membership.leftAt) },
       });
@@ -1809,7 +1914,7 @@ class ChatService {
     });
 
     const { dek } = await this._getOrEnsureConversationDek(conversation);
-    const clearedCutoff = membership.clearedAt
+    const clearedCutoff = membership?.clearedAt
       ? new Date(membership.clearedAt)
       : null;
     return messages.reverse().map((msg) => {
@@ -1833,6 +1938,7 @@ class ChatService {
    * @param {Object} [options] - { limit }
    */
   static async searchMessages(conversationId, userId, queryText, options = {}) {
+    const isSysAdmin = this._isSystemAdmin(options.userRole);
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -1840,11 +1946,11 @@ class ChatService {
       Conversation.findByPk(conversationId),
     ]);
 
-    if (!membership) {
-      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
-    }
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
     const cleanQuery = String(queryText || "").trim();
@@ -1872,12 +1978,12 @@ class ChatService {
           }),
     };
     where[Op.and] = where[Op.and] || [];
-    if (membership.clearedAt) {
+    if (membership?.clearedAt) {
       where[Op.and].push({
         createdAt: { [Op.gt]: new Date(membership.clearedAt) },
       });
     }
-    if (membership.leftAt) {
+    if (membership?.leftAt) {
       where[Op.and].push({
         createdAt: { [Op.lte]: new Date(membership.leftAt) },
       });
@@ -2590,11 +2696,33 @@ class ChatService {
    * @param {string} userId
    * @param {string} [lastReadMessageId]
    */
-  static async markAsRead(conversationId, userId, lastReadMessageId = null) {
+  static async markAsRead(
+    conversationId,
+    userId,
+    lastReadMessageId = null,
+    userRole = null,
+  ) {
+    const isSysAdmin = this._isSystemAdmin(userRole);
     const membership = await ConversationMember.findOne({
       where: { conversationId, userId },
     });
-    if (!membership) throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
+    if (!membership) {
+      if (isSysAdmin) {
+        const conversation = await Conversation.findByPk(conversationId, {
+          attributes: ["id", "type"],
+        });
+        if (conversation?.type === "group") {
+          return {
+            conversationId,
+            userId,
+            readAt: new Date(),
+            lastReadMessageId: null,
+            unreadCount: 0,
+          };
+        }
+      }
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_MEMBER);
+    }
 
     if (membership.leftAt) {
       if (membership.unreadCount || membership.mentionCount) {
@@ -2897,7 +3025,8 @@ class ChatService {
    * @param {string} conversationId
    * @param {string} userId
    */
-  static async getPinnedMessages(conversationId, userId) {
+  static async getPinnedMessages(conversationId, userId, userRole = null) {
+    const isSysAdmin = this._isSystemAdmin(userRole);
     const [membership, conversation] = await Promise.all([
       ConversationMember.findOne({
         where: { conversationId, userId },
@@ -2905,20 +3034,20 @@ class ChatService {
       Conversation.findByPk(conversationId),
     ]);
 
-    if (!membership) {
-      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
-    }
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
+    }
+    if (!membership && !(isSysAdmin && conversation.type === "group")) {
+      throw new ForbiddenException(ErrorCodes.CHAT_NOT_CONVERSATION_MEMBER);
     }
 
     const messageFilter = {
       deletedAt: null,
       [Op.and]: [
-        ...(membership.clearedAt
+        ...(membership?.clearedAt
           ? [{ createdAt: { [Op.gt]: new Date(membership.clearedAt) } }]
           : []),
-        ...(membership.leftAt
+        ...(membership?.leftAt
           ? [{ createdAt: { [Op.lte]: new Date(membership.leftAt) } }]
           : []),
       ],
@@ -3281,6 +3410,7 @@ class ChatService {
             as: "message",
             attributes: [],
             where: { conversationId },
+            paranoid: false,
           },
         ],
       }),
@@ -3298,16 +3428,18 @@ class ChatService {
         ...new Set(attachments.map((att) => att.s3AssetId).filter(Boolean)),
       ];
 
-      for (const s3Key of s3Keys) {
-        try {
-          await s3Service.deleteAndRecord(s3Key);
-        } catch (err) {
-          console.warn(
-            `[ChatService._purgeConversation] Failed deleting S3 key ${s3Key}:`,
-            err?.message || err,
-          );
-        }
-      }
+      await Promise.allSettled(
+        s3Keys.map(async (s3Key) => {
+          try {
+            await s3Service.deleteAndRecord(s3Key);
+          } catch (err) {
+            console.warn(
+              `[ChatService._purgeConversation] Failed deleting S3 key ${s3Key}:`,
+              err?.message || err,
+            );
+          }
+        }),
+      );
 
       if (s3AssetIds.length > 0 || s3Keys.length > 0) {
         const assetFilters = [];
@@ -3358,20 +3490,23 @@ class ChatService {
   }
 
   static async dissolveGroup(conversationId, userId, userRole = null) {
-    if (conversationId === PICARE_GROUP_DB_ID) {
+    if (
+      conversationId === PICARE_GROUP_DB_ID ||
+      this.toPublicConversationId(conversationId) === PICARE_GROUP_PUBLIC_ID
+    ) {
       throw new ForbiddenException(
         "Không thể giải tán nhóm chính thức Đại gia đình - Picare Group",
       );
     }
 
-    const isSysAdmin = String(userRole || "").toLowerCase() === "admin";
-    const [conversation, membership] = await Promise.all([
-      Conversation.findByPk(conversationId),
-      ConversationMember.findOne({
-        where: { conversationId, userId, leftAt: null },
-      }),
-    ]);
+    const isSysAdmin = this._isSystemAdmin(userRole);
+    if (!isSysAdmin) {
+      throw new ForbiddenException(
+        "Chỉ tài khoản có vai trò Admin mới có quyền giải tán nhóm",
+      );
+    }
 
+    const conversation = await Conversation.findByPk(conversationId);
     if (!conversation) {
       throw new NotFoundException(ErrorCodes.CHAT_CONVERSATION_NOT_FOUND);
     }
@@ -3379,20 +3514,9 @@ class ChatService {
       throw new BadRequestException("Chỉ có thể giải tán cuộc trò chuyện nhóm");
     }
 
-    const canDissolve =
-      isSysAdmin ||
-      conversation.createdBy === userId ||
-      membership?.role === "owner" ||
-      membership?.role === "admin";
-    if (!canDissolve) {
-      throw new ForbiddenException(
-        "Chỉ Quản trị viên nhóm mới có quyền giải tán nhóm",
-      );
-    }
-
     const groupName = conversation.name;
     const { memberIds } = await this._purgeConversation(conversationId, {
-      deleteS3Assets: false,
+      deleteS3Assets: true,
     });
 
     const publicId = this.toPublicConversationId(conversationId);
@@ -3402,15 +3526,16 @@ class ChatService {
       groupName,
     };
 
-    if (memberIds.length > 0) {
-      socketService.removeUsersFromConversationRoom(memberIds, publicId);
+    const notifyUserIds = [...new Set([...memberIds, userId].filter(Boolean))];
+    if (notifyUserIds.length > 0) {
+      socketService.removeUsersFromConversationRoom(notifyUserIds, publicId);
       socketService.emitToUsers(
-        memberIds,
+        notifyUserIds,
         "conversation_deleted_for_me",
         payload,
       );
       await ssePublisher.publishToUsers(
-        memberIds,
+        notifyUserIds,
         "CONVERSATION_DISSOLVED",
         payload,
       );
