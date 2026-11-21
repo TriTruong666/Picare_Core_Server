@@ -19,6 +19,13 @@ function imageMime(buffer) {
     buffer.toString("ascii", 8, 12) === "WEBP"
   )
     return "image/webp";
+  if (buffer.toString("ascii", 4, 8) === "ftyp") {
+    const brand = buffer.toString("ascii", 8, 12);
+    if (["heic", "heix", "hevc", "hevx"].includes(brand)) return "image/heic";
+    if (["mif1", "msf1", "heim", "heis", "hevm", "hevs"].includes(brand))
+      return "image/heif";
+    if (["avif", "avis"].includes(brand)) return "image/avif";
+  }
   return null;
 }
 

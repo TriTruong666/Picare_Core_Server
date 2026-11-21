@@ -33,6 +33,17 @@ const input = (userId = "test") => ({
 });
 test("schema bounds images and allows only registered document types", () => {
   assert.equal(schema.validate(input()).documentType, "vn_identity_card");
+  const heic = Buffer.from([
+    0x00, 0x00, 0x00, 0x18,
+    0x66, 0x74, 0x79, 0x70, // ftyp
+    0x68, 0x65, 0x69, 0x63, // heic
+    0x00, 0x00, 0x00, 0x00,
+  ]);
+  assert.equal(schema.imageMime(heic), "image/heic");
+  assert.equal(
+    schema.validate({ ...input(), front: heic, back: heic }).documentType,
+    "vn_identity_card",
+  );
   for (const invalid of [
     { ...input(), documentType: "../../unsafe" },
     { ...input(), back: Buffer.alloc(0) },
