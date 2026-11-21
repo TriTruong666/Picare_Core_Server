@@ -49,6 +49,34 @@ const revokeTrustedIpSchema = [
     .withMessage("Địa chỉ IP không hợp lệ"),
 ];
 
+const forgotPasswordSchema = [
+  body("email").isEmail().withMessage("Email không hợp lệ").normalizeEmail(),
+];
+
+const verifyForgotPasswordSchema = [
+  body("challengeId")
+    .isUUID(4)
+    .withMessage("challengeId không hợp lệ"),
+  body("code")
+    .matches(/^\d{6}$/)
+    .withMessage("Mã OTP phải gồm đúng 6 chữ số"),
+];
+
+const resendForgotPasswordCodeSchema = [
+  body("challengeId")
+    .isUUID(4)
+    .withMessage("challengeId không hợp lệ"),
+];
+
+const resetPasswordSchema = [
+  body("resetToken")
+    .isUUID(4)
+    .withMessage("resetToken không hợp lệ"),
+  body("newPassword")
+    .isLength({ min: 6 })
+    .withMessage("Mật khẩu mới phải có ít nhất 6 ký tự"),
+];
+
 module.exports = {
   loginSchema,
   registerSchema,
@@ -57,4 +85,8 @@ module.exports = {
   loginVerificationSchema,
   resendLoginCodeSchema,
   revokeTrustedIpSchema,
+  forgotPasswordSchema,
+  verifyForgotPasswordSchema,
+  resendForgotPasswordCodeSchema,
+  resetPasswordSchema,
 };

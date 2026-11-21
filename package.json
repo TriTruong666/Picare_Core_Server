@@ -11,7 +11,7 @@
     "test:grpc-storage": "node tests/grpc_s3.handler.test.js",
     "test:grpc-mail": "node --test tests/grpc_mail.handler.test.js",
     "test:chat": "NODE_ENV=test node --test --test-force-exit tests/chat_hub.c0_c4.test.js",
-    "test:auth": "node --test --test-force-exit tests/auth.security.test.js tests/database_migration.security.test.js tests/login_rate_limit.security.test.js tests/session.security.test.js tests/trusted_ip.security.test.js tests/user_session_hook.security.test.js",
+    "test:auth": "node --test --test-force-exit tests/auth.security.test.js tests/forgot_password.security.test.js tests/database_migration.security.test.js tests/login_rate_limit.security.test.js tests/session.security.test.js tests/trusted_ip.security.test.js tests/user_session_hook.security.test.js",
     "deploy": "node scripts/deploy.js"
   },
   "dependencies": {

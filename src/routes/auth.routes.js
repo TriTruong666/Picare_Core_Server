@@ -10,6 +10,10 @@ const {
   loginVerificationSchema,
   resendLoginCodeSchema,
   revokeTrustedIpSchema,
+  forgotPasswordSchema,
+  verifyForgotPasswordSchema,
+  resendForgotPasswordCodeSchema,
+  resetPasswordSchema,
 } = require("../schemas/auth.schema");
 
 /**
@@ -235,5 +239,53 @@ router.delete(
  *         description: Password changed successfully
  */
 router.post("/change-password", protect, changePasswordSchema, AuthController.changePassword);
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot-password:
+ *   post:
+ *     summary: Request a 6-digit OTP to reset forgotten password
+ *     tags: [Auth]
+ */
+router.post("/forgot-password", forgotPasswordSchema, AuthController.forgotPassword);
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot-password/verify:
+ *   post:
+ *     summary: Verify the 6-digit forgot-password OTP and receive a single-use resetToken
+ *     tags: [Auth]
+ */
+router.post(
+  "/forgot-password/verify",
+  verifyForgotPasswordSchema,
+  AuthController.verifyForgotPassword,
+);
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot-password/resend-code:
+ *   post:
+ *     summary: Resend the forgot-password OTP code
+ *     tags: [Auth]
+ */
+router.post(
+  "/forgot-password/resend-code",
+  resendForgotPasswordCodeSchema,
+  AuthController.resendForgotPasswordCode,
+);
+
+/**
+ * @swagger
+ * /api/v1/auth/forgot-password/reset:
+ *   post:
+ *     summary: Reset password using the single-use resetToken
+ *     tags: [Auth]
+ */
+router.post(
+  "/forgot-password/reset",
+  resetPasswordSchema,
+  AuthController.resetPassword,
+);
 
 module.exports = router;

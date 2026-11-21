@@ -119,6 +119,31 @@ const ErrorCodes = {
     message: "Đăng nhập thất bại quá nhiều lần, vui lòng thử lại sau",
     statusCode: 429,
   },
+  AUTH_PASSWORD_RESET_INVALID: {
+    code: "ERR_AUTH_017",
+    message: "Mã OTP khôi phục mật khẩu không chính xác",
+    statusCode: 400,
+  },
+  AUTH_PASSWORD_RESET_EXPIRED: {
+    code: "ERR_AUTH_018",
+    message: "Phiên khôi phục mật khẩu đã hết hạn, vui lòng yêu cầu mã mới",
+    statusCode: 400,
+  },
+  AUTH_PASSWORD_RESET_ATTEMPTS_EXCEEDED: {
+    code: "ERR_AUTH_019",
+    message: "Đã vượt quá số lần nhập mã OTP, vui lòng yêu cầu mã mới",
+    statusCode: 429,
+  },
+  AUTH_PASSWORD_RESET_RESEND_TOO_SOON: {
+    code: "ERR_AUTH_020",
+    message: "Vui lòng chờ trước khi yêu cầu gửi lại mã OTP",
+    statusCode: 429,
+  },
+  AUTH_PASSWORD_RESET_RESEND_LIMIT: {
+    code: "ERR_AUTH_021",
+    message: "Đã vượt quá số lần gửi lại mã OTP, vui lòng thử lại từ đầu",
+    statusCode: 429,
+  },
   CLIENT_NOT_FOUND: {
     code: "ERR_CLIENT_001",
     message: "Không tìm thấy client hệ thống",

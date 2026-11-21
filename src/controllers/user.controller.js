@@ -5,9 +5,18 @@ const { BadRequestException } = require("../common/exceptions/BaseException");
 const ErrorCodes = require("../common/exceptions/error_codes");
 
 class UserController {
+  static extractToken(req) {
+    if (req.cookies?.token) return req.cookies.token;
+    const authorization = req.headers?.authorization;
+    if (typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+      return authorization.slice("Bearer ".length).trim();
+    }
+    return null;
+  }
+
   static async getMe(req, res, next) {
     try {
-      const token = req.cookies.token;
+      const token = UserController.extractToken(req);
       const user = await UserService.getMe(token);
 
       return ResponseHandler.success(

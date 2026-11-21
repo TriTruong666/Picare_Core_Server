@@ -19,6 +19,8 @@ const getBearerToken = (req) => {
   return authorization.slice("Bearer ".length).trim();
 };
 
+const extractUserToken = (req) => req.cookies?.token || getBearerToken(req);
+
 const getPartnerContractToken = (req) => {
   const queryToken = Array.isArray(req.query?.token)
     ? req.query.token[0]
@@ -34,11 +36,11 @@ const getPartnerContractToken = (req) => {
 
 /**
  * Authentication Middleware
- * Bảo vệ các route yêu cầu đăng nhập bằng cách kiểm tra JWT trong cookie.
+ * Bảo vệ các route yêu cầu đăng nhập bằng cách kiểm tra JWT trong cookie hoặc Authorization Bearer.
  */
 const protect = async (req, res, next) => {
   try {
-    const token = req.cookies?.token;
+    const token = extractUserToken(req);
 
     if (!token) {
       throw new UnauthorizedException(ErrorCodes.UNAUTHORIZED);
