@@ -2,8 +2,8 @@
 
 const { validationResult } = require("express-validator");
 const PushNotificationService = require("../services/push_notification.service");
-const ResponseHandler = require("../utils/response_handler");
-const { BadRequestException } = require("../common/exceptions");
+const ResponseHandler = require("../common/response.handler");
+const { BadRequestException } = require("../common/exceptions/BaseException");
 
 class PushTokenController {
   /**
