@@ -2407,7 +2407,7 @@ class ChatService {
       }),
       ConversationMember.findAll({
         where: { conversationId, leftAt: null },
-        attributes: ["userId"],
+        attributes: ["userId", "isMuted"],
       }),
     ]);
 
@@ -2421,6 +2421,15 @@ class ChatService {
       hydrated,
     );
     await ssePublisher.publishToUsers(memberIds, "NEW_MESSAGE", hydrated);
+
+    // Non-blocking remote push dispatch to offline / backgrounded mobile devices
+    const PushNotificationService = require("./push_notification.service");
+    void PushNotificationService.dispatchChatMessagePush({
+      conversation,
+      message: hydrated,
+      members,
+      senderId,
+    }).catch(() => {});
 
     return hydrated;
   }

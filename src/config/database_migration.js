@@ -221,6 +221,26 @@ async function runDatabaseMigrations(customSequelize = sequelize) {
       `);
     }
 
+    // 6. Create 'user_push_tokens' table for Mobile Push Notifications (iOS APNs / Android FCM / Expo Push)
+    await customSequelize.query(`
+      CREATE TABLE IF NOT EXISTS user_push_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL,
+        device_id VARCHAR(128) NOT NULL,
+        platform VARCHAR(16) NOT NULL,
+        token_type VARCHAR(16) NOT NULL DEFAULT 'expo',
+        token VARCHAR(512) NOT NULL,
+        app_bundle_id VARCHAR(128) NOT NULL DEFAULT 'vn.picare.office',
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_user_push_tokens_token ON user_push_tokens (token);
+      CREATE INDEX IF NOT EXISTS idx_user_push_tokens_user_active ON user_push_tokens (user_id, is_active);
+      CREATE INDEX IF NOT EXISTS idx_user_push_tokens_user_device ON user_push_tokens (user_id, device_id);
+    `);
+
     console.log("[MIGRATION]: Database migrations completed successfully.");
   } catch (error) {
     console.error(
